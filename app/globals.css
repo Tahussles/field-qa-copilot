@@ -1,26 +1,253 @@
-@import "tailwindcss";
+@import "tailwindcss" source(none);
+
+/* Only scan our own code for class names (not data/, .venv or other large folders). */
+@source "../app";
+@source "../components";
+@source "../lib";
+
+/* Design tokens. Linear-style dark UI; content panels are solid, only the
+   floating layer (bars, overlays, chips, toasts, modals) is glass. */
+@theme {
+  --color-bg: #08090a;
+  --color-panel: #0e0f11;
+  --color-raised: #141519;
+  --color-ink: #f1f2f4;
+  --color-ink-2: #c9ccd2;
+  --color-muted: #8a8f98;
+  --color-faint: #5b606a;
+  --color-line: rgb(255 255 255 / 0.06);
+  --color-line-strong: rgb(255 255 255 / 0.11);
+  --color-accent: #7c84f8;
+  --color-ok: #4cb782;
+  --color-warn: #f0a23b;
+  --color-crit: #eb5a57;
+  --color-pass: #6b707a;
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-inter-tight), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --radius-panel: 12px;
+}
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: dark;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html,
+body {
+  background: var(--color-bg);
+  color: var(--color-ink);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+  font-feature-settings: "cv11", "ss01";
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Component classes sit in a layer so Tailwind utilities (absolute, rounded-*,
+   padding) still override them; unlayered CSS would beat every utility. */
+@layer components {
+  /* Faint indigo and amber ambient glow behind the whole app. */
+  .ambient {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(42rem 30rem at 12% -6%, rgb(124 132 248 / 0.13), transparent 70%),
+      radial-gradient(36rem 28rem at 96% 104%, rgb(240 162 59 / 0.08), transparent 70%);
+  }
+
+  /* Liquid glass: gradient fill, backdrop blur + saturate, an inner highlight
+     and a masked specular edge. Use the .glass class or the <Glass> component. */
+  .glass {
+    position: relative;
+    isolation: isolate;
+    background:
+      linear-gradient(180deg, rgb(255 255 255 / 0.075) 0%, rgb(255 255 255 / 0.02) 100%),
+      rgb(17 18 21 / 0.62);
+    -webkit-backdrop-filter: blur(18px) saturate(165%);
+    backdrop-filter: blur(18px) saturate(165%);
+    border: 1px solid rgb(255 255 255 / 0.07);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.09),
+      inset 0 -1px 0 rgb(0 0 0 / 0.25),
+      0 12px 32px -12px rgb(0 0 0 / 0.65);
+  }
+  .glass::before {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    z-index: -1;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(
+      135deg,
+      rgb(255 255 255 / 0.32) 0%,
+      rgb(255 255 255 / 0.04) 28%,
+      rgb(255 255 255 / 0) 55%,
+      rgb(255 255 255 / 0.1) 100%
+    );
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .glass {
+      background: rgb(20 21 25 / 0.96);
+    }
+  }
+
+  .panel {
+    background: var(--color-panel);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-panel);
+  }
+
+  .kbd {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    line-height: 1;
+    padding: 3px 5px;
+    border-radius: 5px;
+    color: var(--color-muted);
+    background: rgb(255 255 255 / 0.05);
+    border: 1px solid rgb(255 255 255 / 0.08);
+  }
+
+  .dot {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    flex: none;
+  }
+
+  .input {
+    width: 100%;
+    border-radius: 8px;
+    border: 1px solid var(--color-line-strong);
+    background: rgb(0 0 0 / 0.25);
+    padding: 6px 10px;
+    font-size: 13px;
+    color: var(--color-ink);
+    outline: none;
+  }
+  .input:focus {
+    border-color: var(--color-accent);
+  }
+
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(255 255 255 / 0.12) transparent;
+  }
+}
+
+/* Map: hotspot ring pulse, live point pulse. */
+@keyframes ring-pulse {
+  0% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 0.9;
+  }
+  70% {
+    transform: translate(-50%, -50%) scale(1.35);
+    opacity: 0;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1.35);
+    opacity: 0;
+  }
+}
+.hotspot-ring {
+  position: absolute;
+  border: 1.5px dashed rgb(235 90 87 / 0.95);
+  border-radius: 999px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.hotspot-ring::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 100%;
+  height: 100%;
+  border: 1.5px solid rgb(235 90 87 / 0.6);
+  border-radius: 999px;
+  animation: ring-pulse 2.4s ease-out infinite;
+}
+@keyframes point-pulse {
+  0% {
+    transform: translate(-50%, -50%) scale(0.6);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(3.2);
+    opacity: 0;
+  }
+}
+.point-pulse {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  border: 2px solid currentColor;
+  pointer-events: none;
+  animation: point-pulse 1.6s ease-out 2;
+}
+@keyframes flash {
+  0% {
+    color: var(--color-accent);
+  }
+  100% {
+    color: inherit;
+  }
+}
+.flash {
+  animation: flash 1.2s ease-out;
+}
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.toast-in {
+  animation: toast-in 0.22s ease-out;
+}
+
+.maplibregl-ctrl-attrib {
+  background: rgb(8 9 10 / 0.7) !important;
+  color: var(--color-faint) !important;
+  font-size: 10px !important;
+}
+.maplibregl-ctrl-attrib a {
+  color: var(--color-muted) !important;
+}
+.maplibregl-ctrl-attrib-button {
+  filter: invert(1) opacity(0.6);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  .hotspot-ring::after,
+  .point-pulse {
+    display: none;
+  }
 }
