@@ -65,6 +65,15 @@ class Supabase:
         ))
         return int(response.headers["content-range"].split("/")[1])
 
+    def first(self, table: str, select: str = "*", **filters: str) -> tuple[dict | None, int]:
+        """The first matching row (pass order=...) and the total count, in one request."""
+        response = self._check(self._http.get(
+            f"/{table}", params={"select": select, **filters},
+            headers={"Prefer": "count=exact", "Range": "0-0"},
+        ))
+        rows = response.json()
+        return (rows[0] if rows else None), int(response.headers["content-range"].split("/")[1])
+
     def select(self, table: str, select: str = "*", page_size: int = 1000, **filters: str) -> list[dict]:
         """All matching rows, fetched page by page. Pass order=... for a stable result."""
         rows: list[dict] = []

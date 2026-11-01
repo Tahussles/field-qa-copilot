@@ -14,7 +14,7 @@ from .repo import Repository
 from .schemas import ReviewIn, SubmissionIn
 
 LOCK_TTL_SECONDS = 15
-LOCK_WAIT_SECONDS = 8.0
+LOCK_WAIT_SECONDS = 2.0  # then 503 + Retry-After; phones retry with the same id
 
 
 class Busy(Exception):
@@ -296,75 +296,130 @@ def create_review(repo: Repository, body: ReviewIn) -> dict:
 
 # GET /overview --------------------------------------------------------------------------
 
+def project_now(ctx: ProjectContext) -> datetime:
+    """The project's "now": projects.as_of when set (demos), otherwise the wall clock."""
+    as_of = ctx.project.get("as_of")
+    return datetime.fromisoformat(as_of) if as_of else datetime.now(timezone.utc)
+
+
+def _day_stats(snap: "Snapshot", day: date, tz: ZoneInfo) -> dict:
+    params = snap.ctx.params
+    on_day = [s for s in snap.scored if snap.submissions[s.submission_id].local_date(tz) == day]
+    day_flagged = [s for s in on_day if params.band(s.score) == "flagged"]
+    checks: dict[str, int] = {}
+    by_contributor: dict[str, int] = {}
+    for s in on_day:
+        for key in snap.fired.get(s.submission_id, []):
+            checks[key] = checks.get(key, 0) + 1
+    for s in day_flagged:
+        code = snap.ctx.contributor_rows[snap.submissions[s.submission_id].contributor_id]["code"]
+        by_contributor[code] = by_contributor.get(code, 0) + 1
+    durations = [snap.submissions[s.submission_id].duration_sec for s in on_day
+                 if snap.submissions[s.submission_id].duration_sec is not None]
+    return {
+        "date": day.isoformat(),
+        "received": len(on_day),
+        "flagged": len(day_flagged),
+        "watch": sum(params.band(s.score) == "watch" for s in on_day),
+        "pending_review": sum(s.submission_id not in snap.active_reviews for s in day_flagged),
+        "median_duration_sec": median(durations) if durations else None,
+        "checks_fired": dict(sorted(checks.items(), key=lambda kv: -kv[1])),
+        "flagged_by_contributor": dict(sorted(by_contributor.items(), key=lambda kv: (-kv[1], kv[0]))),
+    }
+
+
+def _contributor_table(snap: "Snapshot") -> list[dict]:
+    rows = contributor_stats(snap.scored, list(snap.submissions.values()), snap.ctx.contributors, snap.ctx.params)
+    for row in rows:
+        info = snap.ctx.contributor_rows[row["contributor_id"]]
+        row["display_name"] = info.get("display_name")
+        row["area"] = snap.ctx.area_names.get(info.get("area_id"))
+    return rows
+
+
 def overview(repo: Repository, day: date | None = None) -> dict:
     snap = snapshot(repo)
     params = snap.ctx.params
     tz = ZoneInfo(params.timezone)
-    day = day or (datetime.now(tz).date() - timedelta(days=1))
+    now = project_now(snap.ctx)
+    today = now.astimezone(tz).date()
     bands = [params.band(s.score) for s in snap.scored]
     flagged_ids = {s.submission_id for s, b in zip(snap.scored, bands) if b == "flagged"}
     subs = list(snap.submissions.values())
-    contributors = contributor_stats(snap.scored, subs, snap.ctx.contributors, params)
-    for row in contributors:
-        info = snap.ctx.contributor_rows[row["contributor_id"]]
-        row["display_name"] = info.get("display_name")
-        row["area"] = snap.ctx.area_names.get(info.get("area_id"))
+    contributors = _contributor_table(snap)
     area_of = {cid: snap.ctx.area_names.get(r.get("area_id"), "unknown") for cid, r in snap.ctx.contributor_rows.items()}
-
-    on_day = [s for s in snap.scored if snap.submissions[s.submission_id].local_date(tz) == day]
-    day_flagged = [s for s in on_day if params.band(s.score) == "flagged"]
-    day_checks: dict[str, int] = {}
-    day_by_contributor: dict[str, int] = {}
-    for s in on_day:
-        for key in snap.fired.get(s.submission_id, []):
-            day_checks[key] = day_checks.get(key, 0) + 1
-    for s in day_flagged:
-        code = snap.ctx.contributor_rows[snap.submissions[s.submission_id].contributor_id]["code"]
-        day_by_contributor[code] = day_by_contributor.get(code, 0) + 1
-    day_durations = [snap.submissions[s.submission_id].duration_sec for s in on_day
-                     if snap.submissions[s.submission_id].duration_sec is not None]
 
     return {
         "project": snap.ctx.project,
         "engine_version": __version__,
+        "now": _iso(now),
+        "now_is_fixed": bool(snap.ctx.project.get("as_of")),
         "thresholds": {"review": params.review_threshold, "watch": params.watch_threshold},
         "kpis": {
             "received": len(snap.scored),
             "flagged": bands.count("flagged"),
             "watch": bands.count("watch"),
             "pending_review": len(flagged_ids - set(snap.active_reviews)),
-            "contributors_to_investigate": sum(r["investigate"] for r in contributors),
+            "contributors_to_investigate": sum(r["status"] == "investigate" for r in contributors),
         },
         "contributors": contributors,
         "areas": area_rates(snap.scored, subs, area_of, params),
         "hotspots": hotspots(snap.scored, subs, snap.ctx.contributors, params),
-        "yesterday": {
-            "date": day.isoformat(),
-            "received": len(on_day),
-            "flagged": len(day_flagged),
-            "watch": sum(params.band(s.score) == "watch" for s in on_day),
-            "pending_review": sum(s.submission_id not in snap.active_reviews for s in day_flagged),
-            "median_duration_sec": median(day_durations) if day_durations else None,
-            "checks_fired": dict(sorted(day_checks.items(), key=lambda kv: -kv[1])),
-            "flagged_by_contributor": dict(sorted(day_by_contributor.items(), key=lambda kv: (-kv[1], kv[0]))),
-        },
+        "today": _day_stats(snap, today, tz),
+        "yesterday": _day_stats(snap, day or today - timedelta(days=1), tz),
+    }
+
+
+# GET /map -----------------------------------------------------------------------------
+
+def map_view(repo: Repository) -> dict:
+    """Everything the map draws, in one response: points, area polygons and hotspots."""
+    snap = snapshot(repo)
+    params = snap.ctx.params
+    points = []
+    for s in snap.scored:
+        sub = snap.submissions[s.submission_id]
+        if sub.lat is None or sub.lng is None:
+            continue
+        info = snap.ctx.contributor_rows[sub.contributor_id]
+        points.append({
+            "id": s.submission_id,
+            "code": info["code"],
+            "kind": info["kind"],
+            "lat": round(sub.lat, 6),
+            "lng": round(sub.lng, 6),
+            "score": s.score,
+            "band": params.band(s.score),
+            "fired": snap.fired.get(s.submission_id, []),
+            "captured_at": _iso(sub.captured_at),
+            "duration_sec": sub.duration_sec,
+        })
+    points.sort(key=lambda p: (p["captured_at"], p["id"]))
+    return {
+        "project": snap.ctx.project,
+        "thresholds": {"review": params.review_threshold, "watch": params.watch_threshold},
+        "points": points,
+        "areas": [{"id": a["id"], "name": a["name"], "boundary": a.get("boundary")} for a in repo.areas(boundary=True)],
+        "hotspots": hotspots(snap.scored, list(snap.submissions.values()), snap.ctx.contributors, params),
     }
 
 
 # POST /rescore ------------------------------------------------------------------------
 
 def rescore(repo: Repository) -> dict:
+    """Rescore the whole project. Writes only rows that changed, so Realtime stays quiet."""
     started = time.perf_counter()
     ctx = context(repo)
     subs = [Submission.from_row(r) for r in repo.submissions()]
     scored = score_all(subs, ctx.contributors, ctx.params)
     score_ms = (time.perf_counter() - started) * 1000
     check_rows, score_rows = _result_rows(scored, ctx.params, _iso(datetime.now(timezone.utc)))
-    repo.save_scores(check_rows, score_rows)
+    written = repo.write_results(check_rows, score_rows)
     return {
         "submissions": len(scored),
         "flagged": sum(s.flagged for s in scored),
         "check_results": len(check_rows),
+        "rows_written": written,
         "engine_version": __version__,
         "score_ms": round(score_ms),
         "total_ms": round((time.perf_counter() - started) * 1000),

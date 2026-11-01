@@ -35,9 +35,9 @@ class LeaseLost(Exception):
 class Repository(Protocol):
     cache_ttl: float  # seconds the service may cache slow-changing reads (0 = never)
 
-    def project(self) -> dict: ...  # id, name, region, timezone
+    def project(self) -> dict: ...  # id, name, region, timezone, as_of
     def check_params(self) -> dict | None: ...
-    def areas(self) -> list[dict]: ...
+    def areas(self, boundary: bool = False) -> list[dict]: ...  # id, name (+ boundary GeoJSON)
     def contributors(self) -> list[dict]: ...  # id, code, display_name, kind, area_id
     def submission(self, submission_id: str) -> dict | None: ...
     def submissions(self, *, contributor_ids: Iterable[str] | None = None, device_ids: Iterable[str] | None = None,
@@ -45,7 +45,8 @@ class Repository(Protocol):
     def scores(self, submission_ids: Iterable[str] | None = None) -> list[dict]: ...
     def check_results(self, submission_id: str) -> list[dict]: ...
     def fired_checks(self, engine_version: str) -> list[dict]: ...  # submission_id, check_key, weight
-    def save_scores(self, check_rows: list[dict], score_rows: list[dict]) -> None: ...  # bulk, no leases (/rescore)
+    def write_results(self, check_rows: list[dict], score_rows: list[dict]) -> int: ...  # bulk, no leases; skips unchanged rows
+    def data_version(self, source: str) -> tuple[int, str | None]: ...  # (row count, max synced_at): changes when data does
 
     # Ingest in two calls. ingest_begin returns {"status": ...}:
     #   duplicate  client_submission_id exists and heal is False: submission, score (or None), checks (fired)
@@ -98,11 +99,16 @@ class InMemoryRepo:
     def check_params(self) -> dict | None:
         return self._check_params
 
-    def areas(self) -> list[dict]:
-        return [dict(a) for a in self._areas]
+    def areas(self, boundary=False) -> list[dict]:
+        return [{k: v for k, v in a.items() if boundary or k != "boundary"} for a in self._areas]
 
     def contributors(self) -> list[dict]:
         return [dict(c) for c in self._contributors]
+
+    def data_version(self, source):
+        with self._mutex:
+            rows = [r for r in self._submissions.values() if r.get("source") == source]
+        return len(rows), max((r["synced_at"] for r in rows), default=None)
 
     def submission(self, submission_id):
         row = self._submissions.get(submission_id)
@@ -156,9 +162,9 @@ class InMemoryRepo:
                 written += 1
         return written
 
-    def save_scores(self, check_rows, score_rows):
+    def write_results(self, check_rows, score_rows):
         with self._mutex:
-            self._write(check_rows, score_rows)
+            return self._write(check_rows, score_rows)
 
     # Ingest, mirroring ingest_begin / ingest_commit -----------------------------
 
@@ -265,7 +271,7 @@ class SupabaseRepo:
     def project(self) -> dict:
         if self._project is None:
             filters = {"id": f"eq.{self._project_id}"} if self._project_id else {}
-            rows = self._db.select("projects", "id,name,region,timezone", order="created_at", **filters)
+            rows = self._db.select("projects", "id,name,region,timezone,as_of", order="created_at", **filters)
             if len(rows) != 1:
                 raise RuntimeError(f"expected one project, found {len(rows)}; set PROJECT_ID")
             self._project = rows[0]
@@ -282,8 +288,13 @@ class SupabaseRepo:
         rows = self._db.select("check_config", "params", **self._in_project())
         return rows[0]["params"] if rows else None
 
-    def areas(self):
-        return self._db.select("areas", "id,name", order="name", **self._in_project())
+    def areas(self, boundary=False):
+        return self._db.select("areas", "id,name,boundary" if boundary else "id,name", order="name", **self._in_project())
+
+    def data_version(self, source):
+        row, count = self._db.first("submissions", "synced_at", order="synced_at.desc",
+                                    source=f"eq.{source}", **self._in_project())
+        return count, row["synced_at"] if row else None
 
     def contributors(self):
         return self._db.select("contributors", "id,code,display_name,kind,area_id", order="code", **self._in_project())
@@ -333,9 +344,18 @@ class SupabaseRepo:
             row.pop("submissions", None)
         return rows
 
-    def save_scores(self, check_rows, score_rows):
-        self._db.upsert("check_results", check_rows, on_conflict="submission_id,check_key,engine_version")
-        self._db.upsert("scores", score_rows, on_conflict="submission_id")
+    def write_results(self, check_rows, score_rows, batch_submissions: int = 250):
+        """Same skip-unchanged write as ingest_commit, with a fresh holder that owns no leases."""
+        written = 0
+        ids = [r["submission_id"] for r in score_rows]
+        for start in range(0, len(ids), batch_submissions):
+            chunk = set(ids[start:start + batch_submissions])
+            written += self._db.rpc("ingest_commit", {
+                "check_rows": [r for r in check_rows if r["submission_id"] in chunk],
+                "score_rows": [r for r in score_rows if r["submission_id"] in chunk],
+                "lock_holder": str(uuid.uuid4()), "expected_locks": 0,
+            })
+        return written
 
     def ingest_begin(self, row, holder, engine_version, ttl_seconds, heal=False):
         return self._db.rpc("ingest_begin", {
