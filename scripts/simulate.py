@@ -157,7 +157,8 @@ def main() -> int:
             log.append({"n": n, "id": body["id"], "code": sub.contributor.code, "status": response.status_code,
                         "ms": round(ms, 1), "score": body["score"], "flagged": body["flagged"],
                         "fired": [f["key"] for f in body["fired"]], "changed": len(body["changed"]),
-                        "rescored": body.get("rescored"), "truth": sub.fraud_type, "noise": sub.noise_tag})
+                        "rescored": body.get("rescored"), "server_ms": body.get("timing_ms"),
+                        "truth": sub.fraud_type, "noise": sub.noise_tag})
     finally:
         flush_truth()
 
@@ -181,6 +182,10 @@ def main() -> int:
           f"responses with flips {flip_lines}")
     print(f"latency ms: first {latencies[0]:.0f}, p50 {statistics.median(latencies):.0f}, "
           f"p95 {percentile(latencies, 0.95):.0f}, max {max(latencies):.0f}")
+    phases = [e["server_ms"] for e in log if e.get("server_ms")]
+    if phases:
+        print("server time ms (median per phase): " + ", ".join(
+            f"{name} {statistics.median(p[name] for p in phases):.0f}" for name in phases[0]))
     print(f"retries of already-sent submissions: {retry_statuses}  (status, same id)")
     print("by actor (final state):")
     for actor in sorted(by_actor, key=lambda a: (a.startswith("genuine"), a)):

@@ -121,8 +121,14 @@ def _stored_view(repo: Repository, ctx: ProjectContext, row: dict, duplicate: bo
 
 def ingest(repo: Repository, payload: SubmissionIn) -> tuple[int, dict]:
     """Store a phone's submission, score it and everything it affects. (201, view) or (200, view) on a retry."""
+    marks = [("start", time.perf_counter())]
+
+    def mark(name: str) -> None:
+        marks.append((name, time.perf_counter()))
+
     ctx = context(repo)
     existing = repo.submission_by_client_id(payload.client_submission_id)
+    mark("lookup")
     if existing:
         return 200, _stored_view(repo, ctx, existing, duplicate=True)
     contributor = ctx.by_code.get(payload.contributor_code)
@@ -132,6 +138,7 @@ def ingest(repo: Repository, payload: SubmissionIn) -> tuple[int, dict]:
     holder = str(uuid.uuid4())
     keys = sorted({f"contributor:{contributor['id']}", f"device:{payload.device_id}"})
     _acquire(repo, keys, holder)
+    mark("lock")
     try:
         row = {
             "id": str(uuid.uuid4()),
@@ -154,6 +161,7 @@ def ingest(repo: Repository, payload: SubmissionIn) -> tuple[int, dict]:
         except Conflict:  # the same retry raced us between the lookup and the insert
             return 200, _stored_view(repo, ctx, repo.submission_by_client_id(payload.client_submission_id), True)
         new = Submission.from_row(stored)
+        mark("insert")
 
         # Everything whose result this arrival may change, plus what those need as context.
         group = repo.submissions(contributor_ids=[new.contributor_id], device_ids=[new.device_id])
@@ -162,13 +170,17 @@ def ingest(repo: Repository, payload: SubmissionIn) -> tuple[int, dict]:
         if contributor_ids != {new.contributor_id} or device_ids != {new.device_id}:
             group = repo.submissions(contributor_ids=contributor_ids, device_ids=device_ids)
         existing_subs = [Submission.from_row(r) for r in group if r["id"] != new.id]
+        mark("load")
 
         scored = score_incremental(new, existing_subs, ctx.contributors, ctx.params)
+        mark("score")
         before = {s["submission_id"]: s["flagged"] for s in repo.scores([s.submission_id for s in scored[1:]])}
         check_rows, score_rows = _result_rows(scored, ctx.params, _iso(datetime.now(timezone.utc)))
         repo.save_scores(check_rows, score_rows)
+        mark("save")
     finally:
         repo.release_locks(holder)
+        mark("release")
 
     mine = scored[0]
     changed = [
@@ -190,6 +202,8 @@ def ingest(repo: Repository, payload: SubmissionIn) -> tuple[int, dict]:
         "changed": changed,
         "rescored": len(scored) - 1,
         "duplicate": False,
+        "timing_ms": {**{name: round((t - marks[i][1]) * 1000) for i, (name, t) in enumerate(marks[1:])},
+                      "total": round((marks[-1][1] - marks[0][1]) * 1000)},
     }
 
 

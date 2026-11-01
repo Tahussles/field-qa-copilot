@@ -122,6 +122,7 @@ def test_third_same_spot_arrival_flips_earlier_ones(client):
     flips = {c["submission_id"]: c for c in third["changed"]}
     assert set(flips) == {first["id"], second["id"]}
     assert all(c["flagged"] is True and c["previously_flagged"] is False and c["score"] == 2.5 for c in flips.values())
+    assert set(third["timing_ms"]) == {"lookup", "lock", "insert", "load", "score", "save", "release", "total"}
 
 
 # Queue and reviews ----------------------------------------------------------------------
