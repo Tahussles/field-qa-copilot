@@ -1,4 +1,3 @@
-import json
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
@@ -122,7 +121,7 @@ def test_third_same_spot_arrival_flips_earlier_ones(client):
     flips = {c["submission_id"]: c for c in third["changed"]}
     assert set(flips) == {first["id"], second["id"]}
     assert all(c["flagged"] is True and c["previously_flagged"] is False and c["score"] == 2.5 for c in flips.values())
-    assert set(third["timing_ms"]) == {"lookup", "lock", "insert", "load", "score", "save", "release", "total"}
+    assert set(third["timing_ms"]) == {"begin", "score", "commit", "total"}
 
 
 # Queue and reviews ----------------------------------------------------------------------
@@ -232,11 +231,141 @@ def test_concurrent_arrivals_end_up_like_a_batch():
         statuses = list(pool.map(lambda b: service.ingest(repo, SubmissionIn(**b))[0], bodies))
     assert statuses == [201] * len(bodies)
 
+    assert_matches_batch(repo)
+    assert repo.locks == {}
+
+
+def assert_matches_batch(repo: InMemoryRepo) -> None:
+    """Stored scores and check results equal a fresh batch scoring of everything stored."""
     contributors = {c["id"]: Contributor.from_row(c) for c in CONTRIBUTORS}
     batch = score_all([Submission.from_row(r) for r in repo.submissions()], contributors, Params())
-    stored = {s["submission_id"]: (s["score"], s["flagged"]) for s in repo.scores()}
-    assert stored == {s.submission_id: (s.score, s.flagged) for s in batch}
+    stored = {s["submission_id"]: (s["score"], s["flagged"], s["engine_version"]) for s in repo.scores()}
+    assert stored == {s.submission_id: (s.score, s.flagged, s.engine_version) for s in batch}
     for s in batch:
-        assert {(r["check_key"], r["fired"], json.dumps(r["evidence"], sort_keys=True))
-                for r in repo.check_results(s.submission_id)} == {
-            (r.key, r.fired, json.dumps(r.evidence, sort_keys=True)) for r in s.results}
+        # Compared as values: 700 and 700.0 are the same median (jsonb agrees).
+        assert {r["check_key"]: (r["fired"], r["evidence"]) for r in repo.check_results(s.submission_id)} == {
+            r.key: (r.fired, r.evidence) for r in s.results}
+
+
+def test_leases_cover_every_account_and_device_a_result_depends_on():
+    repo = make_repo()
+    # P01 has used two phones; P02 shares the second one.
+    for body in (payload("P01", hour=8, device="phone-a"), payload("P01", hour=9, device="phone-b"),
+                 payload("P02", hour=10, device="phone-b")):
+        service.ingest(repo, SubmissionIn(**body))
+    begun = repo.ingest_begin({**payload("P02", hour=11, device="phone-c"), "id": "x", "contributor_id": "c-p02",
+                               "synced_at": DAY.isoformat()}, "holder", "0.2.0", 15)
+    # P02's results read phone-b's accounts (P01), so P01 and P01's other phone are leased too.
+    assert begun["lock_keys"] == sorted(["contributor:c-p02", "device:phone-b", "device:phone-c"])
+    begun_b = repo.ingest_begin({**payload("P02", hour=12, device="phone-b"), "id": "y", "contributor_id": "c-p02",
+                                 "synced_at": DAY.isoformat()}, "other", "0.2.0", 15)
+    assert begun_b["status"] == "busy"
+    repo.release_locks("holder")
+    begun_b = repo.ingest_begin({**payload("P02", hour=12, device="phone-b"), "id": "y", "contributor_id": "c-p02",
+                                 "synced_at": DAY.isoformat()}, "other", "0.2.0", 15)
+    assert "contributor:c-p01" in begun_b["lock_keys"] and "device:phone-a" not in begun_b["lock_keys"]
+
+
+# Failure recovery -------------------------------------------------------------------------
+
+class FakeClock:
+    def __init__(self) -> None:
+        self.now = 1000.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+def _fail_next_commit(repo: InMemoryRepo, monkeypatch, also_crash_release: bool = False) -> None:
+    """The next ingest_commit raises (and, for a crash, so does releasing the leases)."""
+    original_commit, original_release = repo.ingest_commit, repo.release_locks
+
+    def failing_commit(*args, **kwargs):
+        monkeypatch.setattr(repo, "ingest_commit", original_commit)
+        raise RuntimeError("connection reset while writing results")
+
+    def dead_release(holder):
+        monkeypatch.setattr(repo, "release_locks", original_release)
+        raise RuntimeError("process died")
+
+    monkeypatch.setattr(repo, "ingest_commit", failing_commit)
+    if also_crash_release:
+        monkeypatch.setattr(repo, "release_locks", dead_release)
+
+
+def test_failed_commit_then_retry_heals(client, repo, monkeypatch):
+    first = post(client, payload(hour=21 + 10 / 60, north_m=0)).json()
+    second = post(client, payload(hour=21 + 40 / 60, north_m=8)).json()
+    third_body = payload(hour=22 + 10 / 60, north_m=4, duration=600)
+
+    _fail_next_commit(repo, monkeypatch)
+    failed = post(client, third_body)
+    assert failed.status_code == 503 and failed.headers["retry-after"] == "1"
+    stored = [r for r in repo.submissions() if r["client_submission_id"] == third_body["client_submission_id"]]
+    assert len(stored) == 1 and repo.scores([stored[0]["id"]]) == []  # stored, never scored
+    assert repo.locks == {}  # released on the failure path
+
+    retry = post(client, third_body)
+    assert retry.status_code == 200
+    body = retry.json()
+    assert body["healed"] is True and body["duplicate"] is True and body["id"] == stored[0]["id"]
+    assert body["flagged"] is True and body["score"] == 4.5
+    # Healing rescored the affected set too: the two earlier interviews flipped.
+    assert {c["submission_id"] for c in body["changed"]} == {first["id"], second["id"]}
+    assert_matches_batch(repo)
+    assert repo.locks == {}
+
+    again = post(client, third_body).json()  # a healthy record is returned as is
+    assert again["healed"] is False and again["score"] == 4.5 and again["changed"] == []
+
+
+def test_crashed_request_blocks_others_only_until_the_lease_expires(monkeypatch):
+    clock = FakeClock()
+    repo = make_repo(clock=clock)
+    monkeypatch.setattr(service, "LOCK_WAIT_SECONDS", 0.2)
+    service.ingest(repo, SubmissionIn(**payload(hour=9, north_m=0)))
+    crashed_body = payload(hour=10, north_m=5)
+
+    _fail_next_commit(repo, monkeypatch, also_crash_release=True)
+    with pytest.raises(service.ScoringIncomplete):
+        service.ingest(repo, SubmissionIn(**crashed_body))
+    assert repo.locks and all(holder for holder, _ in repo.locks.values())  # the dead request still holds them
+
+    # Within the TTL, the same contributor is blocked...
+    with pytest.raises(service.Busy):
+        service.ingest(repo, SubmissionIn(**payload(hour=11, north_m=10)))
+    # ...and once the TTL passes, the retry heals and everything is released.
+    clock.now += service.LOCK_TTL_SECONDS + 0.1
+    status, body = service.ingest(repo, SubmissionIn(**crashed_body))
+    assert (status, body["healed"]) == (200, True)
+    status, _ = service.ingest(repo, SubmissionIn(**payload(hour=11, north_m=10)))
+    assert status == 201
+    assert_matches_batch(repo)
+    assert repo.locks == {}
+
+
+def test_retry_heals_a_score_from_an_older_engine(client, repo):
+    body = payload(duration=600)
+    created = post(client, body).json()
+    repo._scores[created["id"]]["engine_version"] = "0.1.0"  # scored by an older engine
+    retry = post(client, body).json()
+    assert retry["healed"] is True and retry["engine_version"] == "0.2.0"
+    assert repo.scores([created["id"]])[0]["engine_version"] == "0.2.0"
+
+
+def test_commit_after_the_lease_expired_is_refused():
+    from api._lib.repo import LeaseLost
+
+    clock = FakeClock()
+    repo = make_repo(clock=clock)
+    row = {**payload(hour=9), "id": "s1", "contributor_id": "c-e01", "synced_at": DAY.isoformat()}
+    slow = repo.ingest_begin(row, "slow", "0.2.0", 15)
+    clock.now += 16  # the slow request stalls past its lease
+    fast = repo.ingest_begin(row, "fast", "0.2.0", 15, heal=True)
+    assert fast["status"] == "heal"
+    with pytest.raises(LeaseLost):
+        repo.ingest_commit([], [{"submission_id": "s1", "score": 0.0, "flagged": False, "config": {},
+                                 "engine_version": "0.2.0"}], "slow", len(slow["lock_keys"]))
+    assert repo.scores() == []  # nothing written by the stale holder
+    repo.ingest_commit([], [], "fast", len(fast["lock_keys"]))
+    assert repo.locks == {}
