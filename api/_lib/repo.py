@@ -1,20 +1,23 @@
 """Data access behind one small interface, so endpoints never talk to Supabase directly.
 
-SupabaseRepo is the real one (PostgREST + service role key). InMemoryRepo
-holds plain dicts and backs the API tests. Rows are dicts shaped like the
-database rows. Every method is scoped to the one configured project.
+SupabaseRepo is the real one (PostgREST + service role key; ingest goes
+through the ingest_begin / ingest_commit database functions). InMemoryRepo
+holds plain dicts, mirrors those functions' semantics, and backs the API
+tests. Rows are dicts shaped like the database rows. Every method is scoped
+to the one configured project. No scoring decisions are made here.
 """
 
 import threading
 import time
 import uuid
 from datetime import datetime, timezone
-from typing import Iterable, Protocol
+from typing import Callable, Iterable, Protocol
 
 from .postgrest import Supabase, SupabaseError, in_list
 
 ENGINE_COLUMNS = "id,contributor_id,device_id,captured_at,synced_at,duration_sec,lat,lng,answers,voice_transcript"
 LIGHT_COLUMNS = "id,contributor_id,device_id,captured_at,duration_sec,lat,lng,source"
+LEASE_LOST_CODE = "FQ409"
 
 
 class Conflict(Exception):
@@ -25,6 +28,10 @@ class NotFound(Exception):
     pass
 
 
+class LeaseLost(Exception):
+    """A commit arrived after one of its leases expired; nothing was written."""
+
+
 class Repository(Protocol):
     cache_ttl: float  # seconds the service may cache slow-changing reads (0 = never)
 
@@ -33,19 +40,27 @@ class Repository(Protocol):
     def areas(self) -> list[dict]: ...
     def contributors(self) -> list[dict]: ...  # id, code, display_name, kind, area_id
     def submission(self, submission_id: str) -> dict | None: ...
-    def submission_by_client_id(self, client_submission_id: str) -> dict | None: ...
-    def insert_submission(self, row: dict) -> dict: ...  # Conflict on a duplicate client_submission_id
     def submissions(self, *, contributor_ids: Iterable[str] | None = None, device_ids: Iterable[str] | None = None,
                     source: str | None = None, light: bool = False) -> list[dict]: ...
     def scores(self, submission_ids: Iterable[str] | None = None) -> list[dict]: ...
     def check_results(self, submission_id: str) -> list[dict]: ...
     def fired_checks(self, engine_version: str) -> list[dict]: ...  # submission_id, check_key, weight
-    def save_scores(self, check_rows: list[dict], score_rows: list[dict]) -> None: ...
+    def save_scores(self, check_rows: list[dict], score_rows: list[dict]) -> None: ...  # bulk, no leases (/rescore)
+
+    # Ingest in two calls. ingest_begin returns {"status": ...}:
+    #   duplicate  client_submission_id exists and heal is False: submission, score (or None), checks (fired)
+    #   busy       an overlapping lease is held; lock_keys
+    #   inserted   new row stored, leases held: submission, lock_keys, group (rows to score with), scores (before)
+    #   heal       like inserted, around the existing row (heal=True)
+    def ingest_begin(self, row: dict, holder: str, engine_version: str, ttl_seconds: int,
+                     heal: bool = False) -> dict: ...
+    def ingest_commit(self, check_rows: list[dict], score_rows: list[dict], holder: str,
+                      expected_locks: int) -> int: ...  # LeaseLost if a lease expired; releases the leases
+    def release_locks(self, holder: str) -> None: ...
+
     def reviews(self, submission_id: str | None = None) -> list[dict]: ...
     def insert_review(self, row: dict) -> dict: ...  # Conflict if the submission has an active review
     def revoke_review(self, review_id: str) -> dict: ...  # NotFound if missing or already revoked
-    def acquire_locks(self, keys: list[str], holder: str, ttl_seconds: int) -> bool: ...
-    def release_locks(self, holder: str) -> None: ...
     def truth_labels(self) -> dict[str, dict]: ...  # only /evaluate may call this
 
 
@@ -60,7 +75,8 @@ class InMemoryRepo:
 
     def __init__(self, project: dict, contributors: list[dict], areas: list[dict] | None = None,
                  check_params: dict | None = None, submissions: list[dict] | None = None,
-                 truth: list[dict] | None = None, write_delay: float = 0.0):
+                 truth: list[dict] | None = None, write_delay: float = 0.0,
+                 clock: Callable[[], float] = time.monotonic, enforce_leases: bool = True):
         self._project = project
         self._contributors = list(contributors)
         self._areas = list(areas or [])
@@ -70,9 +86,11 @@ class InMemoryRepo:
         self._check_results: dict[tuple[str, str, str], dict] = {}
         self._scores: dict[str, dict] = {}
         self._reviews: dict[str, dict] = {}
-        self._locks: dict[str, tuple[str, float]] = {}
+        self.locks: dict[str, tuple[str, float]] = {}  # key -> (holder, expires_at)
         self._mutex = threading.Lock()
         self._write_delay = write_delay  # widens race windows in concurrency tests
+        self._clock = clock
+        self._enforce_leases = enforce_leases  # False only to prove the tests catch races
 
     def project(self) -> dict:
         return dict(self._project)
@@ -89,21 +107,6 @@ class InMemoryRepo:
     def submission(self, submission_id):
         row = self._submissions.get(submission_id)
         return dict(row) if row else None
-
-    def submission_by_client_id(self, client_submission_id):
-        with self._mutex:
-            for row in self._submissions.values():
-                if row["client_submission_id"] == client_submission_id:
-                    return dict(row)
-        return None
-
-    def insert_submission(self, row):
-        with self._mutex:
-            if any(r["client_submission_id"] == row["client_submission_id"] for r in self._submissions.values()):
-                raise Conflict(row["client_submission_id"])
-            stored = {"created_at": _now(), "voice_note_path": None, "transcript_lang": None, **row}
-            self._submissions[row["id"]] = stored
-            return dict(stored)
 
     def submissions(self, *, contributor_ids=None, device_ids=None, source=None, light=False):
         contributor_ids = set(contributor_ids) if contributor_ids is not None else None
@@ -138,14 +141,87 @@ class InMemoryRepo:
             return [{"submission_id": r["submission_id"], "check_key": r["check_key"], "weight": r["weight"]}
                     for r in self._check_results.values() if r["fired"] and r["engine_version"] == engine_version]
 
+    def _write(self, check_rows, score_rows) -> int:
+        written = 0
+        for row in check_rows:
+            key = (row["submission_id"], row["check_key"], row["engine_version"])
+            old = self._check_results.get(key)
+            if old is None or (old["fired"], old["weight"], old["evidence"]) != (row["fired"], row["weight"], row["evidence"]):
+                self._check_results[key] = dict(row)
+                written += 1
+        for row in score_rows:
+            old = self._scores.get(row["submission_id"])
+            if old is None or any(old[k] != row[k] for k in ("score", "flagged", "config", "engine_version")):
+                self._scores[row["submission_id"]] = dict(row)
+                written += 1
+        return written
+
     def save_scores(self, check_rows, score_rows):
+        with self._mutex:
+            self._write(check_rows, score_rows)
+
+    # Ingest, mirroring ingest_begin / ingest_commit -----------------------------
+
+    def _stored_view(self, row: dict, engine_version: str) -> dict:
+        score = self._scores.get(row["id"])
+        checks = [dict(r) for (sid, _, version), r in sorted(self._check_results.items())
+                  if sid == row["id"] and version == engine_version and r["fired"]]
+        return {"submission": dict(row), "score": dict(score) if score else None, "checks": checks}
+
+    def ingest_begin(self, row, holder, engine_version, ttl_seconds, heal=False):
+        with self._mutex:
+            existing = next((r for r in self._submissions.values()
+                             if r["client_submission_id"] == row["client_submission_id"]), None)
+            if existing and not heal:
+                return {"status": "duplicate", **self._stored_view(existing, engine_version)}
+            source = existing or row
+            cid, did = source["contributor_id"], source.get("device_id")
+            subs = list(self._submissions.values())
+            contributor_ids = {cid} | {r["contributor_id"] for r in subs if did and r.get("device_id") == did}
+            device_ids = ({did} if did else set()) | {r["device_id"] for r in subs
+                                                      if r["contributor_id"] == cid and r.get("device_id")}
+            keys = sorted([f"contributor:{c}" for c in contributor_ids] + [f"device:{d}" for d in device_ids])
+
+            now = self._clock()
+            for key in [k for k, (_, expires) in self.locks.items() if expires <= now]:
+                del self.locks[key]
+            if self._enforce_leases and any(k in self.locks and self.locks[k][0] != holder for k in keys):
+                return {"status": "busy", "lock_keys": keys}
+            for key in keys:
+                self.locks[key] = (holder, now + ttl_seconds)
+
+            if existing is None:
+                stored = {"created_at": _now(), "voice_note_path": None, **row}
+                self._submissions[row["id"]] = stored
+            else:
+                stored = existing
+            group = [{k: r.get(k) for k in ENGINE_COLUMNS.split(",")} for r in self._submissions.values()
+                     if r["contributor_id"] in contributor_ids or r.get("device_id") in device_ids]
+            ids = {r["id"] for r in group}
+            scores = [{k: s[k] for k in ("submission_id", "score", "flagged", "engine_version")}
+                      for s in self._scores.values() if s["submission_id"] in ids]
+            return {"status": "heal" if existing else "inserted", "submission": dict(stored), "lock_keys": keys,
+                    "group": sorted(group, key=lambda r: r["id"]), "scores": scores}
+
+    def ingest_commit(self, check_rows, score_rows, holder, expected_locks):
         if self._write_delay:
             time.sleep(self._write_delay)
         with self._mutex:
-            for row in check_rows:
-                self._check_results[(row["submission_id"], row["check_key"], row["engine_version"])] = dict(row)
-            for row in score_rows:
-                self._scores[row["submission_id"]] = dict(row)
+            now = self._clock()
+            held = sum(1 for h, expires in self.locks.values() if h == holder and expires > now)
+            if self._enforce_leases and held < expected_locks:
+                raise LeaseLost(f"holding {held}, expected {expected_locks}")
+            written = self._write(check_rows, score_rows)
+            for key in [k for k, (h, _) in self.locks.items() if h == holder]:
+                del self.locks[key]
+            return written
+
+    def release_locks(self, holder):
+        with self._mutex:
+            for key in [k for k, (h, _) in self.locks.items() if h == holder]:
+                del self.locks[key]
+
+    # Reviews and truth ------------------------------------------------------------
 
     def reviews(self, submission_id=None):
         with self._mutex:
@@ -169,20 +245,6 @@ class InMemoryRepo:
                 raise NotFound(review_id)
             row["revoked_at"] = _now()
             return dict(row)
-
-    def acquire_locks(self, keys, holder, ttl_seconds):
-        with self._mutex:
-            now = time.monotonic()
-            if any(k in self._locks and self._locks[k][1] > now and self._locks[k][0] != holder for k in keys):
-                return False
-            for k in keys:
-                self._locks[k] = (holder, now + ttl_seconds)
-            return True
-
-    def release_locks(self, holder):
-        with self._mutex:
-            for k in [k for k, (h, _) in self._locks.items() if h == holder]:
-                del self._locks[k]
 
     def truth_labels(self):
         return {sid: {"fraud_type": t["fraud_type"], "noise_tag": t.get("noise_tag")}
@@ -230,19 +292,6 @@ class SupabaseRepo:
         rows = self._db.select("submissions", "*", id=f"eq.{submission_id}", **self._in_project())
         return rows[0] if rows else None
 
-    def submission_by_client_id(self, client_submission_id):
-        rows = self._db.select("submissions", "*", client_submission_id=f"eq.{client_submission_id}",
-                               **self._in_project())
-        return rows[0] if rows else None
-
-    def insert_submission(self, row):
-        try:
-            return self._db.insert("submissions", [{**row, "project_id": self._pid}], returning=True)[0]
-        except SupabaseError as error:
-            if error.code == "23505":
-                raise Conflict(row["client_submission_id"]) from error
-            raise
-
     def submissions(self, *, contributor_ids=None, device_ids=None, source=None, light=False):
         filters = {**self._in_project(), "order": "id"}
         parts = []
@@ -288,6 +337,24 @@ class SupabaseRepo:
         self._db.upsert("check_results", check_rows, on_conflict="submission_id,check_key,engine_version")
         self._db.upsert("scores", score_rows, on_conflict="submission_id")
 
+    def ingest_begin(self, row, holder, engine_version, ttl_seconds, heal=False):
+        return self._db.rpc("ingest_begin", {
+            "submission": {**row, "project_id": self._pid}, "lock_holder": holder,
+            "engine_version": engine_version, "ttl_seconds": ttl_seconds, "heal": heal,
+        })
+
+    def ingest_commit(self, check_rows, score_rows, holder, expected_locks):
+        try:
+            return self._db.rpc("ingest_commit", {"check_rows": check_rows, "score_rows": score_rows,
+                                                  "lock_holder": holder, "expected_locks": expected_locks})
+        except SupabaseError as error:
+            if error.code == LEASE_LOST_CODE:
+                raise LeaseLost(str(error)) from error
+            raise
+
+    def release_locks(self, holder):
+        self._db.rpc("release_scoring_locks", {"lock_holder": holder})
+
     def reviews(self, submission_id=None):
         if submission_id:
             return self._db.select("reviews", "*", submission_id=f"eq.{submission_id}", order="created_at")
@@ -310,13 +377,6 @@ class SupabaseRepo:
         if not rows:
             raise NotFound(review_id)
         return rows[0]
-
-    def acquire_locks(self, keys, holder, ttl_seconds):
-        return bool(self._db.rpc("acquire_scoring_locks",
-                                 {"lock_keys": keys, "lock_holder": holder, "ttl_seconds": ttl_seconds}))
-
-    def release_locks(self, holder):
-        self._db.rpc("release_scoring_locks", {"lock_holder": holder})
 
     def truth_labels(self):
         rows = self._db.select("synthetic_truth", "submission_id,fraud_type,noise_tag,submissions!inner(project_id,source)",

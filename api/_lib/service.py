@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo
 from engine import CheckResult, Contributor, Params, ScoredSubmission, Submission, __version__, score_all, score_incremental
 from engine.insights import area_rates, contributor_stats, hotspots
 
-from .repo import Conflict, Repository
+from .repo import Repository
 from .schemas import ReviewIn, SubmissionIn
 
 LOCK_TTL_SECONDS = 15
@@ -23,6 +23,10 @@ class Busy(Exception):
 
 class UnknownContributor(Exception):
     pass
+
+
+class ScoringIncomplete(Exception):
+    """The submission is stored but its results were not written. Retrying the same request heals it."""
 
 
 @dataclass(frozen=True)
@@ -88,123 +92,123 @@ def _contributor_view(ctx: ProjectContext, contributor_id: str) -> dict:
 
 
 # POST /submissions --------------------------------------------------------------
+#
+# Two database calls per arrival: ingest_begin (lease + idempotent insert +
+# context) and ingest_commit (write results + release). Everything in between,
+# including whether a stored record needs healing, is decided here in Python.
 
-def _acquire(repo: Repository, keys: list[str], holder: str) -> None:
+def _begin(repo: Repository, row: dict, holder: str, heal: bool) -> dict:
     deadline = time.monotonic() + LOCK_WAIT_SECONDS
     pause = 0.05
-    while not repo.acquire_locks(keys, holder, LOCK_TTL_SECONDS):
+    while True:
+        begun = repo.ingest_begin(row, holder, __version__, LOCK_TTL_SECONDS, heal)
+        if begun["status"] != "busy":
+            return begun
         if time.monotonic() > deadline:
-            raise Busy(", ".join(keys))
+            raise Busy(", ".join(begun.get("lock_keys") or []))
         time.sleep(pause)
         pause = min(pause * 2, 0.4)
 
 
-def _stored_view(repo: Repository, ctx: ProjectContext, row: dict, duplicate: bool) -> dict:
-    score = next(iter(repo.scores([row["id"]])), None)
-    fired = [{"key": r["check_key"], "weight": r["weight"], "evidence": r["evidence"]}
-             for r in repo.check_results(row["id"]) if r["fired"] and (not score or r["engine_version"] == score["engine_version"])]
+def needs_heal(stored_score: dict | None) -> bool:
+    """A stored submission is unfinished if it has no score, or one from an older engine."""
+    return stored_score is None or stored_score.get("engine_version") != __version__
+
+
+def _view(ctx: ProjectContext, row: dict, score: float | None, flagged: bool | None, version: str | None,
+          fired: list[dict], **extra) -> dict:
     return {
         "id": row["id"],
         "client_submission_id": row["client_submission_id"],
         "contributor": _contributor_view(ctx, row["contributor_id"]),
         "captured_at": row["captured_at"],
         "synced_at": row["synced_at"],
-        "score": score["score"] if score else None,
-        "flagged": score["flagged"] if score else None,
-        "band": ctx.params.band(score["score"]) if score else None,
-        "engine_version": score["engine_version"] if score else None,
+        "score": score,
+        "flagged": flagged,
+        "band": ctx.params.band(score) if score is not None else None,
+        "engine_version": version,
         "fired": fired,
-        "changed": [],
-        "duplicate": duplicate,
+        **extra,
     }
 
 
 def ingest(repo: Repository, payload: SubmissionIn) -> tuple[int, dict]:
-    """Store a phone's submission, score it and everything it affects. (201, view) or (200, view) on a retry."""
+    """Store a phone's submission, score it and everything it affects.
+
+    201 for a new submission. 200 for a retry: the stored record as is, or, if
+    an earlier attempt stored it but never finished scoring, after healing it.
+    """
     marks = [("start", time.perf_counter())]
 
     def mark(name: str) -> None:
         marks.append((name, time.perf_counter()))
 
+    def timing() -> dict:
+        phases = {name: round((t - marks[i][1]) * 1000) for i, (name, t) in enumerate(marks[1:])}
+        return {**phases, "total": round((marks[-1][1] - marks[0][1]) * 1000)}
+
     ctx = context(repo)
-    existing = repo.submission_by_client_id(payload.client_submission_id)
-    mark("lookup")
-    if existing:
-        return 200, _stored_view(repo, ctx, existing, duplicate=True)
     contributor = ctx.by_code.get(payload.contributor_code)
     if contributor is None:
         raise UnknownContributor(payload.contributor_code)
-
+    row = {
+        "id": str(uuid.uuid4()),
+        "contributor_id": contributor["id"],
+        "client_submission_id": payload.client_submission_id,
+        "device_id": payload.device_id,
+        "captured_at": _iso(payload.captured_at),
+        "synced_at": _iso(datetime.now(timezone.utc)),  # the server decides when it received it
+        "duration_sec": payload.duration_sec,
+        "lat": payload.lat,
+        "lng": payload.lng,
+        "gps_accuracy_m": payload.gps_accuracy_m,
+        "answers": payload.answers.model_dump(),
+        "voice_transcript": payload.voice_transcript,
+        "transcript_lang": "en" if payload.voice_transcript else None,
+        "source": payload.source,
+    }
     holder = str(uuid.uuid4())
-    keys = sorted({f"contributor:{contributor['id']}", f"device:{payload.device_id}"})
-    _acquire(repo, keys, holder)
-    mark("lock")
+    begun = _begin(repo, row, holder, heal=False)
+    mark("begin")
+
+    healed = False
+    if begun["status"] == "duplicate":
+        score = begun["score"]
+        if not needs_heal(score):
+            fired = [{"key": c["check_key"], "weight": c["weight"], "evidence": c["evidence"]} for c in begun["checks"]]
+            mark("done")
+            return 200, _view(ctx, begun["submission"], score["score"], score["flagged"], score["engine_version"],
+                              fired, changed=[], duplicate=True, healed=False, timing_ms=timing())
+        begun = _begin(repo, begun["submission"], holder, heal=True)
+        healed = True
+        mark("heal_begin")
+
     try:
-        row = {
-            "id": str(uuid.uuid4()),
-            "contributor_id": contributor["id"],
-            "client_submission_id": payload.client_submission_id,
-            "device_id": payload.device_id,
-            "captured_at": _iso(payload.captured_at),
-            "synced_at": _iso(datetime.now(timezone.utc)),  # the server decides when it received it
-            "duration_sec": payload.duration_sec,
-            "lat": payload.lat,
-            "lng": payload.lng,
-            "gps_accuracy_m": payload.gps_accuracy_m,
-            "answers": payload.answers.model_dump(),
-            "voice_transcript": payload.voice_transcript,
-            "transcript_lang": "en" if payload.voice_transcript else None,
-            "source": payload.source,
-        }
-        try:
-            stored = repo.insert_submission(row)
-        except Conflict:  # the same retry raced us between the lookup and the insert
-            return 200, _stored_view(repo, ctx, repo.submission_by_client_id(payload.client_submission_id), True)
-        new = Submission.from_row(stored)
-        mark("insert")
-
-        # Everything whose result this arrival may change, plus what those need as context.
-        group = repo.submissions(contributor_ids=[new.contributor_id], device_ids=[new.device_id])
-        contributor_ids = {r["contributor_id"] for r in group}
-        device_ids = {r["device_id"] for r in group if r.get("device_id")} | {new.device_id}
-        if contributor_ids != {new.contributor_id} or device_ids != {new.device_id}:
-            group = repo.submissions(contributor_ids=contributor_ids, device_ids=device_ids)
-        existing_subs = [Submission.from_row(r) for r in group if r["id"] != new.id]
-        mark("load")
-
-        scored = score_incremental(new, existing_subs, ctx.contributors, ctx.params)
+        new = Submission.from_row(begun["submission"])
+        group = [Submission.from_row(r) for r in begun["group"] if r["id"] != new.id]
+        scored = score_incremental(new, group, ctx.contributors, ctx.params)
         mark("score")
-        before = {s["submission_id"]: s["flagged"] for s in repo.scores([s.submission_id for s in scored[1:]])}
         check_rows, score_rows = _result_rows(scored, ctx.params, _iso(datetime.now(timezone.utc)))
-        repo.save_scores(check_rows, score_rows)
-        mark("save")
-    finally:
-        repo.release_locks(holder)
-        mark("release")
+        repo.ingest_commit(check_rows, score_rows, holder, len(begun["lock_keys"]))
+        mark("commit")
+    except Exception as error:
+        try:
+            repo.release_locks(holder)
+        except Exception:
+            pass  # the leases expire after LOCK_TTL_SECONDS anyway
+        raise ScoringIncomplete(str(error)) from error
 
+    before = {s["submission_id"]: s["flagged"] for s in begun["scores"]}
     mine = scored[0]
     changed = [
         {"submission_id": s.submission_id, "flagged": s.flagged, "previously_flagged": before.get(s.submission_id, False),
          "score": s.score}
         for s in scored[1:] if before.get(s.submission_id, False) != s.flagged
     ]
-    return 201, {
-        "id": stored["id"],
-        "client_submission_id": stored["client_submission_id"],
-        "contributor": _contributor_view(ctx, stored["contributor_id"]),
-        "captured_at": stored["captured_at"],
-        "synced_at": stored["synced_at"],
-        "score": mine.score,
-        "flagged": mine.flagged,
-        "band": ctx.params.band(mine.score),
-        "engine_version": mine.engine_version,
-        "fired": [{"key": r.key, "weight": r.weight, "evidence": r.evidence} for r in mine.results if r.fired],
-        "changed": changed,
-        "rescored": len(scored) - 1,
-        "duplicate": False,
-        "timing_ms": {**{name: round((t - marks[i][1]) * 1000) for i, (name, t) in enumerate(marks[1:])},
-                      "total": round((marks[-1][1] - marks[0][1]) * 1000)},
-    }
+    fired = [{"key": r.key, "weight": r.weight, "evidence": r.evidence} for r in mine.results if r.fired]
+    return (200 if healed else 201), _view(
+        ctx, begun["submission"], mine.score, mine.flagged, mine.engine_version, fired,
+        changed=changed, rescored=len(scored) - 1, duplicate=healed, healed=healed, timing_ms=timing())
 
 
 # GET /submissions/{id} -------------------------------------------------------------

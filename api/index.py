@@ -67,8 +67,10 @@ def health() -> dict:
 def post_submission(payload: SubmissionIn, response: Response, repo: Repository = Depends(get_repo)) -> dict:
     """Store a phone's submission and score it, plus every earlier submission it affects.
 
-    Idempotent on client_submission_id: a retry returns the stored record with 200.
-    `changed` lists earlier submissions whose flagged status flipped because of this arrival.
+    Idempotent on client_submission_id: a retry returns the stored record with 200,
+    and finishes scoring first if an earlier attempt stored it but failed before
+    writing results (`healed: true`). `changed` lists earlier submissions whose
+    flagged status flipped because of this arrival.
     """
     try:
         status, body = service.ingest(repo, payload)
@@ -76,6 +78,9 @@ def post_submission(payload: SubmissionIn, response: Response, repo: Repository 
         raise HTTPException(422, f"unknown contributor code: {error}")
     except service.Busy:
         raise HTTPException(503, "another arrival for this contributor or device is being scored; retry",
+                            headers={"Retry-After": "1"})
+    except service.ScoringIncomplete:
+        raise HTTPException(503, "stored, but scoring did not finish; retry with the same client_submission_id",
                             headers={"Retry-After": "1"})
     response.status_code = status
     return body
