@@ -1,12 +1,19 @@
-"""Minimal PostgREST client for the offline scripts, authenticated with the service role key."""
+"""Minimal PostgREST client for Supabase, authenticated with the service role key.
+
+Shared by the API (SupabaseRepo) and the offline scripts.
+"""
 
 from pathlib import Path
+from typing import Any
 
 import httpx
 
 
 class SupabaseError(RuntimeError):
-    pass
+    def __init__(self, message: str, status: int | None = None, code: str | None = None):
+        super().__init__(message)
+        self.status = status
+        self.code = code  # Postgres error code, e.g. 23505 for a unique violation
 
 
 def load_env(path: Path) -> dict[str, str]:
@@ -17,6 +24,11 @@ def load_env(path: Path) -> dict[str, str]:
             key, value = line.split("=", 1)
             env[key.strip()] = value.strip()
     return env
+
+
+def in_list(values) -> str:
+    """A PostgREST in.(...) filter with each value quoted."""
+    return "in.(" + ",".join('"' + str(v).replace('"', '\\"') + '"' for v in values) + ")"
 
 
 class Supabase:
@@ -37,8 +49,13 @@ class Supabase:
 
     def _check(self, response: httpx.Response) -> httpx.Response:
         if response.is_error:
+            code = None
+            try:
+                code = response.json().get("code")
+            except ValueError:
+                pass
             raise SupabaseError(f"{response.request.method} {response.request.url.path}: "
-                                f"{response.status_code} {response.text}")
+                                f"{response.status_code} {response.text}", response.status_code, code)
         return response
 
     def count(self, table: str, select: str = "*", **filters: str) -> int:
@@ -64,10 +81,15 @@ class Supabase:
     def delete(self, table: str, **filters: str) -> None:
         self._check(self._http.delete(f"/{table}", params=filters, headers={"Prefer": "return=minimal"}))
 
-    def insert(self, table: str, rows: list[dict], batch_size: int = 500) -> None:
+    def insert(self, table: str, rows: list[dict], batch_size: int = 500, returning: bool = False) -> list[dict]:
+        out: list[dict] = []
+        prefer = "return=representation" if returning else "return=minimal"
         for start in range(0, len(rows), batch_size):
-            self._check(self._http.post(f"/{table}", json=rows[start:start + batch_size],
-                                        headers={"Prefer": "return=minimal"}))
+            response = self._check(self._http.post(f"/{table}", json=rows[start:start + batch_size],
+                                                   headers={"Prefer": prefer}))
+            if returning:
+                out.extend(response.json())
+        return out
 
     def upsert(self, table: str, rows: list[dict], on_conflict: str, batch_size: int = 500) -> None:
         """Insert, or update rows that collide on the on_conflict columns."""
@@ -76,6 +98,14 @@ class Supabase:
                 f"/{table}", params={"on_conflict": on_conflict}, json=rows[start:start + batch_size],
                 headers={"Prefer": "resolution=merge-duplicates,return=minimal"},
             ))
+
+    def update(self, table: str, values: dict, **filters: str) -> list[dict]:
+        response = self._check(self._http.patch(f"/{table}", params=filters, json=values,
+                                                headers={"Prefer": "return=representation"}))
+        return response.json()
+
+    def rpc(self, function: str, args: dict[str, Any]) -> Any:
+        return self._check(self._http.post(f"/rpc/{function}", json=args)).json()
 
     def close(self) -> None:
         self._http.close()

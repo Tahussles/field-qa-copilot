@@ -18,7 +18,7 @@ if str(ROOT) not in sys.path:
 
 from datagen import build_wave, db_rows  # noqa: E402
 from datagen.outputs import summarize, write_local  # noqa: E402
-from supabase_rest import Supabase, SupabaseError  # noqa: E402
+from api._lib.postgrest import Supabase, SupabaseError  # noqa: E402
 
 TABLES = ("projects", "areas", "contributors", "check_config", "submissions", "synthetic_truth")
 

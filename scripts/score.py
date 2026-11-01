@@ -18,7 +18,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from engine import Contributor, Params, Submission, __version__, score_all  # noqa: E402
-from supabase_rest import Supabase, SupabaseError  # noqa: E402
+from api._lib.postgrest import Supabase, SupabaseError  # noqa: E402
 
 SUBMISSION_COLUMNS = "id,contributor_id,device_id,captured_at,synced_at,duration_sec,lat,lng,answers,voice_transcript"
 
