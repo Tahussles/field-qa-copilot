@@ -8,9 +8,20 @@ dependencies = [
 ]
 
 [dependency-groups]
+datagen = [
+    "httpx>=0.28.1",
+    "matplotlib>=3.11.2",
+]
 dev = [
+    "pytest>=9.2.0",
     "uvicorn>=0.38",
 ]
 
 [tool.uv]
 package = false
+# uv run and uv sync install both groups locally; Vercel installs only [project] dependencies.
+default-groups = ["dev", "datagen"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

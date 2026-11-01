@@ -47,3 +47,6 @@ __pycache__/
 .venv/
 .pytest_cache/
 .ruff_cache/
+
+# generated synthetic data (scripts/generate.py)
+/data/
