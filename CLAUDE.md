@@ -16,17 +16,22 @@ Field QA Copilot checks every submission as it syncs, flags likely fabrication w
 
 ```
 app/                      Next.js routes and UI
-api/index.py              FastAPI app; every route lives under /api/py
+api/index.py              FastAPI routes, all under /api/py (docs at /api/py/docs)
+api/_lib/                 Repository (Supabase + in-memory), service logic, schemas, /evaluate
+                          (underscore: Vercel does not turn these files into functions)
 engine/                   detection engine: stdlib only, no I/O (engine.__version__)
   config.py               Params defaults; check_config.params merges over them
   model.py                Submission, Contributor, CheckResult, Context
   checks/                 one module per check: check(target, context) -> CheckResult
   scoring.py              score_all (batch) and score_incremental (live arrivals)
+  insights.py             hotspots, contributor stats, area rates
+  metrics.py              precision/recall against labels the caller supplies
 datagen/                  seeded synthetic wave with planted fraud (may import engine, never the reverse)
-scripts/                  generate.py, score.py, evaluate.py, simulate.py, supabase_rest.py
+scripts/                  generate.py, score.py, evaluate.py, simulate.py, realtime-probe.mjs
 tests/                    pytest suite
 data/synthetic/           generator output: CSVs, summary.json, preview.png (gitignored)
 data/eval/                evaluation output: report.md, report.json (gitignored)
+data/sim/                 simulator run logs (gitignored)
 supabase/migrations/      SQL migrations, numbered and applied in order
 .githooks/commit-msg      rejects attribution strings in commit messages
 .github/workflows/        attribution-guard CI check on every push and PR
@@ -46,6 +51,9 @@ uv run scripts/generate.py --seed 20261031 --dry-run # local files only
 uv run scripts/score.py                              # score the project, upsert check_results and scores
 uv run scripts/evaluate.py                           # local precision/recall report, no database
 uv run scripts/evaluate.py --tuning-only --param 'same_spot_radius_m=30'   # try a change on seeds 1-5
+uv run scripts/simulate.py --target local --speed 0 --limit 40   # replay the Oct 31 live day via the API
+uv run scripts/simulate.py --target prod --reset-live            # full live day against production
+node --env-file=.env.local scripts/realtime-probe.mjs 600        # watch Realtime events
 ```
 
 Python deps: anything `api/` or `engine/` needs at runtime goes in `[project] dependencies`. Generator and test tools live in the `datagen` and `dev` dependency groups, which `uv sync` installs locally but Vercel does not.
@@ -72,7 +80,10 @@ After cloning, wire the commit hook once: `git config core.hooksPath .githooks`.
 
 - Secrets live only in `.env.local`, which is never committed. `.env.example` lists the keys with empty values. Vercel holds the deployed values.
 - The browser uses the anon key and can only read. All writes go through the server with the service role key.
-- Detection code (`engine/`, `api/`) must never read the `synthetic_truth` table or import `datagen`. Only `scripts/evaluate.py` reads the truth. Tests enforce both.
+- `engine/` never reads ground truth or imports `datagen`. In `api/`, only the /evaluate path (`api/_lib/evaluation.py` through `repo.truth_labels()`) reads `synthetic_truth`, server-side, and it returns aggregates only. Scripts may read it (`evaluate.py`, and `simulate.py` writes it). Tests enforce this.
+- API: endpoints depend on the `Repository` interface, never on Supabase directly. Writes need the `X-Demo-Passcode` header (`DEMO_PASSCODE` in `.env.local` and on Vercel). Reads are public.
+- Incremental scoring takes short leases (`scoring_locks`, keys `contributor:<id>` and `device:<id>`) so two arrivals that affect the same submissions never overwrite each other's results.
+- Review queue: score >= review_threshold. Watch band: watch_threshold <= score < review_threshold, counted and filterable, never queued.
 - Synthetic data is deterministic: the same seed gives identical rows, ids included. Change the generator, not the rows.
 - Evaluation seeds: tune defaults on seeds 1-5 only. Seeds 101-110 are held out for reporting and the CI gate; never tune on them. The demo seed is 20261031.
 - A changed default needs its seeds 1-5 evidence in a code comment next to it (see same_spot in engine/config.py).
