@@ -20,8 +20,8 @@ SEED = 20261031
 EXPECTED_FRAUD = {
     "curbstone": (12, 24),
     "speeder": (12, 34),
-    "copypaste": (8, 28),
-    "contradiction": (7, 27),
+    "copypaste": (6, 30),
+    "contradiction": (6, 32),
     "night": (9, 12),
     "multi_account": (12, 36),
     "burst": (23, 27),
@@ -144,6 +144,19 @@ def test_fraud_has_the_planted_shape(wave):
 def test_genuine_noise_stays_genuine(wave):
     noisy = [s for s in wave.submissions if s.noise]
     assert noisy and not any(s.is_fabricated for s in noisy)
+
+    genuine = [s for s in wave.submissions if not s.is_fabricated]
+    interviews = [s for s in genuine if s.contributor.kind == "enumerator"]
+    short = [s for s in genuine if "short_genuine" in s.noise]
+    straight = [s for s in genuine if "straightline_genuine" in s.noise]
+    two_source = [s for s in genuine if "two_source_transcript" in s.noise]
+    assert 0.008 <= len(short) / len(interviews) <= 0.012
+    assert all(s.contributor.kind == "enumerator" and s.duration_sec < 12 * 60 for s in short)
+    assert 0.003 <= len(straight) / len(genuine) <= 0.007
+    # The planted rows are the only genuine straight-liners.
+    assert [s for s in genuine if len(set(s.answers["satisfaction"])) == 1] == straight
+    assert 0.003 <= len(two_source) / len(genuine) <= 0.007
+
     for s in wave.submissions:
         if "late_sync" in s.noise:
             # Synced the next day or later, but captured in daytime: not night work.

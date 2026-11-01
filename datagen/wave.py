@@ -25,9 +25,9 @@ WALK_M_PER_MIN = 70
 WORKDAY_END_HOUR = 19.5
 
 # Genuine behaviour that looks suspicious. These rows stay is_fabricated = false.
-SHORT_GENUINE_RATE = 0.01
-STRAIGHTLINE_GENUINE_RATE = 0.005
-TWO_SOURCE_RATE = 0.005
+SHORT_GENUINE_SHARE = 0.01  # of genuine enumerator interviews
+STRAIGHTLINE_GENUINE_SHARE = 0.005  # of all genuine submissions
+TWO_SOURCE_SHARE = 0.005  # of all genuine submissions
 COMPOUND_DAY_RATE = 0.04
 LATE_CAPTURE_DAYS = 4
 LATE_SYNC_DAYS = 3
@@ -136,29 +136,13 @@ def _satisfaction(rng: Random, bias: float) -> list[int]:
             return values
 
 
-def _straight_line(rng: Random, bias: float) -> list[int]:
-    return [_clamp(round(3 + bias + rng.gauss(0, 0.4)))] * len(ITEM_MEANS)
-
-
-def _answers(rng: Random, area: Area, source: str, bias: float, noise: list[str], *,
-             short: bool = False, allow_noise: bool = True) -> tuple[dict, str]:
-    if allow_noise and rng.random() < STRAIGHTLINE_GENUINE_RATE:
-        satisfaction = _straight_line(rng, bias)
-        noise.append("straightline_genuine")
-    else:
-        satisfaction = _satisfaction(rng, bias)
-    if allow_noise and rng.random() < TWO_SOURCE_RATE:
-        other = rng.choice([s for s in cfg.WATER_SOURCES if s != source])
-        transcript = text.two_source_transcript(rng, source, other)
-        noise.append("two_source_transcript")
-    else:
-        transcript = text.voice_transcript(rng, source, area.landmarks)
+def _answers(rng: Random, area: Area, source: str, bias: float, *, short: bool = False) -> tuple[dict, str]:
     answers = {
         "water_source": source,
-        "satisfaction": satisfaction,
+        "satisfaction": _satisfaction(rng, bias),
         "open_text": text.open_text(rng, source, area.landmarks, short=short),
     }
-    return answers, transcript
+    return answers, text.voice_transcript(rng, source, area.landmarks)
 
 
 def _accuracy(rng: Random) -> float:
@@ -225,13 +209,7 @@ def _enumerator_submissions(seed: int, enum: Contributor, plan: _NoisePlan) -> l
 
     def interview(house: geo.Point, start: datetime, fraud: str | None, noise: list[str],
                   exact_point: bool = False) -> Submission:
-        if fraud == "speeder":
-            minutes = rng.uniform(4, 9)
-        elif fraud is None and rng.random() < SHORT_GENUINE_RATE:
-            minutes = rng.uniform(8, 11.9)
-            noise.append("short_genuine")
-        else:
-            minutes = _interview_minutes(rng)
+        minutes = rng.uniform(4, 9) if fraud == "speeder" else _interview_minutes(rng)
 
         if fraud == "contradiction":
             # The household buys water or uses the river; the form says piped_home.
@@ -245,7 +223,7 @@ def _enumerator_submissions(seed: int, enum: Contributor, plan: _NoisePlan) -> l
             transcript = text.voice_transcript(rng, true_source, area.landmarks)
         else:
             source, bias = _respondent(rng, area, style)
-            answers, transcript = _answers(rng, area, source, bias, noise, allow_noise=fraud is None)
+            answers, transcript = _answers(rng, area, source, bias)
             if fraud == "speeder":
                 answers["open_text"] = text.open_text(rng, source, area.landmarks, short=True)
                 if rng.random() < 0.8:
@@ -311,7 +289,7 @@ def _enumerator_submissions(seed: int, enum: Contributor, plan: _NoisePlan) -> l
                 start = t + _minutes(rng.uniform(1, 4)) if j else t
                 duration = round(rng.uniform(9, 15) * 60)
                 source, bias = _respondent(rng, area, style)
-                answers, transcript = _answers(rng, area, source, bias, [], allow_noise=False)
+                answers, transcript = _answers(rng, area, source, bias)
                 sub = Submission(enum, enum.device_id, start + timedelta(seconds=duration), duration,
                                  geo.scatter(rng, ring, tea_shop, 4, 12), round(rng.uniform(6, 15), 1),
                                  answers, transcript, "curbstone")
@@ -336,7 +314,7 @@ def _enumerator_submissions(seed: int, enum: Contributor, plan: _NoisePlan) -> l
                 start = t + _minutes(rng.uniform(2, 8)) if j else t
                 duration = round(rng.uniform(10, 18) * 60)
                 source, bias = _respondent(rng, area, style)
-                answers, transcript = _answers(rng, area, source, bias, [], allow_noise=False)
+                answers, transcript = _answers(rng, area, source, bias)
                 sub = Submission(enum, enum.device_id, start + timedelta(seconds=duration), duration,
                                  geo.scatter(rng, ring, enum.home, 5, 15), round(rng.uniform(8, 25), 1),
                                  answers, transcript, "night")
@@ -375,12 +353,11 @@ def _participant_submissions(seed: int, p: Contributor, burst: bool) -> list[Sub
     out: list[Submission] = []
     for start in _daytime_slots(rng, days, rng.randint(3, 6) if burst else rng.randint(3, 10)):
         duration = round(rng.triangular(4, 15, 7) * 60)
-        noise: list[str] = []
         used = source if rng.random() < 0.85 else other
-        answers, transcript = _answers(rng, area, used, bias, noise, short=True)
+        answers, transcript = _answers(rng, area, used, bias, short=True)
         sub = Submission(p, p.device_id, start + timedelta(seconds=duration), duration,
                          geo.scatter(rng, area.ring, p.home, 15, 40), _accuracy(rng),
-                         answers, transcript, None, noise)
+                         answers, transcript)
         sub.synced_at = _mobile_sync(rng, sub.captured_at)
         out.append(sub)
 
@@ -463,6 +440,36 @@ def _noise_plan(seed: int, enumerators: list[Contributor]) -> _NoisePlan:
     return _NoisePlan(frozenset(picked[:LATE_CAPTURE_DAYS]), frozenset(picked[LATE_CAPTURE_DAYS:]))
 
 
+def _plant_genuine_noise(seed: int, subs: list[Submission]) -> None:
+    """Make exact shares of genuine rows look suspicious: short, straight-lined or two-source."""
+    rng = rng_for(seed, "genuine-noise")
+
+    def pick(pool: list[Submission], share: float) -> list[Submission]:
+        return rng.sample(pool, round(share * len(pool)))
+
+    genuine = [s for s in subs if not s.is_fabricated and not s.noise]
+    interviews = [s for s in genuine if s.contributor.kind == "enumerator"]
+    for sub in pick(interviews, SHORT_GENUINE_SHARE):
+        # Same start, shorter interview (a busy respondent), so it ends earlier.
+        new_duration = round(rng.uniform(8, 11.9) * 60)
+        sub.captured_at -= timedelta(seconds=sub.duration_sec - new_duration)
+        sub.duration_sec = new_duration
+        sub.noise.append("short_genuine")
+
+    untouched = [s for s in genuine if not s.noise]
+    for sub in pick(untouched, STRAIGHTLINE_GENUINE_SHARE):
+        values = sub.answers["satisfaction"]
+        sub.answers["satisfaction"] = [_clamp(round(sum(values) / len(values)))] * len(values)
+        sub.noise.append("straightline_genuine")
+
+    untouched = [s for s in untouched if not s.noise]
+    for sub in pick(untouched, TWO_SOURCE_SHARE):
+        main = sub.answers["water_source"]
+        other = rng.choice([s for s in cfg.WATER_SOURCES if s != main])
+        sub.voice_transcript = text.two_source_transcript(rng, main, other)
+        sub.noise.append("two_source_transcript")
+
+
 def _assign_ids(seed: int, subs: list[Submission]) -> None:
     by_code: dict[str, list[Submission]] = {}
     for sub in subs:
@@ -515,6 +522,7 @@ def build_wave(seed: int) -> Wave:
         if p.code not in ring_codes:
             subs.extend(_participant_submissions(seed, p, burst=p is burst_account))
     subs.extend(_ring_submissions(seed, ring_members, ring_device))
+    _plant_genuine_noise(seed, subs)
     _assign_ids(seed, subs)
     subs.sort(key=lambda s: (s.captured_at, s.contributor.code))
 
