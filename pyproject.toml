@@ -5,11 +5,12 @@ description = "Detection engine and API for Field QA Copilot"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "fastapi>=0.120",
+    "httpx>=0.28.1",
+    "tzdata>=2025.2",
 ]
 
 [dependency-groups]
 datagen = [
-    "httpx>=0.28.1",
     "matplotlib>=3.11.2",
 ]
 dev = [
@@ -25,3 +26,4 @@ default-groups = ["dev", "datagen"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+filterwarnings = ["ignore:Using `httpx` with `starlette.testclient` is deprecated"]

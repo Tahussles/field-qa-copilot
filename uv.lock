@@ -115,11 +115,12 @@ source = { virtual = "." }
 default-groups = ["datagen", "dev"]
 dependencies = [
     { name = "fastapi" },
+    { name = "httpx" },
+    { name = "tzdata" },
 ]
 
 [package.dev-dependencies]
 datagen = [
-    { name = "httpx" },
     { name = "matplotlib" },
 ]
 dev = [
@@ -128,13 +129,14 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "fastapi", specifier = ">=0.120" }]
+requires-dist = [
+    { name = "fastapi", specifier = ">=0.120" },
+    { name = "httpx", specifier = ">=0.28.1" },
+    { name = "tzdata", specifier = ">=2025.2" },
+]
 
 [package.metadata.requires-dev]
-datagen = [
-    { name = "httpx", specifier = ">=0.28.1" },
-    { name = "matplotlib", specifier = ">=3.11.2" },
-]
+datagen = [{ name = "matplotlib", specifier = ">=3.11.2" }]
 dev = [
     { name = "pytest", specifier = ">=9.2.0" },
     { name = "uvicorn", specifier = ">=0.38" },

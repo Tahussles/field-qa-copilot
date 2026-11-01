@@ -1,9 +1,11 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "regions": ["yul1"],
+  "regions": [
+    "yul1"
+  ],
   "functions": {
     "api/index.py": {
-      "includeFiles": "engine/**"
+      "includeFiles": "{engine/**,api/_lib/**}"
     }
   }
 }
