@@ -17,20 +17,10 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from datagen import build_wave, db_rows  # noqa: E402
-from datagen.db import Supabase  # noqa: E402
 from datagen.outputs import summarize, write_local  # noqa: E402
+from supabase_rest import Supabase, SupabaseError  # noqa: E402
 
 TABLES = ("projects", "areas", "contributors", "check_config", "submissions", "synthetic_truth")
-
-
-def load_env(path: Path) -> dict[str, str]:
-    env = {}
-    for line in path.read_text().splitlines():
-        line = line.strip()
-        if line and not line.startswith("#") and "=" in line:
-            key, value = line.split("=", 1)
-            env[key.strip()] = value.strip()
-    return env
 
 
 def main() -> int:
@@ -53,13 +43,11 @@ def main() -> int:
     if args.dry_run:
         return 0
 
-    env = load_env(ROOT / ".env.local")
-    url, key = env.get("NEXT_PUBLIC_SUPABASE_URL"), env.get("SUPABASE_SERVICE_ROLE_KEY")
-    if not url or not key:
-        print("NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set in .env.local", file=sys.stderr)
+    try:
+        db = Supabase.from_env_file(ROOT / ".env.local")
+    except SupabaseError as error:
+        print(error, file=sys.stderr)
         return 1
-
-    db = Supabase(url, key)
     try:
         project_id = wave.project["id"]
         if db.count("projects", id=f"eq.{project_id}"):
