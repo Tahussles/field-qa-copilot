@@ -13,6 +13,16 @@ import type {
 
 const BASE = "/api/py";
 const PASSCODE_KEY = "fqc-demo-passcode";
+const REVIEWER_KEY = "fqc-reviewer";
+
+/** Name decisions are recorded under: "dashboard" unless set (the smoke test uses "smoke-test"). */
+function reviewerName(): string {
+  try {
+    return window.localStorage.getItem(REVIEWER_KEY) || "dashboard";
+  } catch {
+    return "dashboard";
+  }
+}
 
 export class ApiError extends Error {
   constructor(
@@ -56,7 +66,7 @@ export const api = {
     request<Review>("/reviews", {
       method: "POST",
       passcode,
-      body: JSON.stringify({ submission_id: submissionId, decision, reviewer: "dashboard" }),
+      body: JSON.stringify({ submission_id: submissionId, decision, reviewer: reviewerName() }),
     }),
   undoReview: (passcode: string, reviewId: string) =>
     request<Review>(`/reviews/${reviewId}`, { method: "DELETE", passcode }),

@@ -1,6 +1,21 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
 
 const PASSCODE = process.env.DEMO_PASSCODE;
+const REVIEWER = "smoke-test";
+
+// Reviews made by the smoke test are deleted afterwards with the service role
+// key, so a run against prod leaves no rows behind (not even revoked ones).
+test.afterAll(async () => {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return;
+  const response = await fetch(`${url}/rest/v1/reviews?reviewer=eq.${REVIEWER}`, {
+    method: "DELETE",
+    headers: { apikey: key, Prefer: "return=representation" },
+  });
+  if (!response.ok) throw new Error(`cleanup failed: ${response.status} ${await response.text()}`);
+  console.log(`teardown: deleted ${(await response.json()).length} ${REVIEWER} review(s)`);
+});
 
 async function kpis(request: APIRequestContext) {
   return (await (await request.get("/api/py/overview")).json()).kpis;
@@ -24,8 +39,14 @@ test("overview: the map renders points", async ({ page }) => {
 });
 
 test("queue: approve then undo leaves the data unchanged", async ({ page, request }) => {
-  test.skip(!PASSCODE, "DEMO_PASSCODE is not set");
-  await page.addInitScript((code) => window.localStorage.setItem("fqc-demo-passcode", code), PASSCODE!);
+  test.skip(!PASSCODE || !process.env.SUPABASE_SERVICE_ROLE_KEY, "needs DEMO_PASSCODE and SUPABASE_SERVICE_ROLE_KEY for cleanup");
+  await page.addInitScript(
+    ([code, reviewer]) => {
+      window.localStorage.setItem("fqc-demo-passcode", code);
+      window.localStorage.setItem("fqc-reviewer", reviewer);
+    },
+    [PASSCODE!, REVIEWER],
+  );
   const before = await kpis(request);
 
   await page.goto("/app/queue");
@@ -36,7 +57,7 @@ test("queue: approve then undo leaves the data unchanged", async ({ page, reques
 
   await page.keyboard.press("a");
   await expect(page.getByRole("status").filter({ hasText: "Approved" })).toBeVisible();
-  expect((await activeReview(request, id))?.decision).toBe("approve");
+  expect(await activeReview(request, id)).toMatchObject({ decision: "approve", reviewer: REVIEWER });
   await expect(page).not.toHaveURL(new RegExp(id)); // auto-advanced
 
   await page.keyboard.press("u");
