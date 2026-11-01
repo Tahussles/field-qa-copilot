@@ -18,7 +18,10 @@ Field QA Copilot checks every submission as it syncs, flags likely fabrication w
 app/                      Next.js routes and UI
 api/index.py              FastAPI app; every route lives under /api/py
 engine/                   Python package with the detection checks (engine.__version__)
+datagen/                  seeded synthetic wave with planted fraud (never imported by engine/)
 scripts/                  generate.py, simulate.py, evaluate.py (offline tooling)
+tests/                    pytest suite
+data/synthetic/           generator output: CSVs, summary.json, preview.png (gitignored)
 supabase/migrations/      SQL migrations, numbered and applied in order
 .githooks/commit-msg      rejects attribution strings in commit messages
 .github/workflows/        attribution-guard CI check on every push and PR
@@ -32,7 +35,12 @@ pnpm install
 uv sync
 pnpm dev                                   # Next.js on :3000 and FastAPI on :8000
 curl http://localhost:3000/api/py/health   # {"ok":true,"engine_version":"..."}
+uv run pytest                              # Python tests
+uv run scripts/generate.py --seed 20261031 --reset   # rebuild the synthetic wave in Supabase
+uv run scripts/generate.py --seed 20261031 --dry-run # local files only
 ```
+
+Python deps: anything `api/` or `engine/` needs at runtime goes in `[project] dependencies`. Generator and test tools live in the `datagen` and `dev` dependency groups, which `uv sync` installs locally but Vercel does not.
 
 After cloning, wire the commit hook once: `git config core.hooksPath .githooks`.
 
@@ -56,6 +64,7 @@ After cloning, wire the commit hook once: `git config core.hooksPath .githooks`.
 
 - Secrets live only in `.env.local`, which is never committed. `.env.example` lists the keys with empty values. Vercel holds the deployed values.
 - The browser uses the anon key and can only read. All writes go through the server with the service role key.
-- Detection code (`engine/`, `api/`) must never read the `synthetic_truth` table. Only `scripts/evaluate.py` reads it.
+- Detection code (`engine/`, `api/`) must never read the `synthetic_truth` table or import `datagen`. Only `scripts/evaluate.py` reads the truth. Tests enforce both.
+- Synthetic data is deterministic: the same seed gives identical rows, ids included. Change the generator, not the rows.
 - Keep checks deterministic and explainable: the same submission and config always give the same result, and every check stores `fired`, `weight` and human-readable `evidence`, stamped with `engine_version`.
 - Schema changes go in a new numbered migration. Never edit a migration that has been applied.
