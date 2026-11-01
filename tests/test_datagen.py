@@ -14,6 +14,10 @@ from datagen import geo
 
 ROOT = Path(__file__).resolve().parent.parent
 SEED = 20261031
+NOISE_TAGS = {
+    "short_genuine", "straightline_genuine", "two_source_transcript",
+    "compound_cluster", "late_capture", "late_sync",
+}
 
 # Inclusive bounds per fraud type. Curbstone, night, multi_account and burst are
 # bounded by construction; the rest are binomial draws with wide margins.
@@ -141,15 +145,16 @@ def test_fraud_has_the_planted_shape(wave):
     assert {s.contributor.code for s in ring} == set(wave.ring_members) and len(wave.ring_members) == 4
 
 
-def test_genuine_noise_stays_genuine(wave):
-    noisy = [s for s in wave.submissions if s.noise]
+def test_genuine_noise_stays_genuine(wave, rows):
+    noisy = [s for s in wave.submissions if s.noise_tag]
     assert noisy and not any(s.is_fabricated for s in noisy)
+    assert {t["noise_tag"] for t in rows["synthetic_truth"]} == {None, *NOISE_TAGS}
 
     genuine = [s for s in wave.submissions if not s.is_fabricated]
     interviews = [s for s in genuine if s.contributor.kind == "enumerator"]
-    short = [s for s in genuine if "short_genuine" in s.noise]
-    straight = [s for s in genuine if "straightline_genuine" in s.noise]
-    two_source = [s for s in genuine if "two_source_transcript" in s.noise]
+    short = [s for s in genuine if s.noise_tag == "short_genuine"]
+    straight = [s for s in genuine if s.noise_tag == "straightline_genuine"]
+    two_source = [s for s in genuine if s.noise_tag == "two_source_transcript"]
     assert 0.008 <= len(short) / len(interviews) <= 0.012
     assert all(s.contributor.kind == "enumerator" and s.duration_sec < 12 * 60 for s in short)
     assert 0.003 <= len(straight) / len(genuine) <= 0.007
@@ -158,7 +163,7 @@ def test_genuine_noise_stays_genuine(wave):
     assert 0.003 <= len(two_source) / len(genuine) <= 0.007
 
     for s in wave.submissions:
-        if "late_sync" in s.noise:
+        if s.noise_tag == "late_sync":
             # Synced the next day or later, but captured in daytime: not night work.
             assert 7 <= s.captured_at.astimezone(cfg.EAT).hour <= 21
             assert s.synced_at.astimezone(cfg.EAT).date() > s.captured_at.astimezone(cfg.EAT).date()

@@ -37,7 +37,7 @@ def rows_sha256(rows: dict[str, list[dict]]) -> str:
 def summarize(wave: Wave, rows: dict[str, list[dict]]) -> dict:
     subs = wave.submissions
     fabricated = Counter(s.fraud_type for s in subs if s.is_fabricated)
-    noise = Counter(n for s in subs for n in s.noise)
+    noise = Counter(s.noise_tag for s in subs if s.noise_tag)
 
     def actor(label: str, fraud_type: str, picked: list) -> dict:
         return {
@@ -104,10 +104,10 @@ def write_local(wave: Wave, rows: dict[str, list[dict]], summary: dict, out_dir:
     truth_csv = out_dir / "truth.csv"
     with truth_csv.open("w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["submission_id", "contributor_code", "device_id", "is_fabricated", "fraud_type", "noise"])
+        writer.writerow(["submission_id", "contributor_code", "device_id", "is_fabricated", "fraud_type", "noise_tag"])
         for sub in wave.submissions:
             writer.writerow([sub.id, sub.contributor.code, sub.device_id, sub.is_fabricated,
-                             sub.fraud_type or "", ";".join(sub.noise)])
+                             sub.fraud_type or "", sub.noise_tag or ""])
 
     summary_json = out_dir / "summary.json"
     summary_json.write_text(json.dumps(summary, indent=2) + "\n")

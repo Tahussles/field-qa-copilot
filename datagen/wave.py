@@ -8,9 +8,11 @@ does not reshuffle the rest. Times are planned in EAT and stored in UTC.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from random import Random
+
+from engine.config import Params
 
 from . import config as cfg
 from . import geo, text
@@ -69,7 +71,7 @@ class Submission:
     answers: dict
     voice_transcript: str
     fraud_type: str | None = None
-    noise: list[str] = field(default_factory=list)
+    noise_tag: str | None = None  # why a genuine row may look suspicious; at most one per row
     synced_at: datetime | None = None
     id: str = ""
     client_submission_id: str = ""
@@ -176,7 +178,8 @@ def _sync_day_batch(rng: Random, batch: list[Submission], day: date, late: bool)
     if late:
         when = _at(day, 24 + rng.uniform(12.0, 19.0))
         for sub in batch:
-            sub.noise.append("late_sync")
+            if sub.noise_tag is None:
+                sub.noise_tag = "late_sync"
     elif rng.random() < 0.65:
         when = max(_at(day, rng.uniform(18.0, 22.0)), last + _minutes(rng.uniform(10, 40)))
         if when > _at(day, 22.5):
@@ -207,7 +210,7 @@ def _enumerator_submissions(seed: int, enum: Contributor, plan: _NoisePlan) -> l
     copy_bases = [text.open_text(rng, rng.choice(cfg.WATER_SOURCES), area.landmarks) for _ in range(3)]
     clean = enum.code not in cfg.FRAUD_ENUMERATORS
 
-    def interview(house: geo.Point, start: datetime, fraud: str | None, noise: list[str],
+    def interview(house: geo.Point, start: datetime, fraud: str | None, noise_tag: str | None = None,
                   exact_point: bool = False) -> Submission:
         minutes = rng.uniform(4, 9) if fraud == "speeder" else _interview_minutes(rng)
 
@@ -236,7 +239,7 @@ def _enumerator_submissions(seed: int, enum: Contributor, plan: _NoisePlan) -> l
         point = house if exact_point else geo.scatter(rng, ring, house, accuracy / 2, accuracy)
         duration = round(minutes * 60)
         return Submission(enum, enum.device_id, start + timedelta(seconds=duration), duration,
-                          point, accuracy, answers, transcript, fraud, noise)
+                          point, accuracy, answers, transcript, fraud, noise_tag)
 
     out: list[Submission] = []
     for day_no, day in enumerate(cfg.FIELD_DAYS, start=1):
@@ -274,9 +277,8 @@ def _enumerator_submissions(seed: int, enum: Contributor, plan: _NoisePlan) -> l
             if not lunch and t.hour >= 12:
                 gap += rng.uniform(40, 75)
                 lunch = True
-            noise = ["compound_cluster"] if in_compound else []
             sub = interview(house, t + _minutes(gap), _enumerator_fraud(rng, enum.code, day_no),
-                            noise, exact_point=in_compound)
+                            "compound_cluster" if in_compound else None, exact_point=in_compound)
             if sub.captured_at > _at(day, WORKDAY_END_HOUR):
                 break
             batch.append(sub)
@@ -299,7 +301,7 @@ def _enumerator_submissions(seed: int, enum: Contributor, plan: _NoisePlan) -> l
         if (enum.code, day_no) in plan.late_capture:
             # A genuine call-back that finishes around 21:00-21:30.
             end = _at(day, rng.uniform(21.0, 21.5))
-            sub = interview(geo.scatter(rng, ring, cluster, 110, 300), end, None, ["late_capture"])
+            sub = interview(geo.scatter(rng, ring, cluster, 110, 300), end, None, "late_capture")
             sub.captured_at = end
             batch.append(sub)
 
@@ -447,27 +449,27 @@ def _plant_genuine_noise(seed: int, subs: list[Submission]) -> None:
     def pick(pool: list[Submission], share: float) -> list[Submission]:
         return rng.sample(pool, round(share * len(pool)))
 
-    genuine = [s for s in subs if not s.is_fabricated and not s.noise]
+    genuine = [s for s in subs if not s.is_fabricated and s.noise_tag is None]
     interviews = [s for s in genuine if s.contributor.kind == "enumerator"]
     for sub in pick(interviews, SHORT_GENUINE_SHARE):
         # Same start, shorter interview (a busy respondent), so it ends earlier.
         new_duration = round(rng.uniform(8, 11.9) * 60)
         sub.captured_at -= timedelta(seconds=sub.duration_sec - new_duration)
         sub.duration_sec = new_duration
-        sub.noise.append("short_genuine")
+        sub.noise_tag = "short_genuine"
 
-    untouched = [s for s in genuine if not s.noise]
+    untouched = [s for s in genuine if s.noise_tag is None]
     for sub in pick(untouched, STRAIGHTLINE_GENUINE_SHARE):
         values = sub.answers["satisfaction"]
         sub.answers["satisfaction"] = [_clamp(round(sum(values) / len(values)))] * len(values)
-        sub.noise.append("straightline_genuine")
+        sub.noise_tag = "straightline_genuine"
 
-    untouched = [s for s in untouched if not s.noise]
+    untouched = [s for s in untouched if s.noise_tag is None]
     for sub in pick(untouched, TWO_SOURCE_SHARE):
         main = sub.answers["water_source"]
         other = rng.choice([s for s in cfg.WATER_SOURCES if s != main])
         sub.voice_transcript = text.two_source_transcript(rng, main, other)
-        sub.noise.append("two_source_transcript")
+        sub.noise_tag = "two_source_transcript"
 
 
 def _assign_ids(seed: int, subs: list[Submission]) -> None:
@@ -533,11 +535,12 @@ def build_wave(seed: int) -> Wave:
         "region": cfg.PROJECT_REGION,
         "start_date": cfg.FIELD_DAYS[0].isoformat(),
         "end_date": cfg.FIELD_DAYS[-1].isoformat(),
+        "timezone": cfg.PROJECT_TIMEZONE,
         "created_at": PROJECT_CREATED.isoformat(),
     }
     check_config = {
         "project_id": project_id,
-        "params": dict(cfg.DEFAULT_CHECK_PARAMS),
+        "params": Params().to_config(),  # the engine's defaults
         "updated_at": PROJECT_CREATED.isoformat(),
     }
     return Wave(seed, project, areas, [*enumerators, *participants], subs, check_config,
@@ -587,7 +590,8 @@ def db_rows(wave: Wave) -> dict[str, list[dict]]:
             for s in wave.submissions
         ],
         "synthetic_truth": [
-            {"submission_id": s.id, "is_fabricated": s.is_fabricated, "fraud_type": s.fraud_type}
+            {"submission_id": s.id, "is_fabricated": s.is_fabricated, "fraud_type": s.fraud_type,
+             "noise_tag": s.noise_tag}
             for s in wave.submissions
         ],
     }

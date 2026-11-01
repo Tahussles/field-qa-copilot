@@ -12,6 +12,7 @@ EAT = timezone(timedelta(hours=3), "EAT")
 
 PROJECT_NAME = "Household Water Access Survey"
 PROJECT_REGION = "Kisumu, Kenya"
+PROJECT_TIMEZONE = "Africa/Nairobi"  # EAT, UTC+3, no daylight saving
 WAVE = 2
 FIELD_DAYS = tuple(date(2026, 10, 25) + timedelta(days=i) for i in range(6))
 
@@ -28,14 +29,6 @@ SATISFACTION_ITEMS = (
     "opening_hours",
     "overall",
 )
-
-DEFAULT_CHECK_PARAMS = {
-    "speed_min_minutes": 12,
-    "same_spot_radius_m": 50,
-    "same_spot_min_neighbours": 2,
-    "copy_similarity": 0.8,
-    "review_threshold": 2,
-}
 
 ENUMERATORS_PER_AREA = 5
 PARTICIPANTS_PER_AREA = 10
