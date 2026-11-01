@@ -1,12 +1,27 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useMemo, useState } from "react";
 
 import { useAppData } from "@/components/app/AppData";
 import { Brief } from "@/components/overview/Brief";
 import { ContributorsTable } from "@/components/overview/ContributorsTable";
 import { Kpis } from "@/components/overview/Kpis";
-import { MapPanel } from "@/components/overview/MapPanel";
+
+// The map (MapLibre, ~1 MB) loads after first paint; a same-size skeleton holds its place.
+const MapPanel = dynamic(() => import("@/components/overview/MapPanel").then((m) => m.MapPanel), {
+  ssr: false,
+  loading: () => <MapSkeleton />,
+});
+
+function MapSkeleton() {
+  return (
+    <section aria-label="Map of submissions" aria-busy className="panel relative h-[420px] overflow-hidden md:h-[560px] xl:h-[600px]">
+      <div className="map-skeleton absolute inset-0" aria-hidden />
+      <p className="absolute inset-0 grid place-items-center text-sm text-muted">Loading the map…</p>
+    </section>
+  );
+}
 
 export function Overview() {
   const { overview, map, pulses, error } = useAppData();
