@@ -1,0 +1,61 @@
+name: attribution-guard
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  attribution-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Check commit messages and author emails
+        env:
+          ALLOWED_AUTHOR_EMAILS: "173319783+Tahussles@users.noreply.github.com"
+          EVENT_NAME: ${{ github.event_name }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_AFTER: ${{ github.event.after }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          zero=0000000000000000000000000000000000000000
+          pattern='co-authored-by|claude|anthropic|generated with'
+
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            range="$PR_BASE..$PR_HEAD"
+          elif [ "$PUSH_AFTER" = "$zero" ]; then
+            echo "Branch deletion, nothing to check."
+            exit 0
+          elif [ "$PUSH_BEFORE" = "$zero" ] || ! git cat-file -e "$PUSH_BEFORE^{commit}" 2>/dev/null; then
+            # New branch or tag (or an old tip we can't see): check its whole history.
+            range="$PUSH_AFTER"
+          else
+            range="$PUSH_BEFORE..$PUSH_AFTER"
+          fi
+
+          echo "Checking commits in $range"
+          failed=0
+          for sha in $(git rev-list "$range"); do
+            label=$(git log -1 --format='%h %s' "$sha")
+            email=$(git log -1 --format='%ae' "$sha")
+            if git log -1 --format='%B' "$sha" | grep -qiE "$pattern"; then
+              echo "::error::$label -> message contains a forbidden attribution string"
+              failed=1
+            fi
+            case " $ALLOWED_AUTHOR_EMAILS " in
+              *" $email "*) ;;
+              *) echo "::error::$label -> author email $email is not allowed"; failed=1 ;;
+            esac
+          done
+
+          if [ "$failed" -eq 0 ]; then
+            echo "All commits passed."
+          fi
+          exit "$failed"

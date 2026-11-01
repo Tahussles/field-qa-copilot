@@ -1,0 +1,15 @@
+#!/bin/sh
+# Rejects commit messages that carry attribution trailers or tool mentions.
+# Wire it once per clone: git config core.hooksPath .githooks
+
+pattern='co-authored-by|claude|anthropic|generated with'
+
+# Ignore git's comment lines and the diff below the scissors line (git commit -v).
+body=$(sed -e '/^# -\{24\} >8 -\{24\}$/,$d' -e '/^#/d' "$1")
+
+if printf '%s\n' "$body" | grep -qiE "$pattern"; then
+  echo "commit-msg: rejected. The message contains a forbidden string" >&2
+  echo "(Co-Authored-By, Claude, Anthropic or \"Generated with\", any case):" >&2
+  printf '%s\n' "$body" | grep -niE "$pattern" | sed 's/^/  line /' >&2
+  exit 1
+fi
