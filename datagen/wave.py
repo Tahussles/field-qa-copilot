@@ -201,129 +201,156 @@ def _enumerator_fraud(rng: Random, code: str, day_no: int) -> str | None:
     return None
 
 
+@dataclass(frozen=True)
+class EnumeratorProfile:
+    """What stays fixed for an enumerator across days: where they work and their quirks."""
+
+    clusters: tuple[geo.Point, ...]
+    tea_shop: geo.Point
+    style: float  # small interviewer effect on satisfaction
+    copy_bases: tuple[str, ...]
+
+
+def enumerator_profile(rng: Random, enum: Contributor) -> EnumeratorProfile:
+    """The first draws of an enumerator's stream, so the live day can redraw the same profile."""
+    ring = enum.area.ring
+    clusters = tuple(geo.random_point_in(rng, ring, 500) for _ in range(3))
+    tea_shop = geo.random_point_in(rng, ring, 300)
+    style = rng.gauss(0, 0.15)
+    copy_bases = tuple(text.open_text(rng, rng.choice(cfg.WATER_SOURCES), enum.area.landmarks) for _ in range(3))
+    return EnumeratorProfile(clusters, tea_shop, style, copy_bases)
+
+
+def _interview(rng: Random, enum: Contributor, profile: EnumeratorProfile, house: geo.Point, start: datetime,
+               fraud: str | None, noise_tag: str | None = None, exact_point: bool = False) -> Submission:
+    area, ring = enum.area, enum.area.ring
+    minutes = rng.uniform(4, 9) if fraud == "speeder" else _interview_minutes(rng)
+
+    if fraud == "contradiction":
+        # The household buys water or uses the river; the form says piped_home.
+        true_source = rng.choice(("vendor", "river"))
+        bias = rng.gauss(0, 0.7) + SOURCE_EFFECT[true_source] + profile.style
+        answers = {
+            "water_source": "piped_home",
+            "satisfaction": _satisfaction(rng, bias),
+            "open_text": text.open_text(rng, true_source, area.landmarks),
+        }
+        transcript = text.voice_transcript(rng, true_source, area.landmarks)
+    else:
+        source, bias = _respondent(rng, area, profile.style)
+        answers, transcript = _answers(rng, area, source, bias)
+        if fraud == "speeder":
+            answers["open_text"] = text.open_text(rng, source, area.landmarks, short=True)
+            if rng.random() < 0.8:
+                answers["satisfaction"] = [rng.choice((3, 4, 4, 5))] * len(ITEM_MEANS)
+        elif fraud == "copypaste":
+            base = rng.choice(profile.copy_bases)
+            answers["open_text"] = base if rng.random() < 0.4 else text.one_word_variant(rng, base)
+
+    accuracy = _accuracy(rng)
+    point = house if exact_point else geo.scatter(rng, ring, house, accuracy / 2, accuracy)
+    duration = round(minutes * 60)
+    return Submission(enum, enum.device_id, start + timedelta(seconds=duration), duration,
+                      point, accuracy, answers, transcript, fraud, noise_tag)
+
+
+def enumerator_day(rng: Random, enum: Contributor, profile: EnumeratorProfile, day: date, day_no: int,
+                   cluster: geo.Point, *, late_capture: bool = False, late_sync: bool = False) -> list[Submission]:
+    """One working day in one village cluster, plus any night forms, with synced_at set."""
+    area, ring = enum.area, enum.area.ring
+    clean = enum.code not in cfg.FRAUD_ENUMERATORS
+    batch: list[Submission] = []
+    n = rng.randint(6, 8)
+    curbstoning = enum.code == cfg.CURBSTONE and day_no >= 3
+    n_tea = round(n * rng.uniform(0.5, 0.7)) if curbstoning else 0
+    n_field = n - n_tea
+
+    # Genuine compound: three households within ~30 m, interviewed back to back.
+    compound_from, compound = None, cluster
+    if clean and rng.random() < COMPOUND_DAY_RATE:
+        compound_from = rng.randint(0, n_field - 3)
+        compound = geo.scatter(rng, ring, cluster, 110, 300)
+
+    t = _at(day, rng.uniform(8.0, 9.25))
+    prev: geo.Point | None = None
+    lunch = False
+    for i in range(n_field):
+        in_compound = compound_from is not None and compound_from <= i < compound_from + 3
+        if in_compound:
+            house = geo.scatter(rng, ring, compound, 8, 15)
+        else:
+            house = geo.scatter(rng, ring, cluster, 110, 300)
+        if prev is None:
+            gap = 0.0
+        elif in_compound and i > compound_from:
+            gap = rng.uniform(2, 5)
+        else:
+            # Walking plus finding the household and getting consent.
+            gap = geo.distance_m(prev, house) / WALK_M_PER_MIN + rng.uniform(8, 25)
+            if rng.random() < 0.15:
+                gap += rng.uniform(20, 60)  # nobody home, a refusal or a call-back
+        if not lunch and t.hour >= 12:
+            gap += rng.uniform(40, 75)
+            lunch = True
+        sub = _interview(rng, enum, profile, house, t + _minutes(gap), _enumerator_fraud(rng, enum.code, day_no),
+                         "compound_cluster" if in_compound else None, exact_point=in_compound)
+        if sub.captured_at > _at(day, WORKDAY_END_HOUR):
+            break
+        batch.append(sub)
+        t, prev = sub.captured_at, house
+
+    if n_tea:
+        # Curbstoning: the rest of the day's forms filled in at one tea shop.
+        t = max(t + _minutes(rng.uniform(20, 40)), _at(day, rng.uniform(13.5, 15.0)))
+        for j in range(n_tea):
+            start = t + _minutes(rng.uniform(1, 4)) if j else t
+            duration = round(rng.uniform(9, 15) * 60)
+            source, bias = _respondent(rng, area, profile.style)
+            answers, transcript = _answers(rng, area, source, bias)
+            sub = Submission(enum, enum.device_id, start + timedelta(seconds=duration), duration,
+                             geo.scatter(rng, ring, profile.tea_shop, 4, 12), round(rng.uniform(6, 15), 1),
+                             answers, transcript, "curbstone")
+            batch.append(sub)
+            t = sub.captured_at
+
+    if late_capture:
+        # A genuine call-back that finishes around 21:00-21:30.
+        end = _at(day, rng.uniform(21.0, 21.5))
+        sub = _interview(rng, enum, profile, geo.scatter(rng, ring, cluster, 110, 300), end, None, "late_capture")
+        sub.captured_at = end
+        batch.append(sub)
+
+    _sync_day_batch(rng, batch, day, late=late_sync)
+    out = list(batch)
+
+    if enum.code == cfg.NIGHT and day_no >= 4:
+        # Forms invented at home between 22:00 and 01:00, synced next morning.
+        night: list[Submission] = []
+        t = _at(day, rng.uniform(22.0, 22.4))
+        for j in range(rng.randint(3, 4)):
+            start = t + _minutes(rng.uniform(2, 8)) if j else t
+            duration = round(rng.uniform(10, 18) * 60)
+            source, bias = _respondent(rng, area, profile.style)
+            answers, transcript = _answers(rng, area, source, bias)
+            sub = Submission(enum, enum.device_id, start + timedelta(seconds=duration), duration,
+                             geo.scatter(rng, ring, enum.home, 5, 15), round(rng.uniform(8, 25), 1),
+                             answers, transcript, "night")
+            night.append(sub)
+            t = sub.captured_at
+        _assign_sync(rng, night, _at(day, 24 + rng.uniform(6.5, 8.0)))
+        out.extend(night)
+    return out
+
+
 def _enumerator_submissions(seed: int, enum: Contributor, plan: _NoisePlan) -> list[Submission]:
     rng = rng_for(seed, "enumerator", enum.code)
-    area, ring = enum.area, enum.area.ring
-    clusters = [geo.random_point_in(rng, ring, 500) for _ in range(3)]
-    tea_shop = geo.random_point_in(rng, ring, 300)
-    style = rng.gauss(0, 0.15)  # small interviewer effect on satisfaction
-    copy_bases = [text.open_text(rng, rng.choice(cfg.WATER_SOURCES), area.landmarks) for _ in range(3)]
-    clean = enum.code not in cfg.FRAUD_ENUMERATORS
-
-    def interview(house: geo.Point, start: datetime, fraud: str | None, noise_tag: str | None = None,
-                  exact_point: bool = False) -> Submission:
-        minutes = rng.uniform(4, 9) if fraud == "speeder" else _interview_minutes(rng)
-
-        if fraud == "contradiction":
-            # The household buys water or uses the river; the form says piped_home.
-            true_source = rng.choice(("vendor", "river"))
-            bias = rng.gauss(0, 0.7) + SOURCE_EFFECT[true_source] + style
-            answers = {
-                "water_source": "piped_home",
-                "satisfaction": _satisfaction(rng, bias),
-                "open_text": text.open_text(rng, true_source, area.landmarks),
-            }
-            transcript = text.voice_transcript(rng, true_source, area.landmarks)
-        else:
-            source, bias = _respondent(rng, area, style)
-            answers, transcript = _answers(rng, area, source, bias)
-            if fraud == "speeder":
-                answers["open_text"] = text.open_text(rng, source, area.landmarks, short=True)
-                if rng.random() < 0.8:
-                    answers["satisfaction"] = [rng.choice((3, 4, 4, 5))] * len(ITEM_MEANS)
-            elif fraud == "copypaste":
-                base = rng.choice(copy_bases)
-                answers["open_text"] = base if rng.random() < 0.4 else text.one_word_variant(rng, base)
-
-        accuracy = _accuracy(rng)
-        point = house if exact_point else geo.scatter(rng, ring, house, accuracy / 2, accuracy)
-        duration = round(minutes * 60)
-        return Submission(enum, enum.device_id, start + timedelta(seconds=duration), duration,
-                          point, accuracy, answers, transcript, fraud, noise_tag)
-
+    profile = enumerator_profile(rng, enum)
     out: list[Submission] = []
     for day_no, day in enumerate(cfg.FIELD_DAYS, start=1):
-        cluster = clusters[(day_no - 1) // 2]  # a new village cluster every two days
-        batch: list[Submission] = []
-        n = rng.randint(6, 8)
-        curbstoning = enum.code == cfg.CURBSTONE and day_no >= 3
-        n_tea = round(n * rng.uniform(0.5, 0.7)) if curbstoning else 0
-        n_field = n - n_tea
-
-        # Genuine compound: three households within ~30 m, interviewed back to back.
-        compound_from, compound = None, cluster
-        if clean and rng.random() < COMPOUND_DAY_RATE:
-            compound_from = rng.randint(0, n_field - 3)
-            compound = geo.scatter(rng, ring, cluster, 110, 300)
-
-        t = _at(day, rng.uniform(8.0, 9.25))
-        prev: geo.Point | None = None
-        lunch = False
-        for i in range(n_field):
-            in_compound = compound_from is not None and compound_from <= i < compound_from + 3
-            if in_compound:
-                house = geo.scatter(rng, ring, compound, 8, 15)
-            else:
-                house = geo.scatter(rng, ring, cluster, 110, 300)
-            if prev is None:
-                gap = 0.0
-            elif in_compound and i > compound_from:
-                gap = rng.uniform(2, 5)
-            else:
-                # Walking plus finding the household and getting consent.
-                gap = geo.distance_m(prev, house) / WALK_M_PER_MIN + rng.uniform(8, 25)
-                if rng.random() < 0.15:
-                    gap += rng.uniform(20, 60)  # nobody home, a refusal or a call-back
-            if not lunch and t.hour >= 12:
-                gap += rng.uniform(40, 75)
-                lunch = True
-            sub = interview(house, t + _minutes(gap), _enumerator_fraud(rng, enum.code, day_no),
-                            "compound_cluster" if in_compound else None, exact_point=in_compound)
-            if sub.captured_at > _at(day, WORKDAY_END_HOUR):
-                break
-            batch.append(sub)
-            t, prev = sub.captured_at, house
-
-        if n_tea:
-            # Curbstoning: the rest of the day's forms filled in at one tea shop.
-            t = max(t + _minutes(rng.uniform(20, 40)), _at(day, rng.uniform(13.5, 15.0)))
-            for j in range(n_tea):
-                start = t + _minutes(rng.uniform(1, 4)) if j else t
-                duration = round(rng.uniform(9, 15) * 60)
-                source, bias = _respondent(rng, area, style)
-                answers, transcript = _answers(rng, area, source, bias)
-                sub = Submission(enum, enum.device_id, start + timedelta(seconds=duration), duration,
-                                 geo.scatter(rng, ring, tea_shop, 4, 12), round(rng.uniform(6, 15), 1),
-                                 answers, transcript, "curbstone")
-                batch.append(sub)
-                t = sub.captured_at
-
-        if (enum.code, day_no) in plan.late_capture:
-            # A genuine call-back that finishes around 21:00-21:30.
-            end = _at(day, rng.uniform(21.0, 21.5))
-            sub = interview(geo.scatter(rng, ring, cluster, 110, 300), end, None, "late_capture")
-            sub.captured_at = end
-            batch.append(sub)
-
-        _sync_day_batch(rng, batch, day, late=(enum.code, day_no) in plan.late_sync)
-        out.extend(batch)
-
-        if enum.code == cfg.NIGHT and day_no >= 4:
-            # Forms invented at home between 22:00 and 01:00, synced next morning.
-            night: list[Submission] = []
-            t = _at(day, rng.uniform(22.0, 22.4))
-            for j in range(rng.randint(3, 4)):
-                start = t + _minutes(rng.uniform(2, 8)) if j else t
-                duration = round(rng.uniform(10, 18) * 60)
-                source, bias = _respondent(rng, area, style)
-                answers, transcript = _answers(rng, area, source, bias)
-                sub = Submission(enum, enum.device_id, start + timedelta(seconds=duration), duration,
-                                 geo.scatter(rng, ring, enum.home, 5, 15), round(rng.uniform(8, 25), 1),
-                                 answers, transcript, "night")
-                night.append(sub)
-                t = sub.captured_at
-            _assign_sync(rng, night, _at(day, 24 + rng.uniform(6.5, 8.0)))
-            out.extend(night)
+        cluster = profile.clusters[(day_no - 1) // 2]  # a new village cluster every two days
+        out.extend(enumerator_day(rng, enum, profile, day, day_no, cluster,
+                                  late_capture=(enum.code, day_no) in plan.late_capture,
+                                  late_sync=(enum.code, day_no) in plan.late_sync))
     return out
 
 
@@ -344,31 +371,44 @@ def _mobile_sync(rng: Random, captured: datetime) -> datetime:
     return captured + _seconds(min(600.0, max(5.0, rng.lognormvariate(math.log(60), 0.8))))
 
 
-def _participant_submissions(seed: int, p: Contributor, burst: bool) -> list[Submission]:
-    rng = rng_for(seed, "participant", p.code)
-    area = p.area
+def participant_household(rng: Random, area: Area) -> tuple[str, float, str]:
+    """A participant household's main source, satisfaction bias and fallback source.
+
+    The first draws of the participant's stream, so the live day can redraw them.
+    """
     source, bias = _respondent(rng, area)
     other = rng.choice([s for s in cfg.WATER_SOURCES if s != source])
+    return source, bias, other
+
+
+def participant_submission(rng: Random, p: Contributor, start: datetime, source: str, bias: float,
+                           other: str) -> Submission:
+    """One genuine self-report from home, synced over mobile data within minutes."""
+    area = p.area
+    duration = round(rng.triangular(4, 15, 7) * 60)
+    used = source if rng.random() < 0.85 else other
+    answers, transcript = _answers(rng, area, used, bias, short=True)
+    sub = Submission(p, p.device_id, start + timedelta(seconds=duration), duration,
+                     geo.scatter(rng, area.ring, p.home, 15, 40), _accuracy(rng),
+                     answers, transcript)
+    sub.synced_at = _mobile_sync(rng, sub.captured_at)
+    return sub
+
+
+def _participant_submissions(seed: int, p: Contributor, burst: bool) -> list[Submission]:
+    rng = rng_for(seed, "participant", p.code)
+    source, bias, other = participant_household(rng, p.area)
     burst_day = rng.choice(cfg.FIELD_DAYS[2:5]) if burst else None
     days = [d for d in cfg.FIELD_DAYS if d != burst_day]
 
-    out: list[Submission] = []
-    for start in _daytime_slots(rng, days, rng.randint(3, 6) if burst else rng.randint(3, 10)):
-        duration = round(rng.triangular(4, 15, 7) * 60)
-        used = source if rng.random() < 0.85 else other
-        answers, transcript = _answers(rng, area, used, bias, short=True)
-        sub = Submission(p, p.device_id, start + timedelta(seconds=duration), duration,
-                         geo.scatter(rng, area.ring, p.home, 15, 40), _accuracy(rng),
-                         answers, transcript)
-        sub.synced_at = _mobile_sync(rng, sub.captured_at)
-        out.append(sub)
-
+    out = [participant_submission(rng, p, start, source, bias, other)
+           for start in _daytime_slots(rng, days, rng.randint(3, 6) if burst else rng.randint(3, 10))]
     if burst:
-        out.extend(_burst(rng, p, source, bias, burst_day))
+        out.extend(burst_session(rng, p, source, bias, burst_day))
     return out
 
 
-def _burst(rng: Random, p: Contributor, source: str, bias: float, day: date) -> list[Submission]:
+def burst_session(rng: Random, p: Contributor, source: str, bias: float, day: date) -> list[Submission]:
     """About 25 near-identical submissions in roughly an hour, to farm points."""
     base_satisfaction = _satisfaction(rng, bias)
     base_text = text.open_text(rng, source, p.area.landmarks, short=True)
@@ -398,37 +438,58 @@ def _burst(rng: Random, p: Contributor, source: str, bias: float, day: date) -> 
     return out
 
 
+@dataclass(frozen=True)
+class RingProfile:
+    source: str
+    other: str
+    base_satisfaction: tuple[int, ...]
+    bases: tuple[str, ...]
+
+
+def ring_profile(rng: Random, area: Area) -> RingProfile:
+    """The ring's shared answers. The first draws of its stream, so the live day can redraw them."""
+    source, bias = _respondent(rng, area)
+    other = rng.choice([s for s in cfg.WATER_SOURCES if s != source])
+    base_satisfaction = tuple(_satisfaction(rng, bias))
+    bases = tuple(text.open_text(rng, source, area.landmarks, short=True) for _ in range(2))
+    return RingProfile(source, other, base_satisfaction, bases)
+
+
+def ring_session(rng: Random, members: list[Contributor], device: str, profile: RingProfile,
+                 day: date) -> list[Submission]:
+    """One sitting: the phone submits 1-3 times for each account, interleaved, from one spot."""
+    area = members[0].area
+    spot = members[0].home
+    queue = [m for m in members for _ in range(rng.randint(1, 3))]
+    rng.shuffle(queue)
+    t = _at(day, rng.uniform(9.0, 16.5))
+    out: list[Submission] = []
+    for j, member in enumerate(queue):
+        start = t + _minutes(rng.uniform(0.5, 3)) if j else t
+        duration = round(rng.uniform(3, 6) * 60)
+        used = profile.source if rng.random() < 0.9 else profile.other
+        base = rng.choice(profile.bases)
+        answers = {
+            "water_source": used,
+            "satisfaction": [_clamp(v + rng.choice((-1, 0, 0, 0, 1))) for v in profile.base_satisfaction],
+            "open_text": base if rng.random() < 0.5 else text.one_word_variant(rng, base),
+        }
+        sub = Submission(member, device, start + timedelta(seconds=duration), duration,
+                         geo.scatter(rng, area.ring, spot, 6, 20), round(rng.uniform(5, 20), 1),
+                         answers, text.voice_transcript(rng, used, area.landmarks), "multi_account")
+        sub.synced_at = sub.captured_at + _seconds(rng.uniform(10, 120))
+        out.append(sub)
+        t = sub.captured_at
+    return out
+
+
 def _ring_submissions(seed: int, members: list[Contributor], device: str) -> list[Submission]:
     """Four accounts on one phone, submitting in bursts on the same days with similar answers."""
     rng = rng_for(seed, "ring")
-    area = members[0].area
-    spot = members[0].home
-    source, bias = _respondent(rng, area)
-    other = rng.choice([s for s in cfg.WATER_SOURCES if s != source])
-    base_satisfaction = _satisfaction(rng, bias)
-    bases = [text.open_text(rng, source, area.landmarks, short=True) for _ in range(2)]
-
+    profile = ring_profile(rng, members[0].area)
     out: list[Submission] = []
     for day in sorted(rng.sample(list(cfg.FIELD_DAYS), 3)):
-        queue = [m for m in members for _ in range(rng.randint(1, 3))]
-        rng.shuffle(queue)
-        t = _at(day, rng.uniform(9.0, 16.5))
-        for j, member in enumerate(queue):
-            start = t + _minutes(rng.uniform(0.5, 3)) if j else t
-            duration = round(rng.uniform(3, 6) * 60)
-            used = source if rng.random() < 0.9 else other
-            base = rng.choice(bases)
-            answers = {
-                "water_source": used,
-                "satisfaction": [_clamp(v + rng.choice((-1, 0, 0, 0, 1))) for v in base_satisfaction],
-                "open_text": base if rng.random() < 0.5 else text.one_word_variant(rng, base),
-            }
-            sub = Submission(member, device, start + timedelta(seconds=duration), duration,
-                             geo.scatter(rng, area.ring, spot, 6, 20), round(rng.uniform(5, 20), 1),
-                             answers, text.voice_transcript(rng, used, area.landmarks), "multi_account")
-            sub.synced_at = sub.captured_at + _seconds(rng.uniform(10, 120))
-            out.append(sub)
-            t = sub.captured_at
+        out.extend(ring_session(rng, members, device, profile, day))
     return out
 
 
@@ -442,9 +503,9 @@ def _noise_plan(seed: int, enumerators: list[Contributor]) -> _NoisePlan:
     return _NoisePlan(frozenset(picked[:LATE_CAPTURE_DAYS]), frozenset(picked[LATE_CAPTURE_DAYS:]))
 
 
-def _plant_genuine_noise(seed: int, subs: list[Submission]) -> None:
+def plant_genuine_noise(seed: int, subs: list[Submission], stream: str = "genuine-noise") -> None:
     """Make exact shares of genuine rows look suspicious: short, straight-lined or two-source."""
-    rng = rng_for(seed, "genuine-noise")
+    rng = rng_for(seed, stream)
 
     def pick(pool: list[Submission], share: float) -> list[Submission]:
         return rng.sample(pool, round(share * len(pool)))
@@ -472,14 +533,14 @@ def _plant_genuine_noise(seed: int, subs: list[Submission]) -> None:
         sub.noise_tag = "two_source_transcript"
 
 
-def _assign_ids(seed: int, subs: list[Submission]) -> None:
+def assign_ids(seed: int, subs: list[Submission], namespace: str = "submission") -> None:
     by_code: dict[str, list[Submission]] = {}
     for sub in subs:
         by_code.setdefault(sub.contributor.code, []).append(sub)
     for code, items in by_code.items():
         for i, sub in enumerate(sorted(items, key=lambda s: s.captured_at), start=1):
-            sub.id = make_uuid(seed, "submission", code, i)
-            sub.client_submission_id = make_uuid(seed, "client-submission", code, i)
+            sub.id = make_uuid(seed, namespace, code, i)
+            sub.client_submission_id = make_uuid(seed, f"client-{namespace}", code, i)
 
 
 def build_wave(seed: int) -> Wave:
@@ -524,8 +585,8 @@ def build_wave(seed: int) -> Wave:
         if p.code not in ring_codes:
             subs.extend(_participant_submissions(seed, p, burst=p is burst_account))
     subs.extend(_ring_submissions(seed, ring_members, ring_device))
-    _plant_genuine_noise(seed, subs)
-    _assign_ids(seed, subs)
+    plant_genuine_noise(seed, subs)
+    assign_ids(seed, subs)
     subs.sort(key=lambda s: (s.captured_at, s.contributor.code))
 
     project_id = make_uuid(seed, "project")
