@@ -48,8 +48,8 @@ def test_contributor_stats_and_area_rates():
     scored = score_all(subs, CONTRIBUTORS, params)
     stats = {row["code"]: row for row in contributor_stats(scored, subs, CONTRIBUTORS, params)}
     assert stats["E01"]["submissions"] == 9 and stats["P01"]["submissions"] == 3
-    assert stats["E02"]["flagged"] == 4 and stats["E02"]["investigate"] is True
-    assert stats["P01"]["flagged"] == 0 and stats["P01"]["investigate"] is False
+    assert stats["E02"]["flagged"] == 4 and stats["E02"]["status"] == "investigate"
+    assert stats["P01"]["flagged"] == 0 and stats["P01"]["status"] == "ok"
     assert stats["E02"]["checks_fired"]["off_hours"] == 4
 
     area_of = {ENUM.id: "Kondele", ENUM2.id: "Migosi", PART.id: "Kondele"}
@@ -68,3 +68,14 @@ def test_fraud_type_lists_agree():
     from datagen.config import FRAUD_TYPES
 
     assert tuple(FRAUD_TYPES) == METRIC_FRAUD_TYPES
+
+
+def test_contributor_status_needs_both_count_and_rate():
+    from engine.insights import contributor_status
+
+    assert contributor_status(3, 20) == "investigate"  # 15%
+    assert contributor_status(3, 50) == "ok"  # 6%: a busy honest enumerator with three false alarms
+    assert contributor_status(3, 30) == "watch"  # 10%
+    assert contributor_status(2, 25) == "watch"  # 8%
+    assert contributor_status(2, 26) == "ok"  # 7.7%
+    assert contributor_status(1, 1) == "ok"  # one flag is never enough

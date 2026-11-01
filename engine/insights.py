@@ -15,7 +15,20 @@ from .scoring import ScoredSubmission
 
 HOTSPOT_MIN_COUNT = 4
 HOTSPOT_LINK_FACTOR = 2.0  # link points within 2 x same_spot_radius_m
-INVESTIGATE_MIN_FLAGGED = 3
+# Contributor status: investigate = 3+ flagged and >= 15% of their submissions;
+# watch = 2+ flagged and >= 8%; otherwise ok. A rate keeps one busy honest
+# contributor with a few false alarms out of the investigate list.
+INVESTIGATE_MIN_FLAGGED, INVESTIGATE_MIN_RATE = 3, 0.15
+WATCH_MIN_FLAGGED, WATCH_MIN_RATE = 2, 0.08
+
+
+def contributor_status(flagged: int, submissions: int) -> str:
+    rate = flagged / submissions if submissions else 0.0
+    if flagged >= INVESTIGATE_MIN_FLAGGED and rate >= INVESTIGATE_MIN_RATE:
+        return "investigate"
+    if flagged >= WATCH_MIN_FLAGGED and rate >= WATCH_MIN_RATE:
+        return "watch"
+    return "ok"
 
 
 def _fired(scored: ScoredSubmission, key: str) -> bool:
@@ -124,9 +137,10 @@ def contributor_stats(scored: Iterable[ScoredSubmission], submissions: Iterable[
             "median_duration_sec": median(durations[contributor_id]) if durations[contributor_id] else None,
             "checks_fired": dict(sorted(row["checks"].items())),
             "last_captured_at": iso_utc(row["last_captured_at"]),
-            "investigate": row["flagged"] >= INVESTIGATE_MIN_FLAGGED,
+            "status": contributor_status(row["flagged"], row["submissions"]),
         })
-    out.sort(key=lambda r: (-r["flagged"], -r["flag_rate"], r["code"]))
+    rank = {"investigate": 0, "watch": 1, "ok": 2}
+    out.sort(key=lambda r: (rank[r["status"]], -r["flagged"], -r["flag_rate"], r["code"]))
     return out
 
 
