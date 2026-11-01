@@ -369,3 +369,62 @@ def test_commit_after_the_lease_expired_is_refused():
     assert repo.scores() == []  # nothing written by the stale holder
     repo.ingest_commit([], [], "fast", len(fast["lock_keys"]))
     assert repo.locks == {}
+
+
+# Round 5 additions ------------------------------------------------------------------------
+
+def test_map_returns_points_areas_and_hotspots(client, repo):
+    _seed_queue(client)
+    data = client.get("/api/py/map").json()
+    assert len(data["points"]) == 5 and data["areas"][0]["name"] == "Kondele"
+    point = next(p for p in data["points"] if p["score"] == 4.5)
+    assert point["code"] == "E01" and point["kind"] == "enumerator" and point["band"] == "flagged"
+    assert set(point["fired"]) == {"off_hours", "same_spot", "too_fast"} and point["duration_sec"] == 600
+    assert data["hotspots"] == []
+
+
+def test_evaluate_caches_and_sweeps():
+    from datagen import build_wave, db_rows
+
+    rows = db_rows(build_wave(1))
+    repo = InMemoryRepo(rows["projects"][0], rows["contributors"], rows["areas"], rows["check_config"][0]["params"],
+                        submissions=rows["submissions"], truth=rows["synthetic_truth"])
+    app.dependency_overrides[get_repo] = lambda: repo
+    try:
+        client = TestClient(app)
+        first = client.post("/api/py/evaluate", json={"params": {"review_threshold": 2.5}, "sweep": True}).json()
+        again = client.post("/api/py/evaluate", json={"params": {"review_threshold": 2.5}, "sweep": True}).json()
+        assert (first["cached"], again["cached"]) == (False, True)
+        assert again["combined"] == first["combined"]
+        assert [s["threshold"] for s in first["sweep"]] == [1.0 + 0.5 * i for i in range(15)]
+        at_25 = next(s for s in first["sweep"] if s["threshold"] == 2.5)
+        assert at_25["precision"] == first["combined"]["precision"] and at_25["flagged"] == first["combined"]["flagged"]
+        other = client.post("/api/py/evaluate", json={"params": {"review_threshold": 3}}).json()
+        assert other["cached"] is False and "sweep" not in other
+        # New data changes the data version, so the cache misses.
+        repo._submissions["extra"] = {**rows["submissions"][0], "id": "extra", "client_submission_id": "extra",
+                                      "synced_at": "2030-01-01T00:00:00+00:00"}
+        assert client.post("/api/py/evaluate", json={"params": {"review_threshold": 2.5}, "sweep": True}).json()["cached"] is False
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_rescore_only_writes_what_changed(client):
+    _seed_queue(client)
+    first = client.post("/api/py/rescore", headers=AUTH).json()
+    assert first["rows_written"] == 0  # incremental scoring already left everything current
+
+
+def test_project_as_of_anchors_today_and_yesterday():
+    repo = InMemoryRepo({**PROJECT, "as_of": "2026-10-28T05:00:00+00:00"}, CONTRIBUTORS, AREAS, Params().to_config())
+    app.dependency_overrides[get_repo] = lambda: repo
+    app.dependency_overrides[passcode_value] = lambda: PASSCODE
+    try:
+        client = TestClient(app)
+        _seed_queue(client)  # all captured on 2026-10-27
+        data = client.get("/api/py/overview").json()
+        assert data["now_is_fixed"] is True and data["now"].startswith("2026-10-28T05:00")
+        assert data["today"]["date"] == "2026-10-28" and data["today"]["received"] == 0
+        assert data["yesterday"]["date"] == "2026-10-27" and data["yesterday"]["received"] == 5
+    finally:
+        app.dependency_overrides.clear()
