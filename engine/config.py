@@ -26,7 +26,10 @@ DEFAULT_WEIGHTS = {
 
 @dataclass(frozen=True)
 class Params:
+    # score >= review_threshold goes to the review queue; watch_threshold <= score
+    # < review_threshold is the "watch" band (counted and filterable, never queued).
     review_threshold: float = 2.0
+    watch_threshold: float = 1.0
     weights: dict[str, float] = field(default_factory=lambda: dict(DEFAULT_WEIGHTS))
     # too_fast: minimum plausible duration per contributor kind.
     too_fast_min_minutes: dict[str, float] = field(
@@ -75,6 +78,13 @@ class Params:
             raise ValueError(f"per-kind params need exactly {KINDS}")
         time.fromisoformat(self.off_hours_start)
         time.fromisoformat(self.off_hours_end)
+
+    def band(self, score: float) -> str:
+        if score >= self.review_threshold:
+            return "flagged"
+        if score >= self.watch_threshold:
+            return "watch"
+        return "clear"
 
     def to_dict(self) -> dict[str, Any]:
         """Everything used for a scoring run; stored on scores.config."""
