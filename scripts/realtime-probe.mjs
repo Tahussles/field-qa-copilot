@@ -22,13 +22,15 @@ function describe(table, row) {
   if (table === "scores") {
     return `${row.submission_id?.slice(0, 8)} score ${row.score} flagged ${row.flagged} v${row.engine_version}`;
   }
+  if (row.source === undefined) return `${row.id?.slice(0, 8)}`; // deletes carry only the key
   return `${row.id?.slice(0, 8)} source ${row.source} captured ${row.captured_at}`;
 }
 
-function print({ table, eventType, new: row, old }) {
+function print({ table, eventType, new: fresh, old }) {
+  const row = fresh && Object.keys(fresh).length ? fresh : old;
   const name = `${table} ${eventType}`;
   counts[name] = (counts[name] ?? 0) + 1;
-  console.log(`${time()}  ${table.padEnd(11)} ${eventType.padEnd(6)} ${describe(table, row ?? old)}`);
+  console.log(`${time()}  ${table.padEnd(11)} ${eventType.padEnd(6)} ${describe(table, row)}`);
 }
 
 supabase
