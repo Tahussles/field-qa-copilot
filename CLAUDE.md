@@ -20,7 +20,7 @@ app/                      Next.js routes: / placeholder, /app overview, /app/que
 components/               UI: app/ (shell, data provider, toasts, passcode), overview/, queue/, detectors/, test/, ui/Glass
 lib/                      API client and types, formatting, check labels and colours, Supabase browser client
 tests-e2e/                Playwright smoke test (playwright.config.ts at the root)
-public/vendor/            MapLibre worker copied from node_modules on postinstall (gitignored)
+public/vendor/            MapLibre worker copied from node_modules before dev and build (gitignored)
 api/index.py              FastAPI routes, all under /api/py (docs at /api/py/docs)
 api/_lib/                 Repository (Supabase + in-memory), service logic, schemas, /evaluate
                           (underscore: Vercel does not turn these files into functions)

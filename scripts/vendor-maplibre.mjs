@@ -1,7 +1,8 @@
 // Copies the MapLibre worker into public/ so the browser can load it from a
 // stable URL. MapLibre 6 resolves its worker next to its own module, which a
 // bundler moves, so the map calls setWorkerUrl("/vendor/maplibre-gl-worker.mjs").
-// Runs on postinstall; the copy is gitignored.
+// Runs before `next dev` and `next build` (not on install: Vercel can restore
+// node_modules from its build cache and skip install scripts). The copy is gitignored.
 import { copyFileSync, mkdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";

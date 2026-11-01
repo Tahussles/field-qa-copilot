@@ -4,14 +4,13 @@
   "private": true,
   "scripts": {
     "dev": "concurrently -k -n web,api -c blue,green \"pnpm:dev:web\" \"pnpm:dev:api\"",
-    "dev:web": "next dev",
+    "dev:web": "node scripts/vendor-maplibre.mjs && next dev",
     "dev:api": "uv run uvicorn api.index:app --reload --reload-dir api --reload-dir engine --port 8000",
-    "build": "next build",
+    "build": "node scripts/vendor-maplibre.mjs && next build",
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test:smoke": "playwright test",
-    "postinstall": "node scripts/vendor-maplibre.mjs"
+    "test:smoke": "playwright test"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.118.0",
