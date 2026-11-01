@@ -82,7 +82,8 @@ After cloning, wire the commit hook once: `git config core.hooksPath .githooks`.
 - The browser uses the anon key and can only read. All writes go through the server with the service role key.
 - `engine/` never reads ground truth or imports `datagen`. In `api/`, only the /evaluate path (`api/_lib/evaluation.py` through `repo.truth_labels()`) reads `synthetic_truth`, server-side, and it returns aggregates only. Scripts may read it (`evaluate.py`, and `simulate.py` writes it). Tests enforce this.
 - API: endpoints depend on the `Repository` interface, never on Supabase directly. Writes need the `X-Demo-Passcode` header (`DEMO_PASSCODE` in `.env.local` and on Vercel). Reads are public.
-- Incremental scoring takes short leases (`scoring_locks`, keys `contributor:<id>` and `device:<id>`) so two arrivals that affect the same submissions never overwrite each other's results.
+- Ingest is two database calls: `ingest_begin` (lease, idempotent insert, fetch the scoring context) and `ingest_commit` (fenced write of the results, release). SQL only fetches and writes; every check and scoring decision stays in Python.
+- Leases (`scoring_locks`) cover every contributor and device whose results an arrival can read or change, expire after 15 s, and are fenced: a commit after its lease expired writes nothing. A retry of a stored submission that has no score, or one from an older engine_version, heals it and its affected set.
 - Review queue: score >= review_threshold. Watch band: watch_threshold <= score < review_threshold, counted and filterable, never queued.
 - Synthetic data is deterministic: the same seed gives identical rows, ids included. Change the generator, not the rows.
 - Evaluation seeds: tune defaults on seeds 1-5 only. Seeds 101-110 are held out for reporting and the CI gate; never tune on them. The demo seed is 20261031.
