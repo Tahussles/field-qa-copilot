@@ -30,15 +30,28 @@ def char_shingles(text: str, size: int = 3) -> frozenset[str]:
 def jaccard(a: frozenset[str], b: frozenset[str]) -> float:
     if not a and not b:
         return 0.0
-    return len(a & b) / len(a | b)
+    shared = len(a & b)
+    return shared / (len(a) + len(b) - shared)
 
 
-def word_jaccard(a: str, b: str) -> float:
+# Pair results are cached in a canonical order: every pair is compared from
+# both sides within a run, and the same texts recur across /evaluate calls.
+@lru_cache(maxsize=131072)
+def _word_pair(a: str, b: str) -> float:
     return jaccard(content_words(a), content_words(b))
 
 
-def shingle_jaccard(a: str, b: str) -> float:
+@lru_cache(maxsize=131072)
+def _shingle_pair(a: str, b: str) -> float:
     return jaccard(char_shingles(a), char_shingles(b))
+
+
+def word_jaccard(a: str, b: str) -> float:
+    return _word_pair(a, b) if a <= b else _word_pair(b, a)
+
+
+def shingle_jaccard(a: str, b: str) -> float:
+    return _shingle_pair(a, b) if a <= b else _shingle_pair(b, a)
 
 
 SIMILARITY = {"word_jaccard": word_jaccard, "char_shingle": shingle_jaccard}

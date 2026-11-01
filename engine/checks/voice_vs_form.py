@@ -7,6 +7,7 @@ vendor. A later round replaces this with a model that should do better.
 """
 
 import re
+from functools import lru_cache
 
 from ..model import CheckResult, Context, Submission
 
@@ -27,6 +28,7 @@ _PATTERNS = [
 ]
 
 
+@lru_cache(maxsize=16384)
 def voice_source(transcript: str) -> tuple[str, str, int] | None:
     """(source, keyword, position) of the earliest keyword in the transcript, or None."""
     text = transcript.lower()
