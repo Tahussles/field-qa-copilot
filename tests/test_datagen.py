@@ -196,3 +196,44 @@ def test_detection_code_never_mentions_the_truth_table():
         if path not in allowed:
             assert "synthetic_truth" not in path.read_text(), path
     assert "truth_labels" not in (ROOT / "api" / "_lib" / "service.py").read_text()
+
+
+# Live day ---------------------------------------------------------------------
+
+@pytest.fixture(scope="module")
+def live(wave):
+    from datagen.live import build_live_day
+
+    return build_live_day(SEED, wave)
+
+
+def test_live_day_is_deterministic_and_separate(live, wave):
+    from datagen.live import LIVE_DAY, build_live_day
+
+    again = build_live_day(SEED)
+    assert [(s.id, s.client_submission_id, s.answers) for s in again.submissions] == \
+           [(s.id, s.client_submission_id, s.answers) for s in live.submissions]
+    assert 250 <= len(live.submissions) <= 300
+    assert {s.captured_at.astimezone(cfg.EAT).date() for s in live.submissions if s.fraud_type != "night"} == {LIVE_DAY}
+    base_ids = {s.client_submission_id for s in wave.submissions}
+    assert base_ids.isdisjoint(s.client_submission_id for s in live.submissions)
+
+
+def test_live_day_continues_every_fraud_actor(live, wave):
+    by_type = Counter(s.fraud_type for s in live.submissions if s.is_fabricated)
+    assert set(by_type) == set(cfg.FRAUD_TYPES)
+    assert {s.contributor.code for s in live.submissions if s.fraud_type == "curbstone"} == {cfg.CURBSTONE}
+    assert {s.device_id for s in live.submissions if s.fraud_type == "multi_account"} == {wave.ring_device}
+    assert {s.contributor.code for s in live.submissions if s.fraud_type == "burst"} == {wave.burst_account}
+    # Same tea shop as during the wave.
+    tea = [s.point for s in wave.submissions if s.fraud_type == "curbstone"]
+    centre = (sum(p[0] for p in tea) / len(tea), sum(p[1] for p in tea) / len(tea))
+    assert all(geo.distance_m(centre, s.point) <= 24 for s in live.submissions if s.fraud_type == "curbstone")
+
+
+def test_live_day_rows_are_sane(live):
+    for s in live.submissions:
+        assert geo.contains(s.contributor.area.ring, s.point)
+        assert s.captured_at <= s.synced_at and s.duration_sec > 0
+        assert s.noise_tag is None or not s.is_fabricated
+    assert [s.synced_at for s in live.submissions] == sorted(s.synced_at for s in live.submissions)
