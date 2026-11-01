@@ -167,14 +167,14 @@ function MobileNav() {
   const pathname = usePathname();
   const active = sectionFor(pathname).href;
   return (
-    <Glass as="nav" aria-label="Sections" className="fixed inset-x-3 bottom-3 z-30 flex rounded-2xl p-1.5 md:hidden">
+    <Glass as="nav" aria-label="Sections" className="glass-tint fixed inset-x-3 bottom-3 z-30 flex rounded-2xl p-1.5 md:hidden">
       {SECTIONS.map((s) => (
         <Link
           key={s.href}
           href={s.href}
           aria-current={active === s.href ? "page" : undefined}
           className={`flex flex-1 flex-col items-center gap-0.5 rounded-xl py-1.5 text-[10.5px] ${
-            active === s.href ? "bg-white/[0.08] text-ink" : "text-muted"
+            active === s.href ? "bg-white/[0.08] text-ink" : "text-ink-2"
           }`}
         >
           <s.icon className="h-4 w-4" />
