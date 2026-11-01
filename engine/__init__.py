@@ -1,3 +1,23 @@
-"""Deterministic, explainable fabrication checks for field data submissions."""
+"""Deterministic, explainable fabrication checks for field data submissions.
 
-__version__ = "0.1.0"
+Pure Python, standard library only, no I/O and no AI. Every result carries
+the engine version so stored results can be traced to the code that made them.
+"""
+
+__version__ = "0.2.0"
+
+from .checks import CHECK_KEYS  # noqa: E402
+from .config import Params  # noqa: E402
+from .model import CheckResult, Contributor, Submission  # noqa: E402
+from .scoring import ScoredSubmission, score_all, score_incremental  # noqa: E402
+
+__all__ = [
+    "CHECK_KEYS",
+    "CheckResult",
+    "Contributor",
+    "Params",
+    "ScoredSubmission",
+    "Submission",
+    "score_all",
+    "score_incremental",
+]
