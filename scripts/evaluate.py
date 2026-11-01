@@ -23,6 +23,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from datagen import build_wave, db_rows  # noqa: E402
+from datagen.live import LIVE_DAY, build_live_day  # noqa: E402
 from engine import CHECK_KEYS, Contributor, Params, Submission, __version__, score_all  # noqa: E402
 from engine.metrics import FRAUD_TYPES, NOISE_TAGS, TARGETS, combined, per_check  # noqa: E402
 
@@ -67,6 +68,34 @@ def run_seed(seed: int, params: Params) -> dict:
         "sweep": [{k: v for k, v in combined(scores, truth, t).items() if k in ("threshold", "precision", "recall", "flagged")}
                   for t in THRESHOLDS],
         "copy_methods": copy_methods,
+    }
+
+
+def run_live_day(seed: int, params: Params) -> dict:
+    """Score the wave plus the live day together, as production ends up after the simulator run."""
+    wave = build_wave(seed)
+    live = build_live_day(seed, wave)
+    rows = db_rows(wave)
+    contributors = [Contributor.from_row(r) for r in rows["contributors"]]
+    params = replace(params, timezone=rows["projects"][0]["timezone"])
+    wave_subs = [Submission.from_row(r) for r in rows["submissions"]]
+    live_subs = [
+        Submission(id=s.id, contributor_id=s.contributor.id, device_id=s.device_id, captured_at=s.captured_at,
+                   synced_at=s.synced_at, duration_sec=s.duration_sec, lat=s.point[1], lng=s.point[0],
+                   answers=s.answers, voice_transcript=s.voice_transcript)
+        for s in live.submissions
+    ]
+    labels = {t["submission_id"]: t for t in rows["synthetic_truth"]}
+    live_labels = {s.id: {"fraud_type": s.fraud_type, "noise_tag": s.noise_tag} for s in live.submissions}
+    scored = score_all(wave_subs + live_subs, contributors, params)
+    live_scored = [s for s in scored if s.submission_id in live_labels]
+    scores = {s.submission_id: s.score for s in scored}
+    return {
+        "date": LIVE_DAY.isoformat(),
+        "live": combined({k: scores[k] for k in live_labels}, live_labels, params.review_threshold,
+                         params.watch_threshold),
+        "live_per_check": per_check(live_scored, live_labels),
+        "wave_and_live": combined(scores, {**labels, **live_labels}, params.review_threshold, params.watch_threshold),
     }
 
 
@@ -201,6 +230,19 @@ def render_markdown(report: dict) -> str:
             f"{pct(d['copied_text']['targeted_recall'])} / {pct(h['copied_text']['targeted_recall'])} | "
             f"{pct(h['combined']['precision'])} | {pct(h['combined']['recall'])} |")
 
+    live = report.get("live_day")
+    if live:
+        lines += ["", f"## Live day ({live['date']}, replayed through the API by scripts/simulate.py)", "",
+                  "Scored together with the demo wave, which is what production holds after a full simulator run.", "",
+                  "| | precision | recall | flagged | watch | false alarms | misses | fabricated | submissions |",
+                  "|---|---|---|---|---|---|---|---|---|"]
+        for label, c in (("live day rows", live["live"]), ("wave + live day", live["wave_and_live"])):
+            lines.append(f"| {label} | {pct(c['precision'])} | {pct(c['recall'])} | {c['flagged']} | {c['watch']} | "
+                         f"{c['false_positives']} | {c['false_negatives']} | {c['fabricated']} | {c['submissions']} |")
+        alarms = {k: v for k, v in live["live"]["false_alarms_by_cause"].items() if v}
+        misses = {k: v for k, v in live["live"]["misses_by_fraud_type"].items() if v}
+        lines += ["", f"Live-day false alarms by cause: {alarms or 'none'}. Misses by fraud type: {misses or 'none'}."]
+
     lines += ["", f"Scoring time: {demo['score_ms']:.0f} ms for the demo wave "
               f"({demo['combined']['submissions']} submissions).", ""]
     return "\n".join(lines)
@@ -241,6 +283,7 @@ def main() -> int:
         "demo": demo,
         "held_out": held_out,
         "tuning": tuning,
+        "live_day": run_live_day(DEMO_SEED, params),
     }
     args.out.mkdir(parents=True, exist_ok=True)
     (args.out / "report.json").write_text(json.dumps(report, indent=2) + "\n")
