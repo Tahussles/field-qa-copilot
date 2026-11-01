@@ -105,7 +105,8 @@ class Supabase:
         return response.json()
 
     def rpc(self, function: str, args: dict[str, Any]) -> Any:
-        return self._check(self._http.post(f"/rpc/{function}", json=args)).json()
+        response = self._check(self._http.post(f"/rpc/{function}", json=args))
+        return response.json() if response.content else None  # void functions answer 204
 
     def close(self) -> None:
         self._http.close()
