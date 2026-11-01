@@ -1,4 +1,4 @@
-import type { Band, CheckKey, ContributorStatus } from "./types";
+import type { Band, CheckKey, ContributorStatus, Hotspot } from "./types";
 
 export const CHECK_ORDER: CheckKey[] = [
   "too_fast",
@@ -75,26 +75,42 @@ export function statusColor(status: ContributorStatus): string {
   return status === "investigate" ? COLORS.crit : status === "watch" ? COLORS.warn : COLORS.ok;
 }
 
-// Tie-break when two checks fired equally often: the more specific evidence
-// leads (a shared GPS fix or copied text says more than speed alone).
-const SPECIFICITY: CheckKey[] = [
+// Tie-break when two checks fired equally often. Shared device and same spot
+// come first: they point at a specific place or phone to verify. E07's
+// same-spot interviews were also logged in bursts (23 each), and same spot is
+// the finding a field lead can act on.
+const TIE_ORDER: CheckKey[] = [
+  "shared_device",
   "same_spot",
+  "burst",
   "copied_text",
   "voice_vs_form",
-  "shared_device",
   "straight_lining",
-  "burst",
   "off_hours",
   "too_fast",
 ];
 
-/** Checks by how often they fired, most first; the table and the brief share this order. */
+/** Checks by how often they fired for a contributor, most first, ties by TIE_ORDER. */
 export function rankChecks(checks: Partial<Record<CheckKey, number>>): [CheckKey, number][] {
   return (Object.entries(checks) as [CheckKey, number][]).sort(
-    (a, b) => b[1] - a[1] || SPECIFICITY.indexOf(a[0]) - SPECIFICITY.indexOf(b[0]),
+    (a, b) => b[1] - a[1] || TIE_ORDER.indexOf(a[0]) - TIE_ORDER.indexOf(b[0]),
   );
 }
 
-export function dominantCheck(checks: Partial<Record<CheckKey, number>>): CheckKey | null {
+/**
+ * A contributor's main signal: the check that fired most often for them.
+ * The contributors table, the brief and the hotspot cards all use this.
+ */
+export function mainSignal(checks: Partial<Record<CheckKey, number>>): CheckKey | null {
   return rankChecks(checks)[0]?.[0] ?? null;
+}
+
+/** Each contributor's largest hotspot (some contributors have more than one pile). */
+export function biggestHotspots(hotspots: Hotspot[]): Map<string, Hotspot> {
+  const out = new Map<string, Hotspot>();
+  for (const h of hotspots) {
+    const current = out.get(h.contributor_code);
+    if (!current || h.count > current.count) out.set(h.contributor_code, h);
+  }
+  return out;
 }

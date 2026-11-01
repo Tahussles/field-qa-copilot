@@ -1,4 +1,4 @@
-import { CHECK_ACTION, CHECK_LABEL, dominantCheck } from "@/lib/checks";
+import { biggestHotspots, CHECK_ACTION, CHECK_LABEL, mainSignal } from "@/lib/checks";
 import { fmtDuration, fmtLocalDate, fmtPct } from "@/lib/format";
 import type { Overview } from "@/lib/types";
 
@@ -13,7 +13,7 @@ export function Brief({ overview }: { overview: Overview | null }) {
   const t = overview.today;
   const investigate = overview.contributors.filter((c) => c.status === "investigate");
   const watch = overview.contributors.filter((c) => c.status === "watch");
-  const hotspotFor = new Map(overview.hotspots.map((h) => [h.contributor_code, h]));
+  const hotspotFor = biggestHotspots(overview.hotspots);
 
   return (
     <section aria-labelledby="brief-title" className="panel scrollbar-thin flex flex-col p-4 xl:h-[600px] xl:overflow-y-auto">
@@ -49,7 +49,7 @@ export function Brief({ overview }: { overview: Overview | null }) {
             <p className="text-ink">Investigate {investigate.length === 1 ? "one contributor" : `${investigate.length} contributors`}:</p>
             <ul className="mt-1.5 space-y-2">
               {investigate.slice(0, BRIEF_TOP).map((c) => {
-                const signal = dominantCheck(c.checks_fired);
+                const signal = mainSignal(c.checks_fired);
                 const hotspot = hotspotFor.get(c.code);
                 return (
                   <li key={c.contributor_id} className="flex gap-2">
@@ -62,7 +62,9 @@ export function Brief({ overview }: { overview: Overview | null }) {
                       {signal && (
                         <>
                           , mostly <span className="text-ink">{CHECK_LABEL[signal]}</span>
-                          {signal === "same_spot" && hotspot ? `: ${hotspot.count} interviews in one spot` : ""}
+                          {signal === "same_spot" && hotspot
+                            ? `: ${hotspot.count} interviews in one spot${hotspot.mostly_off_hours ? ", mostly after 22:00" : ""}`
+                            : ""}
                         </>
                       )}
                       . {signal && <span className="text-muted">Recommended: {CHECK_ACTION[signal]}.</span>}

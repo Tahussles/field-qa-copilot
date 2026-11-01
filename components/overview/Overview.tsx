@@ -26,8 +26,8 @@ function MapSkeleton() {
 export function Overview() {
   const { overview, map, pulses, error } = useAppData();
   const [focus, setFocus] = useState<string | null>(null);
-  const names = useMemo(
-    () => Object.fromEntries((overview?.contributors ?? []).map((c) => [c.code, c.display_name ?? ""])),
+  const contributors = useMemo(
+    () => Object.fromEntries((overview?.contributors ?? []).map((c) => [c.code, c])),
     [overview],
   );
 
@@ -40,7 +40,7 @@ export function Overview() {
       )}
       <Kpis overview={overview} />
       <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_380px]">
-        <MapPanel data={map} names={names} focus={focus} onFocus={setFocus} pulses={pulses} />
+        <MapPanel data={map} contributors={contributors} focus={focus} onFocus={setFocus} pulses={pulses} />
         <Brief overview={overview} />
       </div>
       <ContributorsTable rows={overview?.contributors ?? []} focus={focus} onFocus={setFocus} />

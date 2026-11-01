@@ -1,4 +1,4 @@
-import { CHECK_LABEL, rankChecks, statusColor } from "@/lib/checks";
+import { CHECK_LABEL, mainSignal, rankChecks, statusColor } from "@/lib/checks";
 import { fmtPct } from "@/lib/format";
 import type { ContributorRow } from "@/lib/types";
 
@@ -40,6 +40,7 @@ export function ContributorsTable({
             {rows.map((row) => {
               const selected = focus === row.code;
               const color = statusColor(row.status);
+              const main = mainSignal(row.checks_fired);
               const signals = rankChecks(row.checks_fired).slice(0, 2);
               return (
                 <tr
@@ -71,7 +72,13 @@ export function ContributorsTable({
                   <td className="px-2">
                     <div className="flex gap-1">
                       {signals.map(([key, n]) => (
-                        <span key={key} className="rounded-md bg-white/[0.05] px-1.5 py-0.5 text-[11px] whitespace-nowrap text-muted">
+                        <span
+                          key={key}
+                          title={key === main ? "Main signal" : undefined}
+                          className={`rounded-md px-1.5 py-0.5 text-[11px] whitespace-nowrap ${
+                            key === main ? "bg-white/[0.08] text-ink-2" : "bg-white/[0.04] text-muted"
+                          }`}
+                        >
                           {CHECK_LABEL[key]} <span className="text-faint">{n}</span>
                         </span>
                       ))}

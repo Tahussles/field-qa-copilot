@@ -7,9 +7,9 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Glass } from "@/components/ui/Glass";
-import { CHECK_LABEL, COLORS, scoreColor } from "@/lib/checks";
+import { CHECK_LABEL, COLORS, mainSignal, scoreColor } from "@/lib/checks";
 import { fmtDateTime, fmtDuration, fmtLocalDate, shortId } from "@/lib/format";
-import type { Hotspot, MapData, MapPoint } from "@/lib/types";
+import type { ContributorRow, Hotspot, MapData, MapPoint } from "@/lib/types";
 
 // OpenFreeMap: free vector tiles, no API key. Attribution comes from the tile source.
 const STYLE_URL = "https://tiles.openfreemap.org/styles/dark";
@@ -134,13 +134,13 @@ function tuneBasemap(map: MlMap) {
 
 export function MapPanel({
   data,
-  names,
+  contributors,
   focus,
   onFocus,
   pulses,
 }: {
   data: MapData | null;
-  names: Record<string, string>;
+  contributors: Record<string, ContributorRow>;
   focus: string | null;
   onFocus: (code: string | null) => void;
   pulses: string[];
@@ -434,7 +434,7 @@ export function MapPanel({
                 <div className="min-w-0 flex-1">
                   <p className="font-medium text-ink">
                     <span className="font-mono">{item.hotspot.contributor_code}</span>{" "}
-                    {names[item.hotspot.contributor_code] ?? ""}
+                    {contributors[item.hotspot.contributor_code]?.display_name ?? ""}
                   </p>
                   <p className="text-muted">{item.hotspot.count} interviews within {Math.round(item.hotspot.radius_m)} m</p>
                 </div>
@@ -454,6 +454,7 @@ export function MapPanel({
                   {item.hotspot.last_date !== item.hotspot.first_date && ` – ${fmtLocalDate(item.hotspot.last_date)}`} ·{" "}
                   {item.hotspot.days} {item.hotspot.days === 1 ? "day" : "days"}
                 </dd>
+                <MainSignalRow checks={contributors[item.hotspot.contributor_code]?.checks_fired} />
                 <dt className="text-faint">Avg duration</dt>
                 <dd className="text-ink-2">{fmtDuration(item.hotspot.avg_duration_sec)}</dd>
                 {item.hotspot.mostly_off_hours && (
@@ -542,7 +543,7 @@ export function MapPanel({
             <span className="font-mono">{shortId(tip.point.id)}</span>
             <span className="text-faint">·</span>
             <span className="font-mono">{tip.point.code}</span>
-            <span className="truncate text-muted">{names[tip.point.code]}</span>
+            <span className="truncate text-muted">{contributors[tip.point.code]?.display_name}</span>
           </p>
           <p className="mt-0.5 text-muted">
             {fmtDateTime(tip.point.captured_at, data?.project.timezone)} · {fmtDuration(tip.point.duration_sec)}
@@ -557,5 +558,16 @@ export function MapPanel({
       {!data && <p className="absolute inset-0 grid place-items-center text-sm text-muted">Loading the map…</p>}
       {data && pointsById.size === 0 && <p className="absolute inset-0 grid place-items-center text-sm text-muted">No submissions yet.</p>}
     </section>
+  );
+}
+
+function MainSignalRow({ checks }: { checks: ContributorRow["checks_fired"] | undefined }) {
+  const signal = mainSignal(checks ?? {});
+  if (!signal) return null;
+  return (
+    <>
+      <dt className="text-faint">Main signal</dt>
+      <dd className="text-ink-2">{CHECK_LABEL[signal]}</dd>
+    </>
   );
 }
