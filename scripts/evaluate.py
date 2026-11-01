@@ -15,7 +15,6 @@ import json
 import statistics
 import sys
 import time
-from collections import Counter
 from dataclasses import replace
 from pathlib import Path
 
@@ -24,32 +23,14 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from datagen import build_wave, db_rows  # noqa: E402
-from datagen.config import FRAUD_TYPES  # noqa: E402
 from engine import CHECK_KEYS, Contributor, Params, Submission, __version__, score_all  # noqa: E402
+from engine.metrics import FRAUD_TYPES, NOISE_TAGS, TARGETS, combined, per_check  # noqa: E402
 
 DEMO_SEED = 20261031
 TUNING_SEEDS = tuple(range(1, 6))
 HELD_OUT_SEEDS = tuple(range(101, 111))
 THRESHOLDS = tuple(1.0 + 0.5 * i for i in range(15))
-NOISE_TAGS = ("short_genuine", "straightline_genuine", "two_source_transcript",
-              "compound_cluster", "late_capture", "late_sync", "untagged")
 COPY_METHODS = ("word_jaccard", "char_shingle")
-
-# The fraud types each check is meant to catch.
-TARGETS = {
-    "too_fast": ("speeder", "burst"),
-    "same_spot": ("curbstone", "night"),
-    "copied_text": ("copypaste", "burst", "multi_account"),
-    "straight_lining": ("speeder",),
-    "voice_vs_form": ("contradiction",),
-    "off_hours": ("night",),
-    "shared_device": ("multi_account",),
-    "burst": ("burst",),
-}
-
-
-def ratio(hits: int, total: int) -> float | None:
-    return hits / total if total else None
 
 
 def wave_inputs(seed: int):
@@ -58,44 +39,6 @@ def wave_inputs(seed: int):
     contributors = [Contributor.from_row(r) for r in rows["contributors"]]
     truth = {t["submission_id"]: t for t in rows["synthetic_truth"]}
     return submissions, contributors, truth, rows["projects"][0]["timezone"]
-
-
-def combined(scores: dict[str, float], truth: dict, threshold: float) -> dict:
-    fakes = {sid for sid, t in truth.items() if t["is_fabricated"]}
-    flagged = {sid for sid, score in scores.items() if score >= threshold}
-    false_alarms = Counter(truth[sid]["noise_tag"] or "untagged" for sid in flagged - fakes)
-    misses = Counter(truth[sid]["fraud_type"] for sid in fakes - flagged)
-    return {
-        "threshold": threshold,
-        "submissions": len(scores),
-        "fabricated": len(fakes),
-        "flagged": len(flagged),
-        "false_positives": len(flagged - fakes),
-        "false_negatives": len(fakes - flagged),
-        "precision": ratio(len(flagged & fakes), len(flagged)),
-        "recall": ratio(len(flagged & fakes), len(fakes)),
-        "false_alarms_by_cause": {tag: false_alarms.get(tag, 0) for tag in NOISE_TAGS},
-        "misses_by_fraud_type": {ft: misses.get(ft, 0) for ft in FRAUD_TYPES},
-    }
-
-
-def per_check(scored, truth: dict) -> dict:
-    fakes = {sid for sid, t in truth.items() if t["is_fabricated"]}
-    fired = {key: set() for key in CHECK_KEYS}
-    for s in scored:
-        for r in s.results:
-            if r.fired:
-                fired[r.key].add(s.submission_id)
-    out = {}
-    for key, ids in fired.items():
-        targeted = {sid for sid, t in truth.items() if t["fraud_type"] in TARGETS[key]}
-        out[key] = {
-            "fires_on": len(ids),
-            "precision": ratio(len(ids & fakes), len(ids)),
-            "recall": ratio(len(ids & fakes), len(fakes)),
-            "targeted_recall": ratio(len(ids & targeted), len(targeted)),
-        }
-    return out
 
 
 def run_seed(seed: int, params: Params) -> dict:
