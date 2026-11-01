@@ -15,7 +15,12 @@ Field QA Copilot checks every submission as it syncs, flags likely fabrication w
 ## Folder layout
 
 ```
-app/                      Next.js routes and UI
+app/                      Next.js routes: / placeholder, /app overview, /app/queue[/id], /app/detectors, /app/test
+  globals.css             design tokens (@theme), .glass and other component classes (@layer components)
+components/               UI: app/ (shell, data provider, toasts, passcode), overview/, queue/, detectors/, test/, ui/Glass
+lib/                      API client and types, formatting, check labels and colours, Supabase browser client
+tests-e2e/                Playwright smoke test (playwright.config.ts at the root)
+public/vendor/            MapLibre worker copied from node_modules on postinstall (gitignored)
 api/index.py              FastAPI routes, all under /api/py (docs at /api/py/docs)
 api/_lib/                 Repository (Supabase + in-memory), service logic, schemas, /evaluate
                           (underscore: Vercel does not turn these files into functions)
@@ -27,11 +32,12 @@ engine/                   detection engine: stdlib only, no I/O (engine.__versio
   insights.py             hotspots, contributor stats, area rates
   metrics.py              precision/recall against labels the caller supplies
 datagen/                  seeded synthetic wave with planted fraud (may import engine, never the reverse)
-scripts/                  generate.py, score.py, evaluate.py, simulate.py, realtime-probe.mjs
+scripts/                  generate.py, score.py, evaluate.py, simulate.py, realtime-probe.mjs, vendor-maplibre.mjs
 tests/                    pytest suite
 data/synthetic/           generator output: CSVs, summary.json, preview.png (gitignored)
 data/eval/                evaluation output: report.md, report.json (gitignored)
 data/sim/                 simulator run logs (gitignored)
+data/screens/             dashboard screenshots (gitignored)
 supabase/migrations/      SQL migrations, numbered and applied in order
 .githooks/commit-msg      rejects attribution strings in commit messages
 .github/workflows/        attribution-guard CI check on every push and PR
@@ -45,6 +51,9 @@ pnpm install
 uv sync
 pnpm dev                                   # Next.js on :3000 and FastAPI on :8000
 curl http://localhost:3000/api/py/health   # {"ok":true,"engine_version":"..."}
+pnpm typecheck && pnpm lint                # TypeScript and ESLint
+pnpm test:smoke                            # Playwright smoke test against the local app (reads prod data;
+                                           # approve-then-undo needs DEMO_PASSCODE in .env.local)
 uv run pytest                              # Python tests
 uv run scripts/generate.py --seed 20261031 --reset   # rebuild the synthetic wave in Supabase
 uv run scripts/generate.py --seed 20261031 --dry-run # local files only
@@ -91,3 +100,8 @@ After cloning, wire the commit hook once: `git config core.hooksPath .githooks`.
 - Bump engine.__version__ when check logic changes; check_results are keyed by engine_version, and scores.config records the params used.
 - Keep checks deterministic and explainable: the same submission and config always give the same result, and every check stores `fired`, `weight` and human-readable `evidence`, stamped with `engine_version`.
 - Schema changes go in a new numbered migration. Never edit a migration that has been applied.
+- `projects.as_of`, when set, is "now" for that project: today, yesterday and the brief anchor to it. The demo project is fixed at 2026-10-31 08:00 Africa/Nairobi.
+- Contributor status: investigate = 3+ flagged and rate >= 15%; watch = 2+ flagged and rate >= 8%; otherwise ok (`engine/insights.py`).
+- Dashboard UI: content panels are solid (`.panel`); only the floating layer (bars, map overlays, chips, tooltips, toasts, modals) uses `.glass` / `<Glass>`. Custom classes live in `@layer components` so Tailwind utilities can override them.
+- The dashboard reads with the publishable key and refreshes on Supabase Realtime events (debounced ~1 s), never by polling. Writes from the browser go through the API with `X-Demo-Passcode`.
+- Map: MapLibre with the OpenFreeMap dark style (no key; attribution from the tile source). Its worker is served from `public/vendor/` because a bundler moves the module it would otherwise resolve against.
