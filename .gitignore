@@ -12,6 +12,8 @@
 
 # testing
 /coverage
+/test-results/
+/playwright-report/
 
 # next.js
 /.next/
@@ -19,6 +21,9 @@
 
 # production
 /build
+
+# copied from node_modules on postinstall (scripts/vendor-maplibre.mjs)
+/public/vendor/
 
 # misc
 .DS_Store

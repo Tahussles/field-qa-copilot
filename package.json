@@ -8,15 +8,20 @@
     "dev:api": "uv run uvicorn api.index:app --reload --reload-dir api --reload-dir engine --port 8000",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "test:smoke": "playwright test",
+    "postinstall": "node scripts/vendor-maplibre.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.118.0",
+    "maplibre-gl": "^6.16.0",
     "next": "16.4.3",
     "react": "19.3.0",
     "react-dom": "19.3.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "@tailwindcss/turbopack": "^4",
     "@types/node": "^20",
     "@types/react": "^19",

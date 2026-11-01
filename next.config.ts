@@ -1,12 +1,16 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
   cacheComponents: true,
   partialPrefetching: true,
+  // The floating dev badge sits on the sidebar; keep dev screenshots clean.
+  devIndicators: false,
   turbopack: {
     rules: {
       "*.css": {
+        // Our CSS only: running the Tailwind loader on node_modules CSS
+        // (maplibre-gl.css) hangs the build.
+        condition: { not: "foreign" },
         loaders: ["@tailwindcss/turbopack"],
         as: "*.css",
       },

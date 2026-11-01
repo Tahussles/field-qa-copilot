@@ -12,6 +12,12 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Ours: Python env, generated data, the vendored map worker and Playwright output.
+    ".venv/**",
+    "public/vendor/**",
+    "data/**",
+    "playwright-report/**",
+    "test-results/**",
   ]),
 ]);
 
