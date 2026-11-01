@@ -130,11 +130,17 @@ def get_overview(day: date | None = Query(default=None, alias="date",
     return service.overview(repo, day)
 
 
+@router.get("/map")
+def get_map(repo: Repository = Depends(get_repo)) -> dict:
+    """Points (id, contributor, position, score, band, fired checks, time), area polygons and hotspots."""
+    return service.map_view(repo)
+
+
 @router.post("/evaluate")
 def post_evaluate(body: EvaluateIn, repo: Repository = Depends(get_repo)) -> dict:
-    """Rescore the synthetic wave in memory with candidate params; aggregates only."""
+    """Rescore the synthetic wave in memory with candidate params; aggregates only. Cached."""
     try:
-        return run_evaluation(repo, body.params)
+        return run_evaluation(repo, body.params, body.sweep)
     except ValueError as error:
         raise HTTPException(422, str(error))
 

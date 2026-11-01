@@ -63,3 +63,4 @@ class EvaluateIn(BaseModel):
 
     params: dict[str, Any] = Field(default_factory=dict, examples=[{"weights": {"same_spot": 3}, "review_threshold": 2.5}],
                                    description="Overrides merged over the project's check_config")
+    sweep: bool = Field(default=False, description="Also return precision/recall/flagged for thresholds 1.0 to 8.0")
