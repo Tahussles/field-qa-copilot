@@ -54,4 +54,8 @@ __pycache__/
 .ruff_cache/
 
 # generated synthetic data (scripts/generate.py)
-/data/
+/data/*
+!/data/eval/
+/data/eval/*
+# hard-mode aggregates are served by the API (/api/py/eval/hard)
+!/data/eval/hard.json

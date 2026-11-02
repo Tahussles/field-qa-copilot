@@ -5,7 +5,7 @@
   ],
   "functions": {
     "api/index.py": {
-      "includeFiles": "{engine/**,datagen/**,api/_lib/**}"
+      "includeFiles": "{engine/**,datagen/**,api/_lib/**,data/eval/hard.json}"
     }
   }
 }
