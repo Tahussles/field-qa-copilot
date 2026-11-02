@@ -180,11 +180,12 @@ def run_brief(repo, provider: Provider, job):
     except AIUnavailable as error:
         saved = repo.save_brief({"for_date": for_date, "data_version": version, "status": "template",
                                  "stats": facts, "items": None, "content_md": None, "model": None,
-                                 "fallback": {"reason": str(error)}})
+                                 "fallback": {"reason": str(error)}, "audio_path": None})
         return {"brief_id": saved["id"], "status": "template", "reason": str(error)}, error.usage
+    # audio_path is cleared: a rewritten brief must not keep the old one's audio (Listen re-synthesises).
     saved = repo.save_brief({"for_date": for_date, "data_version": version, "status": "ai", "stats": facts,
                              "items": written.model_dump(), "content_md": briefs.markdown(written),
-                             "model": usage.model, "fallback": None})
+                             "model": usage.model, "fallback": None, "audio_path": None})
     return {"brief_id": saved["id"], "status": "ai", "rejected": usage.rejected}, usage
 
 

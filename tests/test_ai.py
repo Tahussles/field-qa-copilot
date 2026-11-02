@@ -349,6 +349,11 @@ def test_the_brief_is_written_cached_read_aloud_and_falls_back(repo):
     second = client.post(f"/api/py/brief/{state['brief']['id']}/audio").json()
     assert first["url"].startswith("memory://brief-audio/") and first == second and provider.calls == ["tts"]
 
+    # Rewriting the brief drops the old audio; the next Listen makes new audio.
+    jobs.run_job(repo, FakeProvider(written=written), job_id=repo.requeue_job(queued["id"])["id"])
+    assert client.get("/api/py/brief").json()["brief"]["has_audio"] is False
+    assert client.post(f"/api/py/brief/{state['brief']['id']}/audio").json()["url"] and provider.calls == ["tts", "tts"]
+
     # Regenerate (passcode) for the same numbers re-runs the finished job; a failing model gives the template.
     assert client.post("/api/py/brief/regenerate").status_code == 401
     assert client.post("/api/py/brief/regenerate", headers=AUTH).json()["queued"]
