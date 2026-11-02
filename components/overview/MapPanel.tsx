@@ -7,12 +7,11 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Glass } from "@/components/ui/Glass";
+import { STYLE_URL, tuneBasemap } from "@/lib/basemap";
 import { CHECK_LABEL, CHECK_TITLE, COLORS, mainSignal, scoreColor } from "@/lib/checks";
 import { fmtDuration, fmtStamp, shortId } from "@/lib/format";
 import type { ContributorRow, Hotspot, MapData, MapPoint } from "@/lib/types";
 
-// OpenFreeMap: free vector tiles, no API key. Attribution comes from the tile source.
-const STYLE_URL = "https://tiles.openfreemap.org/styles/dark";
 const PASSED = "#9aa0aa"; // the prototype's passed-dot grey (drawn at 35% opacity)
 const CARD = { w: 236, h: 132 };
 const CHIP = { w: 252, h: 34 };
@@ -117,37 +116,6 @@ function areaFeatures(data: MapData) {
       }),
     },
   };
-}
-
-/** Recolour OpenFreeMap's dark style to the prototype's map palette. */
-function tuneBasemap(map: MlMap) {
-  const paint = (id: string, prop: string, value: unknown) => {
-    try {
-      (map.setPaintProperty as (layer: string, name: string, v: unknown) => void).call(map, id, prop, value);
-    } catch {
-      // layer without that property
-    }
-  };
-  for (const layer of map.getStyle().layers ?? []) {
-    const id = layer.id;
-    if (layer.type === "background") paint(id, "background-color", "#0b0c0f");
-    else if (id === "water") paint(id, "fill-color", "#131823"); // rgba(90,130,210,.10) over the map ground
-    else if (id === "waterway") paint(id, "line-color", "#1a2130");
-    else if (id === "building") {
-      paint(id, "fill-color", "#0d0e11");
-      paint(id, "fill-outline-color", "#121317");
-    } else if (layer.type === "fill") paint(id, "fill-color", "#0c0d10");
-    else if (layer.type === "line" && id.startsWith("highway")) {
-      paint(id, "line-color", id.includes("major") || id.includes("motorway") || id.includes("trunk") ? "#1e1f23" : "#151619");
-    } else if (layer.type === "line") paint(id, "line-color", "#141518");
-    else if (/^place_(other|suburb|village)$/.test(id)) {
-      // Real neighbourhood names would sit next to our survey area labels.
-      map.setLayoutProperty(id, "visibility", "none");
-    } else if (layer.type === "symbol") {
-      paint(id, "text-color", "#54565b");
-      paint(id, "text-halo-color", "#0b0c0f");
-    }
-  }
 }
 
 export function MapPanel({
