@@ -22,16 +22,32 @@ export const CHECK_LABEL: Record<CheckKey, string> = {
   burst: "burst",
 };
 
+/** Check names for chips and card titles (sentence case, as in the prototype). */
 export const CHECK_TITLE: Record<CheckKey, string> = {
-  too_fast: "Finished too fast",
-  same_spot: "Same spot as other interviews",
-  copied_text: "Open answer copied",
-  straight_lining: "All answers identical",
-  voice_vs_form: "Voice note contradicts the form",
-  off_hours: "Captured at night",
-  shared_device: "Phone shared between accounts",
-  burst: "Burst of submissions",
+  too_fast: "Too fast",
+  same_spot: "Same spot",
+  copied_text: "Copied text",
+  straight_lining: "Straight-lining",
+  voice_vs_form: "Voice vs form",
+  off_hours: "Off hours",
+  shared_device: "Shared device",
+  burst: "Burst",
 };
+
+/** "What it looks for", for the detectors table. */
+export const CHECK_DESCRIPTION: Record<CheckKey, string> = {
+  too_fast: "Shorter than a real visit takes",
+  same_spot: "Several interviews at one location, one day",
+  copied_text: "Open answer nearly identical to another",
+  straight_lining: "All 8 satisfaction items given the same score",
+  voice_vs_form: "Voice note names a different water source",
+  off_hours: "Captured between 21:00 and 06:00",
+  shared_device: "One phone submitting for several accounts",
+  burst: "Many submissions inside one hour",
+};
+
+/** Checks whose evidence is strongest get the red card edge. */
+export const CHECK_STRONG: ReadonlySet<CheckKey> = new Set<CheckKey>(["same_spot", "copied_text", "shared_device"]);
 
 /** What a field lead should do about a contributor whose dominant signal is this check. */
 export const CHECK_ACTION: Record<CheckKey, string> = {
@@ -58,9 +74,9 @@ export const COLORS = {
   ok: "#4cb782",
   warn: "#f0a23b",
   crit: "#eb5a57",
-  pass: "#6b707a",
+  pass: "#8a8f98",
   muted: "#8a8f98",
-  faint: "#5b606a",
+  faint: "#5b6069",
   ink: "#f1f2f4",
 };
 
@@ -70,6 +86,14 @@ export function scoreColor(score: number, band: Band): string {
   if (band === "flagged") return COLORS.warn;
   return COLORS.pass;
 }
+
+/** Score tag variant: red at 5+, amber when flagged, plain otherwise. */
+export function scoreClass(score: number, band: Band): string {
+  return score >= 5 ? "score score-crit" : band === "flagged" ? "score score-warn" : "score";
+}
+
+export const STATUS_LABEL: Record<ContributorStatus, string> = { investigate: "Investigate", watch: "Watch", ok: "OK" };
+export const STATUS_CLASS: Record<ContributorStatus, string> = { investigate: "st-crit", watch: "st-warn", ok: "st-ok" };
 
 export function statusColor(status: ContributorStatus): string {
   return status === "investigate" ? COLORS.crit : status === "watch" ? COLORS.warn : COLORS.ok;

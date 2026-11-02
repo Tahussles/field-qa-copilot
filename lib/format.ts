@@ -59,8 +59,21 @@ export function fmtPct(value: number | null | undefined, digits = 0): string {
   return value == null ? "—" : `${(value * 100).toFixed(digits)}%`;
 }
 
+/** Scores as the prototype shows them: 6, 3.5 (no trailing ".0"). */
 export function fmtScore(score: number | null | undefined): string {
-  return score == null ? "—" : Number.isInteger(score) ? score.toFixed(1) : String(score);
+  return score == null ? "—" : String(Number(score.toFixed(1)));
+}
+
+/** "Oct 27": month first, as in the prototype's lists. */
+export function fmtMonthDay(iso: string, tz = DEFAULT_TZ): string {
+  const parts = formatter(tz, { month: "short", day: "numeric" }).formatToParts(new Date(iso));
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  return `${get("month")} ${get("day")}`;
+}
+
+/** "Oct 27, 14:26": the queue and evidence timestamp format. */
+export function fmtStamp(iso: string, tz = DEFAULT_TZ): string {
+  return `${fmtMonthDay(iso, tz)}, ${fmtTime(iso, tz)}`;
 }
 
 /** "S-3F9A": a short, readable handle for a submission id. */
