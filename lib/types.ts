@@ -145,6 +145,8 @@ export interface QueueItem {
   band: Band;
   fired: CheckKey[];
   review: Review | null;
+  /** A model job (transcription, meaning check) for this submission is queued or running. */
+  ai_pending?: boolean;
 }
 
 export interface CheckResult {
@@ -304,4 +306,55 @@ export interface LandingData {
   thresholds: { review: number; watch: number };
   points: LandingPoint[];
   counters: { submissions: number; fabricated: number; flagged: number; precision: number | null; recall: number | null };
+}
+
+// The morning brief (/brief) and hard mode (/eval/hard) -------------------------------------
+
+export interface BriefItem {
+  contributor_code: string;
+  finding: string;
+  action: string;
+}
+
+export interface BriefState {
+  for_date: string;
+  data_version: string;
+  facts: Record<string, unknown>;
+  brief: {
+    id: string;
+    status: "ai" | "template";
+    items: { summary: string; items: BriefItem[]; closing: string } | null;
+    content_md: string | null;
+    model: string | null;
+    stats: Record<string, unknown>;
+    fallback: { reason: string } | null;
+    data_version: string;
+    created_at: string;
+    has_audio: boolean;
+  } | null;
+  stale: boolean;
+  writing: boolean;
+}
+
+export interface HardSide {
+  combined: { submissions: number; fabricated: number; flagged: number; precision: number | null; recall: number | null;
+    false_positives: number; false_negatives: number };
+  per_check: Record<CheckKey, { fires_on: number; precision: number | null; recall: number | null }>;
+  misses_by_fraud_type: Record<string, number>;
+  decided_by_ai: number;
+}
+
+export interface HardEval {
+  generated_at: string;
+  engine_version: string;
+  seeds: number[];
+  model: string;
+  rules_only_run: boolean;
+  calls: { total: number; consistency: number; paraphrase: number; verdicts: number; failed: number;
+    median_latency_ms: number | null };
+  cost_usd: { estimated_before_run: number; spent_this_run: number; all_cached_calls: number };
+  planted_per_wave: Record<string, number>;
+  rules: HardSide;
+  rules_ai: HardSide;
+  gaps: { fraud_type: string; planted: number; missed: number; missed_by_rules: number }[];
 }

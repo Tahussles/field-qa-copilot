@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { CHECK_DESCRIPTION, CHECK_ORDER, CHECK_TITLE, COLORS } from "@/lib/checks";
 import { fmtPct } from "@/lib/format";
-import type { EvaluateResult } from "@/lib/types";
+import type { CheckKey, EvaluateResult, HardEval } from "@/lib/types";
 
 interface Knobs {
   tooFastMin: number;
@@ -191,7 +191,122 @@ export function Detectors() {
           <SweepChart sweep={result?.sweep ?? []} threshold={knobs.threshold} />
         </div>
       </section>
+
+      <HardMode />
     </div>
+  );
+}
+
+const FRAUD_LABEL: Record<string, string> = {
+  curbstone: "Careful curbstoner (E07)",
+  copypaste: "Reworded copies (E22)",
+  contradiction: "Subtle contradictions (E11)",
+  speeder: "Speeder (E14)",
+  night: "Night forms (E19)",
+  multi_account: "Device ring",
+  burst: "Burst account",
+};
+const AI_CHECKS: CheckKey[] = ["voice_vs_form", "copied_text"];
+
+/** Hard mode (scripts/evaluate.py --hard): the same checks with and without the model's verdicts. */
+function HardMode() {
+  const [data, setData] = useState<HardEval | null>(null);
+  const [missing, setMissing] = useState(false);
+  useEffect(() => {
+    api.hardEval().then(setData, () => setMissing(true));
+  }, []);
+  if (missing) return null;
+  const rows: { label: string; rules: number | null | undefined; ai: number | null | undefined; good: number; pct?: boolean }[] = data
+    ? [
+        { label: "Precision (flags that are fakes)", rules: data.rules.combined.precision, ai: data.rules_ai.combined.precision, good: 0.8, pct: true },
+        { label: "Recall (fakes that are flagged)", rules: data.rules.combined.recall, ai: data.rules_ai.combined.recall, good: 0.6, pct: true },
+        ...AI_CHECKS.flatMap((key) => [
+          { label: `${CHECK_TITLE[key]}: recall`, rules: data.rules.per_check[key].recall, ai: data.rules_ai.per_check[key].recall, good: 0.6, pct: true },
+          { label: `${CHECK_TITLE[key]}: precision`, rules: data.rules.per_check[key].precision, ai: data.rules_ai.per_check[key].precision, good: 0.8, pct: true },
+        ]),
+      ]
+    : [];
+  const types = data ? Object.keys(data.planted_per_wave) : [];
+  return (
+    <section aria-label="Hard mode" className="panel overflow-hidden" data-testid="hard-mode">
+      <div className="ph">
+        <h2>Hard mode: rules only vs rules + AI</h2>
+        <span className="ph-caption">
+          {data ? `seeds ${data.seeds.join(", ")} · ${data.model} · ${data.calls.total.toLocaleString("en-US")} model calls` : "Loading…"}
+        </span>
+      </div>
+      <p className="max-w-[80ch] px-4 pt-3.5 text-muted">
+        Fraud written to dodge the rules: reworded copies, contradictions that mention the home pipe first, and a curbstoner who
+        spreads fakes 60 to 120 m apart with 20+ minute gaps. Same checks, scored once with the rules alone and once with the
+        model&apos;s verdicts as inputs. Separate seeds, never the demo wave.
+      </p>
+      {data && (
+        <div className="grid gap-x-6 gap-y-4 p-4 lg:grid-cols-2">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Averaged over the hard waves</th>
+                <th>Rules only</th>
+                <th>Rules + AI</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.label}>
+                  <td className="text-ink-2">{r.label}</td>
+                  <td>
+                    <PctBar value={r.rules} good={r.good} />
+                  </td>
+                  <td>
+                    <PctBar value={r.ai} good={r.good} testId={r.label.startsWith("Recall") ? "hard-recall-ai" : undefined} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Missed fakes per wave</th>
+                <th className="font-mono">Planted</th>
+                <th>Rules only</th>
+                <th>Rules + AI</th>
+              </tr>
+            </thead>
+            <tbody>
+              {types.map((t) => (
+                <tr key={t}>
+                  <td className="text-ink-2">{FRAUD_LABEL[t] ?? t}</td>
+                  <td className="font-mono text-muted">{data.planted_per_wave[t]}</td>
+                  <td className="font-mono">{data.rules.misses_by_fraud_type[t]}</td>
+                  <td className={`font-mono ${data.rules_ai.misses_by_fraud_type[t] < data.rules.misses_by_fraud_type[t] ? "text-ok" : ""}`}>
+                    {data.rules_ai.misses_by_fraud_type[t]}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {data && (
+        <div className="border-t border-line px-4 py-3 text-[12px] text-muted">
+          {data.gaps.length > 0 && (
+            <p className="mb-1 text-ink-2">
+              What the model does not fix:{" "}
+              {data.gaps.map((g) => `${FRAUD_LABEL[g.fraud_type] ?? g.fraud_type} (${g.missed} of ${g.planted} still missed)`).join("; ")}.
+              {data.gaps.some((g) => g.fraud_type === "curbstone") &&
+                " Meaning checks cannot see GPS and timing; a careful curbstoner needs back-checks or route plausibility (distance walked against time between interviews), not a language model."}
+            </p>
+          )}
+          <p className="text-faint">
+            {data.rules_only_run
+              ? "Rules-only run: no model verdicts yet, so both columns match."
+              : `${data.calls.verdicts.toLocaleString("en-US")} verdicts, ${data.calls.failed} failed calls, median ${data.calls.median_latency_ms} ms per call; model cost $${data.cost_usd.all_cached_calls.toFixed(2)}.`}{" "}
+            Precision and recall here are scored against planted labels, aggregates only.
+          </p>
+        </div>
+      )}
+    </section>
   );
 }
 

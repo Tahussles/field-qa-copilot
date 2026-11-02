@@ -106,6 +106,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         if (row.flagged && !was) void announce(row.submission_id);
         refresh();
       })
+      // Model work landing: a verdict (the score may change too), a job finishing, a brief written.
+      .on("postgres_changes", { event: "*", schema: "public", table: "ai_verdicts" }, () => refresh())
+      .on("postgres_changes", { event: "*", schema: "public", table: "ai_jobs" }, () => refresh())
+      .on("postgres_changes", { event: "*", schema: "public", table: "briefs" }, () => refresh())
       .subscribe((status) => setLive(status === "SUBSCRIBED" ? "live" : status === "CLOSED" ? "offline" : "connecting"));
     return () => {
       if (timer.current) window.clearTimeout(timer.current);

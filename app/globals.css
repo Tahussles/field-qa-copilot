@@ -296,6 +296,31 @@ mark {
     color: var(--color-accent);
   }
 
+  /* A model decided this evidence (its stored verdict). */
+  .ai-tag {
+    margin-left: 6px;
+    padding: 0 6px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 500;
+    line-height: 16px;
+    letter-spacing: 0.04em;
+    color: var(--color-accent);
+    border: 1px solid rgb(124 132 248 / 0.45);
+    border-radius: 4px;
+    vertical-align: 1px;
+  }
+  .ai-spinner {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    border: 1.5px solid rgb(124 132 248 / 0.3);
+    border-top-color: var(--color-accent);
+    animation: ai-spin 0.8s linear infinite;
+    flex: none;
+  }
+
   .score {
     font-family: var(--font-mono);
     font-size: 11.5px;
@@ -913,5 +938,11 @@ mark {
   to {
     opacity: 1;
     transform: none;
+  }
+}
+
+@keyframes ai-spin {
+  to {
+    transform: rotate(360deg);
   }
 }

@@ -252,7 +252,12 @@ export function QueueView() {
                         {item.contributor.code} · {fmtStamp(item.captured_at, tz)}
                       </span>
                     </span>
-                    <span className={scoreClass(item.score, item.band)}>{fmtScore(item.score)}</span>
+                    <span className="flex flex-none items-center gap-1.5">
+                      {item.ai_pending && (
+                        <span className="ai-spinner" role="status" aria-label="A model is still checking this one" title="A model is still checking this one" />
+                      )}
+                      <span className={scoreClass(item.score, item.band)}>{fmtScore(item.score)}</span>
+                    </span>
                   </div>
                   <div className="flex flex-wrap items-center gap-1">
                     {item.fired.map((key) => (

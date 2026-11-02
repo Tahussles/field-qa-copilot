@@ -18,15 +18,37 @@ interface CardProps {
 }
 
 /** The prototype's evidence card: hairline box, coloured left edge, title with its weight. */
-function Card({ check, children }: { check: CheckResult; children: ReactNode }) {
+function Card({ check, children, ai }: { check: CheckResult; children: ReactNode; ai?: boolean }) {
   return (
     <section className={`card ${CHECK_STRONG.has(check.key) ? "card-crit" : ""}`} aria-label={CHECK_TITLE[check.key]}>
       <h3>
         {CHECK_TITLE[check.key]}
+        {ai && (
+          <span className="ai-tag" title="A model judged this; the check read its stored verdict">
+            AI
+          </span>
+        )}
         <span className="w">+{check.weight}</span>
       </h3>
       {children}
     </section>
+  );
+}
+
+/** Who decided: the model (with confidence, model id and latency) or the rule. */
+function DecidedBy({ model, latency, confidence, rule }: { model?: string; latency?: number | null; confidence?: number; rule?: string }) {
+  return (
+    <p className="mt-2 text-[12px] !text-faint">
+      {model ? (
+        <>
+          Decided by <span className="font-mono">{model}</span>
+          {confidence != null && <> · confidence {fmtPct(confidence)}</>}
+          {latency != null && <> · {latency} ms</>}
+        </>
+      ) : (
+        rule
+      )}
+    </p>
   );
 }
 
@@ -208,7 +230,52 @@ function Highlighted({ text, words }: { text: string; words: Set<string> }) {
   );
 }
 
-function CopiedText({ check, detail }: CardProps) {
+interface ParaphraseEvidence {
+  submission_id: string;
+  relation: string;
+  model: string;
+  reason: string;
+  similarity: number;
+  other_text: string;
+  latency_ms: number | null;
+}
+
+/** copied_text decided by the model: a reworded copy below the word-overlap threshold. */
+function RewordedCopy({ check, detail }: CardProps) {
+  const pair = (check.evidence.paraphrases as ParaphraseEvidence[])[0];
+  return (
+    <Card check={check} ai>
+      <p>
+        A <B>reworded copy</B> of{" "}
+        <Link href={`/app/queue/${pair.submission_id}`} className="font-mono text-ink hover:text-accent">
+          {shortId(pair.submission_id)}
+        </Link>{" "}
+        ({pair.relation === "same_device" ? "same phone, another account" : "same contributor"}). Character overlap{" "}
+        <B>{fmtPct(pair.similarity)}</B>, below what the copy rule needs, so the model judged the pair.
+      </p>
+      <div className="grid gap-2 md:grid-cols-2">
+        <div className="side-box">
+          <span className="lbl">{shortId(detail.submission.id)} (this one)</span>
+          {detail.submission.answers.open_text}
+        </div>
+        <div className="side-box">
+          <span className="lbl">{shortId(pair.submission_id)}</span>
+          {pair.other_text}
+        </div>
+      </div>
+      <p className="mt-2">
+        <span className="text-muted">Model&apos;s reason:</span> {pair.reason}
+      </p>
+      <DecidedBy model={pair.model} latency={pair.latency_ms} />
+    </Card>
+  );
+}
+
+function CopiedText(props: CardProps) {
+  return props.check.evidence.decided_by === "ai_paraphrase" ? <RewordedCopy {...props} /> : <CopiedByRule {...props} />;
+}
+
+function CopiedByRule({ check, detail }: CardProps) {
   const best = check.evidence.best_match as
     | { submission_id: string; similarity: number; relation: string; shared_words: string[] }
     | null;
@@ -247,6 +314,7 @@ function CopiedText({ check, detail }: CardProps) {
           </div>
         ))}
       </div>
+      <DecidedBy rule="Decided by the copy rule: word overlap at or above the threshold." />
     </Card>
   );
 }
@@ -273,8 +341,61 @@ function StraightLining({ check }: CardProps) {
 
 // voice_vs_form ------------------------------------------------------------------------
 
-function VoiceVsForm({ check, detail }: CardProps) {
-  const e = check.evidence as { form_source: string; voice_source: string; matched_keyword: string; keyword_position: number };
+interface VoiceVerdict {
+  decided_by: "ai";
+  model: string;
+  confidence: number;
+  form_says: string;
+  voice_says: string;
+  quote: string;
+  explanation: string;
+  latency_ms: number | null;
+  form_source: string;
+}
+
+/** voice_vs_form decided by the model: its verdict, with the quoted span highlighted in the transcript. */
+function VoiceVsFormAI({ check, detail }: CardProps) {
+  const e = check.evidence as unknown as VoiceVerdict;
+  const transcript = detail.submission.voice_transcript ?? "";
+  const at = e.quote ? transcript.indexOf(e.quote) : -1; // stored verdicts were checked: the quote is an exact span
+  return (
+    <Card check={check} ai>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <div className="side-box">
+          <span className="lbl">Form says ({SOURCE_LABEL[e.form_source] ?? e.form_source})</span>
+          {e.form_says}
+        </div>
+        <div className="side-box">
+          <span className="lbl">Voice note says: {e.voice_says}</span>
+          {at >= 0 ? (
+            <>
+              {transcript.slice(0, at)}
+              <mark>{transcript.slice(at, at + e.quote.length)}</mark>
+              {transcript.slice(at + e.quote.length)}
+            </>
+          ) : (
+            transcript
+          )}
+        </div>
+      </div>
+      <p className="mt-2">{e.explanation}</p>
+      <DecidedBy model={e.model} confidence={e.confidence} latency={e.latency_ms} />
+    </Card>
+  );
+}
+
+function VoiceVsForm(props: CardProps) {
+  return props.check.evidence.decided_by === "ai" ? <VoiceVsFormAI {...props} /> : <VoiceVsFormRule {...props} />;
+}
+
+function VoiceVsFormRule({ check, detail }: CardProps) {
+  const e = check.evidence as {
+    form_source: string;
+    voice_source: string;
+    matched_keyword: string;
+    keyword_position: number;
+    ai?: { model: string; confidence: number; below: number };
+  };
   const transcript = detail.submission.voice_transcript ?? "";
   const at = e.keyword_position ?? transcript.toLowerCase().indexOf(e.matched_keyword);
   const end = at + (e.matched_keyword?.length ?? 0);
@@ -298,9 +419,13 @@ function VoiceVsForm({ check, detail }: CardProps) {
           )}
         </div>
       </div>
-      <p className="mt-2 text-[12px] !text-faint">
-        Keyword match: the first source word in the transcript decides. Round 7 has a model judge the contradiction.
-      </p>
+      <DecidedBy
+        rule={
+          e.ai
+            ? `Decided by the keyword rule: the model's verdict (confidence ${fmtPct(e.ai.confidence)}) is below the ${fmtPct(e.ai.below)} bar.`
+            : "Decided by the keyword rule: the first source word in the transcript decides (no model verdict yet)."
+        }
+      />
     </Card>
   );
 }

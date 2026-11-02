@@ -1,11 +1,13 @@
 // Thin client for the FastAPI routes. Same origin: Next rewrites /api/py/* to Python.
 
 import type {
+  BriefState,
   Decision,
   DemoResetResult,
   DemoStatus,
   DemoStepResult,
   EvaluateResult,
+  HardEval,
   IngestResponse,
   MapData,
   Overview,
@@ -75,6 +77,11 @@ export const api = {
     request<Review>(`/reviews/${reviewId}`, { method: "DELETE", passcode }),
   submit: (passcode: string, body: Record<string, unknown>) =>
     request<IngestResponse>("/submissions", { method: "POST", passcode, body: JSON.stringify(body) }),
+  brief: () => request<BriefState>("/brief"),
+  regenerateBrief: (passcode: string) =>
+    request<{ queued: boolean; job_id: string | null }>("/brief/regenerate", { method: "POST", passcode }),
+  briefAudio: (briefId: string) => request<{ url: string }>(`/brief/${briefId}/audio`, { method: "POST" }),
+  hardEval: () => request<HardEval>("/eval/hard"),
   demoStatus: (passcode: string) => request<DemoStatus>("/demo/status", { passcode }),
   demoStep: (passcode: string, body: { run_id: string; count?: number; until_field_time?: string }) =>
     request<DemoStepResult>("/demo/step", { method: "POST", passcode, body: JSON.stringify(body) }),
