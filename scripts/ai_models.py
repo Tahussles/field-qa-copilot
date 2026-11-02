@@ -25,9 +25,14 @@ def main() -> int:
     env = load_env(ROOT / ".env.local")
     problems = []
     if env.get("ANTHROPIC_API_KEY"):
-        ids = [m.id for m in anthropic.Anthropic(api_key=env["ANTHROPIC_API_KEY"]).models.list()]
-        print("Anthropic models:", ", ".join(i for i in ids if "haiku" in i or "sonnet" in i))
-        for wanted in (JUDGE_MODEL, BRIEF_MODEL):
+        try:
+            ids = [m.id for m in anthropic.Anthropic(api_key=env["ANTHROPIC_API_KEY"]).models.list()]
+        except anthropic.APIStatusError as error:
+            ids = []
+            problems.append(f"Anthropic rejected the key: {error.status_code} {error.body.get('error', {}).get('message')}")
+        if ids:
+            print("Anthropic models:", ", ".join(i for i in ids if "haiku" in i or "sonnet" in i))
+        for wanted in (JUDGE_MODEL, BRIEF_MODEL) if ids else ():
             print(f"  {wanted}: {'listed' if wanted in ids else 'NOT LISTED'}")
             if wanted not in ids:
                 problems.append(wanted)
@@ -35,7 +40,10 @@ def main() -> int:
         problems.append("ANTHROPIC_API_KEY is not set")
     if env.get("ELEVENLABS_API_KEY"):
         headers = {"xi-api-key": env["ELEVENLABS_API_KEY"]}
-        models = [m["model_id"] for m in httpx.get(f"{ELEVENLABS}/models", headers=headers, timeout=20).json()]
+        listed = httpx.get(f"{ELEVENLABS}/models", headers=headers, timeout=20)
+        if listed.is_error:
+            print(f"ElevenLabs /models: HTTP {listed.status_code} {listed.text[:160]}")
+        models = [m["model_id"] for m in listed.json()] if listed.is_success else []
         print(f"ElevenLabs TTS {TTS_MODEL}: {'listed' if TTS_MODEL in models else 'NOT LISTED'} "
               f"(speech to text uses {SCRIBE_MODEL})")
         voice = httpx.get(f"{ELEVENLABS}/voices/{TTS_VOICE}", headers=headers, timeout=20)
