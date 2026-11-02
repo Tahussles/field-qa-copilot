@@ -15,6 +15,7 @@ Field QA Copilot checks every submission as it syncs, flags likely fabrication w
 ## Folder layout
 
 ```
+design/prototype.html     the approved design (static, fake data); the dashboard matches its look
 app/                      Next.js routes: / placeholder, /app overview, /app/queue[/id], /app/detectors, /app/test
   globals.css             design tokens (@theme), .glass and other component classes (@layer components)
 components/               UI: app/ (shell, data provider, toasts, passcode), overview/, queue/, detectors/, test/, ui/Glass
@@ -105,6 +106,6 @@ After cloning, wire the commit hook once: `git config core.hooksPath .githooks`.
 - `projects.as_of`, when set, is "now" for that project: today, yesterday and the brief anchor to it. The demo project is fixed at 2026-10-31 08:00 Africa/Nairobi.
 - Contributor status: investigate = 3+ flagged and rate >= 15%; watch = 2+ flagged and rate >= 8%; otherwise ok (`engine/insights.py`).
 - Main signal: the check that fired most for a contributor; ties go shared_device > same_spot > burst > copied_text > voice_vs_form > straight_lining > off_hours > too_fast. One function (`mainSignal` in `lib/checks.ts`) feeds the contributors table, the brief and the hotspot cards.
-- Dashboard UI: content panels are solid (`.panel`); only the floating layer (bars, map overlays, chips, tooltips, toasts, modals) uses `.glass` / `<Glass>`; add `.glass-tint` where small text sits over busy content. Without backdrop-filter, glass falls back to opaque. Custom classes live in `@layer components` so Tailwind utilities can override them.
+- Dashboard UI matches `design/prototype.html`: its tokens, glass recipe and component classes live in `app/globals.css`. Content panels are solid (`.panel`); only the floating layer (bars, map overlays, chips, tooltips, toasts, modals) uses `.glass` / `<Glass>`; add `.glass-tint` where small text sits over busy content. Without backdrop-filter, glass falls back to opaque. Custom classes live in `@layer components` so Tailwind utilities can override them.
 - The dashboard reads with the publishable key and refreshes on Supabase Realtime events (debounced ~1 s), never by polling. Writes from the browser go through the API with `X-Demo-Passcode`.
 - Map: MapLibre with the OpenFreeMap dark style (no key; attribution from the tile source), loaded after first paint behind a skeleton, with a preconnect to the tile host. Its worker is served from `public/vendor/` because a bundler moves the module it would otherwise resolve against.
