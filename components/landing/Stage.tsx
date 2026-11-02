@@ -13,7 +13,7 @@ import type { CheckKey, LandingData, SubmissionDetail } from "@/lib/types";
 const ADD_MS = 90; // one replayed arrival per tick
 const FEED_MS = 1100;
 const FEED_ROWS = 9;
-const SEED_SHARE = 0.25; // replay starts with a quarter of the day already on the map
+const SEED_SHARE = 0.5; // replay starts with half the day already on the map, as full as the prototype's stage
 const LIVE_IDLE_MS = 30_000; // no real arrival for this long: back to the replay
 const DETAIL_CONCURRENCY = 4;
 
