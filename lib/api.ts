@@ -76,7 +76,7 @@ export const api = {
   submit: (passcode: string, body: Record<string, unknown>) =>
     request<IngestResponse>("/submissions", { method: "POST", passcode, body: JSON.stringify(body) }),
   demoStatus: (passcode: string) => request<DemoStatus>("/demo/status", { passcode }),
-  demoStep: (passcode: string, body: { count?: number; until_field_time?: string }) =>
+  demoStep: (passcode: string, body: { run_id: string; count?: number; until_field_time?: string }) =>
     request<DemoStepResult>("/demo/step", { method: "POST", passcode, body: JSON.stringify(body) }),
   demoReset: (passcode: string) => request<DemoResetResult>("/demo/reset", { method: "POST", passcode }),
 };

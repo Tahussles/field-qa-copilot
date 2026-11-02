@@ -1,5 +1,6 @@
 """Demo controls: /demo/reset, /demo/step and /demo/status against the seeded wave and live day."""
 
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
@@ -33,6 +34,7 @@ def fresh_repo(wave) -> InMemoryRepo:
     rows = db_rows(wave)
     repo = InMemoryRepo(rows["projects"][0], rows["contributors"], rows["areas"], rows["check_config"][0]["params"],
                         submissions=rows["submissions"], truth=rows["synthetic_truth"])
+    repo.set_demo_run(str(uuid.uuid4()))
     with client_for(repo) as client:
         assert client.post("/api/py/rescore", headers=AUTH).status_code == 200
     return repo
@@ -60,7 +62,7 @@ def state(repo: InMemoryRepo) -> dict:
         "checks": {r["id"]: {c["check_key"]: (c["fired"], c["weight"], c["evidence"]) for c in repo.check_results(r["id"])}
                    for r in subs},
         "reviews": repo.reviews(),
-        "as_of": repo.as_of(),
+        "as_of": repo.clock()["as_of"],
     }
 
 
@@ -73,10 +75,14 @@ def by_client_id(repo: InMemoryRepo) -> dict:
             for s in repo.scores()}
 
 
-def run_live_day(client) -> int:
+def step(client, repo, **body):
+    return client.post("/api/py/demo/step", json={"run_id": repo.clock()["demo_run_id"], **body}, headers=AUTH)
+
+
+def run_live_day(client, repo) -> int:
     calls = 0
     while True:
-        body = client.post("/api/py/demo/step", json={"count": 50}, headers=AUTH).json()
+        body = step(client, repo, count=50).json()
         calls += 1
         if body["progress"]["done"]:
             return calls
@@ -85,7 +91,7 @@ def run_live_day(client) -> int:
 def test_demo_endpoints_need_the_passcode(wave):
     with client_for(fresh_repo(wave)) as client:
         assert client.get("/api/py/demo/status").status_code == 401
-        assert client.post("/api/py/demo/step", json={}).status_code == 401
+        assert client.post("/api/py/demo/step", json={"run_id": str(uuid.uuid4())}).status_code == 401
         assert client.post("/api/py/demo/reset", headers={"X-Demo-Passcode": "wrong"}).status_code == 401
 
 
@@ -118,12 +124,12 @@ def test_step_is_idempotent_and_moves_the_clock(wave, live):
     repo = fresh_repo(wave)
     until = live.submissions[11].synced_at.isoformat()
     with client_for(repo) as client:
-        first = client.post("/api/py/demo/step", json={"until_field_time": until}, headers=AUTH).json()
-        again = client.post("/api/py/demo/step", json={"until_field_time": until}, headers=AUTH).json()
+        first = step(client, repo, until_field_time=until).json()
+        again = step(client, repo, until_field_time=until).json()
     assert len(first["results"]) == 12 and again["results"] == []
     assert first["progress"]["sent"] == again["progress"]["sent"] == 12
     assert len(repo.submissions(source="simulator")) == 12
-    assert repo.as_of() == demo._iso(live.submissions[11].synced_at)
+    assert repo.clock()["as_of"] == demo._iso(live.submissions[11].synced_at)
     assert first["progress"]["next_field_time"] == demo._iso(live.submissions[12].synced_at)
     sent = {r["id"] for r in first["results"]}
     assert set(repo._truth) >= sent  # labels written server-side for exactly what was sent
@@ -134,8 +140,7 @@ def test_concurrent_steps_never_send_twice(wave, live):
     repo = fresh_repo(wave)
     with client_for(repo) as client:
         with ThreadPoolExecutor(max_workers=4) as pool:
-            bodies = list(pool.map(lambda _: client.post("/api/py/demo/step", json={"count": 8}, headers=AUTH).json(),
-                                   range(4)))
+            bodies = list(pool.map(lambda _: step(client, repo, count=8).json(), range(4)))
         status = client.get("/api/py/demo/status", headers=AUTH).json()
     stored = [r["client_submission_id"] for r in repo.submissions(source="simulator")]
     assert len(stored) == len(set(stored)) == status["progress"]["sent"]
@@ -149,7 +154,7 @@ def test_steps_end_like_the_cli_simulator(wave, live):
     """The full live day by /demo/step ends with the same scores as simulate.py posting every payload."""
     by_step = fresh_repo(wave)
     with client_for(by_step) as client:
-        calls = run_live_day(client)
+        calls = run_live_day(client, by_step)
     by_simulator = fresh_repo(wave)
     with client_for(by_simulator) as client:
         for sub in live.submissions:
@@ -162,14 +167,14 @@ def test_steps_end_like_the_cli_simulator(wave, live):
                       Params.from_config(by_step.check_params(), timezone="Africa/Nairobi"))
     assert {s["submission_id"]: (s["score"], s["flagged"]) for s in by_step.scores()} == {
         s.submission_id: (s.score, s.flagged) for s in batch}
-    assert by_step.as_of() == demo._iso(live.submissions[-1].synced_at)
+    assert by_step.clock()["as_of"] == demo._iso(live.submissions[-1].synced_at)
 
 
 def test_reset_restores_the_fresh_wave(wave, live):
     repo = fresh_repo(wave)
     fresh = state(repo)
     with client_for(repo) as client:
-        run_live_day(client)
+        run_live_day(client, repo)
         wave_row = next(iter(fresh["submissions"]))
         live_row = repo.submissions(source="simulator")[0]["id"]
         for sid in (wave_row, live_row):
@@ -218,10 +223,36 @@ def test_a_reset_during_a_step_stops_the_step_cleanly(wave, live, monkeypatch):
 
     monkeypatch.setattr(demo.service, "ingest", ingest_then_reset)
     with client_for(repo) as client:
-        response = client.post("/api/py/demo/step", json={"count": 4}, headers=AUTH)
+        response = step(client, repo, count=4)
     body = response.json()
     assert response.status_code == 200 and "reset" in body["error"]
-    assert repo.as_of() == cfg.PROJECT_AS_OF
+    assert repo.clock()["as_of"] == cfg.PROJECT_AS_OF
     # What the step sent after the reset is stored with its labels; what the reset removed is gone.
     stored = {r["id"] for r in repo.submissions(source="simulator")}
     assert stored == {r["id"] for r in body["results"][2:]} and set(repo._truth) >= stored
+
+
+def test_a_reset_issues_a_new_run_and_old_steps_get_409(wave):
+    repo = fresh_repo(wave)
+    with client_for(repo) as client:
+        old = client.get("/api/py/demo/status", headers=AUTH).json()["run_id"]
+        assert step(client, repo, count=2).status_code == 200
+        new = client.post("/api/py/demo/reset", headers=AUTH).json()["run_id"]
+        assert new != old and client.get("/api/py/demo/status", headers=AUTH).json()["run_id"] == new
+        stale = client.post("/api/py/demo/step", json={"run_id": old, "count": 2}, headers=AUTH)
+        assert stale.status_code == 409 and "reset" in stale.json()["detail"]
+        assert repo.submissions(source="simulator") == []
+        assert step(client, repo, count=2).status_code == 200
+
+
+def test_today_stays_pinned_to_the_live_day_after_midnight(wave, live):
+    repo = fresh_repo(wave)
+    with client_for(repo) as client:
+        run_live_day(client, repo)  # the last syncs are the next afternoon
+        data = client.get("/api/py/overview").json()
+    assert data["now"].startswith("2026-11-01")  # the clock shows real field time
+    assert data["today_is_pinned"] and data["today"]["date"] == "2026-10-31"
+    assert data["yesterday"]["date"] == "2026-10-30"
+    captured_on_live_day = sum(s.captured_at.astimezone(cfg.EAT).date().isoformat() == "2026-10-31"
+                               for s in live.submissions)
+    assert data["today"]["received"] == captured_on_live_day

@@ -5,7 +5,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import { useWithPasscode } from "@/components/app/Passcode";
 import { useToast } from "@/components/app/Toasts";
 import { Glass } from "@/components/ui/Glass";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { DEFAULT_TZ, fmtDateTime, fmtStamp, localDate } from "@/lib/format";
 import type { DemoMoment, DemoProgress, DemoStatus, DemoStepResult } from "@/lib/types";
 
@@ -114,13 +114,34 @@ function DemoRunner({ open, onClose }: { open: boolean; onClose: () => void }) {
     stopTimer();
   }, []);
 
+  const runId = useRef<string | null>(null);
+  useEffect(() => {
+    runId.current = status?.run_id ?? null;
+  }, [status?.run_id]);
+
   const step = useCallback(
     async (body: { count?: number; until_field_time?: string }) => {
-      const res = await withPasscode((code) => api.demoStep(code, body));
-      if (res) apply(res);
-      return res;
+      try {
+        const res = await withPasscode((code) => api.demoStep(code, { run_id: runId.current ?? "", ...body }));
+        if (res) apply(res);
+        return res;
+      } catch (e) {
+        // 409: someone reset the demo (another tab). Stop here and pick up the new run.
+        if (e instanceof ApiError && e.status === 409) {
+          runningRef.current = false;
+          setRunning(false);
+          if (interval.current) window.clearInterval(interval.current);
+          interval.current = null;
+          setClock(null);
+          setLast(null);
+          toast({ tone: "error", title: "The demo was reset elsewhere", body: "this run stopped; press Start to replay the new run" });
+          void load();
+          return null;
+        }
+        throw e;
+      }
     },
-    [withPasscode, apply],
+    [withPasscode, apply, toast, load],
   );
 
   const tick = useCallback(async () => {

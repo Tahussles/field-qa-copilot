@@ -69,6 +69,7 @@ class EvaluateIn(BaseModel):
 class DemoStepIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    run_id: UUID = Field(description="The current demo run, from /demo/status or /demo/reset")
     count: int | None = Field(default=None, ge=1, le=50, strict=True,
                               description="How many pending live-day submissions to send (default 1, or 50 with until)")
     until_field_time: AwareDatetime | None = Field(default=None,

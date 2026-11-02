@@ -598,6 +598,7 @@ def build_wave(seed: int) -> Wave:
         "end_date": cfg.FIELD_DAYS[-1].isoformat(),
         "timezone": cfg.PROJECT_TIMEZONE,
         "as_of": cfg.PROJECT_AS_OF,
+        "day_pin": cfg.PROJECT_DAY_PIN,
         "created_at": PROJECT_CREATED.isoformat(),
     }
     check_config = {

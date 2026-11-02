@@ -35,9 +35,10 @@ class LeaseLost(Exception):
 class Repository(Protocol):
     cache_ttl: float  # seconds the service may cache slow-changing reads (0 = never)
 
-    def project(self) -> dict: ...  # id, name, region, timezone, as_of (as_of may be cached; see as_of())
-    def as_of(self) -> str | None: ...  # projects.as_of, read fresh
+    def project(self) -> dict: ...  # id, name, region, timezone, as_of (may be cached; see clock())
+    def clock(self) -> dict: ...  # as_of, day_pin, demo_run_id, read fresh (the demo moves them)
     def set_as_of(self, value: str, forward_only: bool = False) -> None: ...
+    def set_demo_run(self, run_id: str) -> None: ...
     def check_params(self) -> dict | None: ...
     def areas(self, boundary: bool = False) -> list[dict]: ...  # id, name (+ boundary GeoJSON)
     def contributors(self) -> list[dict]: ...  # id, code, display_name, kind, area_id
@@ -104,8 +105,11 @@ class InMemoryRepo:
     def project(self) -> dict:
         return dict(self._project)
 
-    def as_of(self):
-        return self._project.get("as_of")
+    def clock(self):
+        return {k: self._project.get(k) for k in ("as_of", "day_pin", "demo_run_id")}
+
+    def set_demo_run(self, run_id):
+        self._project = {**self._project, "demo_run_id": run_id}
 
     def set_as_of(self, value, forward_only=False):
         current = self._project.get("as_of")
@@ -338,9 +342,12 @@ class SupabaseRepo:
     def _pid(self) -> str:
         return self.project()["id"]
 
-    def as_of(self):
-        rows = self._db.select("projects", "as_of", id=f"eq.{self._pid}")
-        return rows[0]["as_of"] if rows else None
+    def clock(self):
+        rows = self._db.select("projects", "as_of,day_pin,demo_run_id", id=f"eq.{self._pid}")
+        return rows[0] if rows else {"as_of": None, "day_pin": None, "demo_run_id": None}
+
+    def set_demo_run(self, run_id):
+        self._db.update("projects", {"demo_run_id": run_id}, id=f"eq.{self._pid}")
 
     def set_as_of(self, value, forward_only=False):
         filters = {"id": f"eq.{self._pid}"}

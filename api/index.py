@@ -42,7 +42,8 @@ def get_repo() -> Repository:
         settings = get_settings()
         if not settings.supabase_url or not settings.service_key:
             raise HTTPException(503, "database is not configured")
-        _repo = SupabaseRepo(Supabase(settings.supabase_url, settings.service_key, timeout=20), settings.project_id)
+        _repo = SupabaseRepo(Supabase(settings.supabase_url, settings.service_key, timeout=settings.db_timeout),
+                             settings.project_id)
     return _repo
 
 
@@ -175,7 +176,10 @@ def post_demo_step(body: DemoStepIn, repo: Repository = Depends(get_repo)) -> di
     Pending means not in the database yet (by client_submission_id), so repeating
     a step, or two tabs stepping at once, never sends anything twice.
     """
-    return demo.step(repo, body.count, body.until_field_time)
+    try:
+        return demo.step(repo, str(body.run_id), body.count, body.until_field_time)
+    except demo.StaleRun:
+        raise HTTPException(409, "this demo run was reset; reload the demo controls to get the new run")
 
 
 @router.post("/demo/reset", dependencies=[Depends(require_passcode)])

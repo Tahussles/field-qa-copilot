@@ -301,6 +301,12 @@ def project_now(as_of: str | None) -> datetime:
     return datetime.fromisoformat(as_of) if as_of else datetime.now(timezone.utc)
 
 
+def project_today(clock: dict, tz: ZoneInfo) -> date:
+    """The local date "today" means: projects.day_pin when set (a demo replay of one field day), else now's date."""
+    pin = clock.get("day_pin")
+    return date.fromisoformat(pin) if pin else project_now(clock.get("as_of")).astimezone(tz).date()
+
+
 def _day_stats(snap: "Snapshot", day: date, tz: ZoneInfo) -> dict:
     params = snap.ctx.params
     on_day = [s for s in snap.scored if snap.submissions[s.submission_id].local_date(tz) == day]
@@ -340,9 +346,10 @@ def overview(repo: Repository, day: date | None = None) -> dict:
     snap = snapshot(repo)
     params = snap.ctx.params
     tz = ZoneInfo(params.timezone)
-    as_of = repo.as_of()  # read fresh: the demo moves it while the context is cached
+    clock = repo.clock()  # read fresh: the demo moves it while the context is cached
+    as_of = clock.get("as_of")
     now = project_now(as_of)
-    today = now.astimezone(tz).date()
+    today = project_today(clock, tz)
     bands = [params.band(s.score) for s in snap.scored]
     flagged_ids = {s.submission_id for s, b in zip(snap.scored, bands) if b == "flagged"}
     subs = list(snap.submissions.values())
@@ -354,6 +361,7 @@ def overview(repo: Repository, day: date | None = None) -> dict:
         "engine_version": __version__,
         "now": _iso(now),
         "now_is_fixed": bool(as_of),
+        "today_is_pinned": bool(clock.get("day_pin")),
         "thresholds": {"review": params.review_threshold, "watch": params.watch_threshold},
         "kpis": {
             "received": len(snap.scored),
@@ -411,7 +419,7 @@ def replay_day(repo: Repository) -> dict:
     snap = snapshot(repo)
     params = snap.ctx.params
     tz = ZoneInfo(params.timezone)
-    day = project_now(repo.as_of()).astimezone(tz).date() - timedelta(days=1)
+    day = project_today(repo.clock(), tz) - timedelta(days=1)
     points = []
     for s in snap.scored:
         sub = snap.submissions[s.submission_id]

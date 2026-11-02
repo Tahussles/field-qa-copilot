@@ -256,6 +256,8 @@ export interface DemoMoment {
 
 export interface DemoStatus {
   seed: number;
+  /** The current demo run; steps must send it. A reset issues a new one. */
+  run_id: string;
   progress: DemoProgress;
   moments: DemoMoment[];
 }
@@ -278,6 +280,7 @@ export interface DemoStepResult {
 }
 
 export interface DemoResetResult {
+  run_id: string;
   deleted: Record<string, number>;
   rescored: { submissions: number; flagged: number; rows_written: number };
   as_of: string;

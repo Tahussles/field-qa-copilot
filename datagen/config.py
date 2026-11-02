@@ -15,6 +15,9 @@ PROJECT_REGION = "Kisumu, Kenya"
 PROJECT_TIMEZONE = "Africa/Nairobi"  # EAT, UTC+3, no daylight saving
 # The project's own "now" for the demo: the morning of the live day (Oct 31, 08:00 EAT).
 PROJECT_AS_OF = "2026-10-31T05:00:00+00:00"
+# The live day. During its replay "today" stays here even once the field clock
+# passes midnight (enumerators sync the next morning).
+PROJECT_DAY_PIN = "2026-10-31"
 WAVE = 2
 FIELD_DAYS = tuple(date(2026, 10, 25) + timedelta(days=i) for i in range(6))
 

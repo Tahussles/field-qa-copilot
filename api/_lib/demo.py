@@ -11,6 +11,7 @@ database yet, so a repeated or concurrent step never sends anything twice.
 """
 
 import time
+import uuid
 from datetime import datetime, timezone
 from functools import lru_cache
 
@@ -85,7 +86,7 @@ def progress(repo: Repository, live: LiveDay, present: dict[str, str] | None = N
         "sent": len(sent_ids),
         "total": len(live.submissions),
         "flagged": flagged,
-        "field_clock": repo.as_of(),
+        "field_clock": repo.clock().get("as_of"),
         "next_field_time": _iso(pending.synced_at) if pending else None,
         "done": pending is None,
     }
@@ -95,7 +96,12 @@ def status(repo: Repository, seed: int = DEMO_SEED) -> dict:
     live = live_day(seed)
     present = repo.client_ids(LIVE_SOURCES)
     moments = [{**m, "sent": m["client_submission_id"] in present} for m in key_moments(live)]
-    return {"seed": seed, "progress": progress(repo, live, present), "moments": moments}
+    return {"seed": seed, "run_id": repo.clock().get("demo_run_id"), "progress": progress(repo, live, present),
+            "moments": moments}
+
+
+class StaleRun(Exception):
+    """The step names a demo run that a reset has replaced."""
 
 
 def _ingest_with_retry(repo: Repository, body: SubmissionIn) -> tuple[int, dict]:
@@ -110,9 +116,17 @@ def _ingest_with_retry(repo: Repository, body: SubmissionIn) -> tuple[int, dict]
     raise AssertionError("unreachable")
 
 
-def step(repo: Repository, count: int | None = None, until: datetime | None = None, seed: int = DEMO_SEED) -> dict:
-    """Send the next pending live-day submissions in sync order: `count` of them, or all synced by `until`."""
+def step(repo: Repository, run_id: str, count: int | None = None, until: datetime | None = None,
+         seed: int = DEMO_SEED) -> dict:
+    """Send the next pending live-day submissions in sync order: `count` of them, or all synced by `until`.
+
+    run_id must be the current demo run (from status or reset); after a reset an
+    old run's steps raise StaleRun, so a forgotten tab cannot refill the day.
+    """
     started = time.perf_counter()
+    current = repo.clock().get("demo_run_id")
+    if current is None or str(current) != str(run_id):
+        raise StaleRun(str(current))
     live = live_day(seed)
     present = repo.client_ids(LIVE_SOURCES)
     due = [s for s in live.submissions if s.client_submission_id not in present]
@@ -167,9 +181,12 @@ def reset(repo: Repository) -> dict:
     deleted["reviews"] += repo.delete_reviews()
     rescored = service.rescore(repo)
     repo.set_as_of(RESET_AS_OF)
+    run_id = str(uuid.uuid4())
+    repo.set_demo_run(run_id)
     return {
+        "run_id": run_id,
         "deleted": deleted,
         "rescored": {k: rescored[k] for k in ("submissions", "flagged", "rows_written")},
-        "as_of": repo.as_of(),
+        "as_of": repo.clock().get("as_of"),
         "timing_ms": round((time.perf_counter() - started) * 1000),
     }
