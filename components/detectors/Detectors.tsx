@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { api } from "@/lib/api";
-import { CHECK_LABEL, CHECK_ORDER, COLORS } from "@/lib/checks";
+import { CHECK_DESCRIPTION, CHECK_ORDER, CHECK_TITLE, COLORS } from "@/lib/checks";
 import { fmtPct } from "@/lib/format";
 import type { EvaluateResult } from "@/lib/types";
 
@@ -17,11 +17,27 @@ interface Knobs {
 const DEFAULTS: Knobs = { tooFastMin: 12, radius: 50, similarity: 0.8, threshold: 2 };
 
 const SLIDERS: { key: keyof Knobs; label: string; min: number; max: number; step: number; format: (v: number) => string; help: string }[] = [
-  { key: "tooFastMin", label: "Too fast (enumerators)", min: 4, max: 24, step: 1, format: (v) => `${v} min`, help: "Interviews shorter than this fire too_fast." },
-  { key: "radius", label: "Same spot radius", min: 10, max: 200, step: 5, format: (v) => `${v} m`, help: "Interviews this close on one day count as the same spot." },
-  { key: "similarity", label: "Copied text similarity", min: 0.5, max: 1, step: 0.05, format: (v) => v.toFixed(2), help: "Word overlap needed to call two answers copies." },
-  { key: "threshold", label: "Review threshold", min: 1, max: 8, step: 0.5, format: (v) => v.toFixed(1), help: "Scores at or above this go to the review queue." },
+  { key: "tooFastMin", label: "Too fast", min: 4, max: 24, step: 1, format: (v) => `${v} min`, help: "Flag enumerator interviews shorter than this" },
+  { key: "radius", label: "Same spot", min: 10, max: 200, step: 5, format: (v) => `${v} m`, help: "3+ interviews, same day, within this radius" },
+  { key: "similarity", label: "Copied text", min: 0.5, max: 1, step: 0.05, format: (v) => `${Math.round(v * 100)}%`, help: "Word overlap with another of their answers" },
+  { key: "threshold", label: "Send to review at", min: 1, max: 8, step: 0.5, format: (v) => String(v), help: "Combined score needed to enter the queue" },
 ];
+
+/** Percent with a bar; green when good, red when weak (prototype thresholds). */
+function PctBar({ value, good, testId }: { value: number | null | undefined; good: number; testId?: string }) {
+  const v = value ?? 0;
+  const color = value == null ? undefined : v >= good ? COLORS.ok : v >= good / 2 ? COLORS.warn : COLORS.crit;
+  return (
+    <div className="flex items-center gap-2">
+      <span className="w-10 font-mono tabular-nums" data-testid={testId}>
+        {value == null ? "—" : `${Math.round(v * 100)}%`}
+      </span>
+      <div className="bar max-w-[96px]" aria-hidden>
+        <i style={{ width: `${Math.round(v * 100)}%`, background: color }} />
+      </div>
+    </div>
+  );
+}
 
 function toParams(k: Knobs) {
   return {
@@ -63,113 +79,118 @@ export function Detectors() {
   const changed = (Object.keys(DEFAULTS) as (keyof Knobs)[]).some((k) => knobs[k] !== DEFAULTS[k]);
 
   return (
-    <div className="mx-auto grid max-w-[1400px] gap-3 lg:grid-cols-[340px_minmax(0,1fr)]">
-      <section aria-label="Detector settings" className="panel space-y-5 p-4">
-        <div className="flex items-center">
-          <h2 className="font-display text-sm font-semibold">Settings</h2>
-          <button
-            type="button"
-            disabled={!changed}
-            onClick={() => setKnobs(DEFAULTS)}
-            className="ml-auto text-[12px] text-muted hover:text-ink disabled:opacity-40"
-          >
-            Reset to defaults
-          </button>
+    <div className="flex flex-col gap-5">
+      {error && <p className="panel px-4 py-3 text-[13px] text-crit">{error}</p>}
+      <section aria-label="Tune the detectors" className="panel overflow-hidden" aria-busy={pending}>
+        <div className="ph">
+          <h2>Tune the detectors</h2>
+          <span className="flex items-center gap-3">
+            <span className="ph-caption">
+              {result ? `${result.combined.fabricated} planted fakes among ${result.combined.submissions} submissions` : "Scoring…"}
+            </span>
+            <button type="button" disabled={!changed} onClick={() => setKnobs(DEFAULTS)} className="btn btn-sm btn-ghost">
+              Reset
+            </button>
+          </span>
         </div>
-        {SLIDERS.map((s) => (
-          <div key={s.key}>
-            <div className="flex items-baseline justify-between">
-              <label htmlFor={`slider-${s.key}`} className="text-[13px] text-ink-2">
+        <p className="max-w-[76ch] px-4 pt-3.5 text-muted">
+          Every synthetic submission is labelled genuine or fabricated, because the fraud was planted on purpose. That lets each check
+          be scored. A stricter check catches more fakes but spends more reviewer time on genuine interviews. Nothing here changes the
+          live queue.
+        </p>
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-[18px] p-4">
+          {SLIDERS.map((s) => (
+            <div key={s.key}>
+              <label htmlFor={`slider-${s.key}`} className="mb-1.5 flex justify-between text-[13px] font-medium">
                 {s.label}
+                <span className="font-mono text-accent" data-testid={`value-${s.key}`}>
+                  {s.format(knobs[s.key])}
+                </span>
               </label>
-              <span className="font-mono text-[12.5px] text-ink" data-testid={`value-${s.key}`}>
-                {s.format(knobs[s.key])}
-              </span>
+              <input
+                id={`slider-${s.key}`}
+                type="range"
+                min={s.min}
+                max={s.max}
+                step={s.step}
+                value={knobs[s.key]}
+                onChange={(e) => setKnobs((k) => ({ ...k, [s.key]: Number(e.target.value) }))}
+                className="w-full accent-[#7c84f8]"
+              />
+              <small className="text-[11.5px] text-faint">{s.help}</small>
             </div>
-            <input
-              id={`slider-${s.key}`}
-              type="range"
-              min={s.min}
-              max={s.max}
-              step={s.step}
-              value={knobs[s.key]}
-              onChange={(e) => setKnobs((k) => ({ ...k, [s.key]: Number(e.target.value) }))}
-              className="mt-2 w-full accent-[#7c84f8]"
-            />
-            <p className="mt-1 text-[11.5px] text-faint">{s.help}</p>
-          </div>
-        ))}
-        <p className="border-t border-line pt-3 text-[11.5px] text-faint">
-          Changes here are a what-if: nothing is saved and the live queue keeps its settings.
+          ))}
+        </div>
+        <div className="overflow-x-auto border-t border-line">
+          <table className="table min-w-[720px]" data-testid="detector-table">
+            <thead>
+              <tr>
+                <th>Check</th>
+                <th>What it looks for</th>
+                <th className="font-mono">Fires on</th>
+                <th>Precision</th>
+                <th>Recall</th>
+                <th className="font-mono">Weight</th>
+              </tr>
+            </thead>
+            <tbody className={pending ? "opacity-60 transition-opacity" : ""}>
+              {CHECK_ORDER.map((key) => {
+                const m = result?.per_check[key];
+                return (
+                  <tr key={key}>
+                    <td>{CHECK_TITLE[key]}</td>
+                    <td className="text-muted">{CHECK_DESCRIPTION[key]}</td>
+                    <td className="font-mono tabular-nums">{m?.fires_on ?? "—"}</td>
+                    <td>
+                      <PctBar value={m?.precision} good={0.8} />
+                    </td>
+                    <td>
+                      <PctBar value={m?.recall} good={0.6} />
+                    </td>
+                    <td className="font-mono text-muted">{result?.params.weights[key] ?? "—"}</td>
+                  </tr>
+                );
+              })}
+              <tr className="bg-accent/[0.07] font-medium">
+                <td>Combined score ≥ {knobs.threshold}</td>
+                <td className="text-muted">What reaches the review queue</td>
+                <td className="font-mono tabular-nums" data-testid="combined-flagged">
+                  {result?.combined.flagged ?? "—"}
+                </td>
+                <td>
+                  <PctBar value={result?.combined.precision} good={0.8} testId="combined-precision" />
+                </td>
+                <td>
+                  <PctBar value={result?.combined.recall} good={0.6} />
+                </td>
+                <td />
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p className="px-4 py-3.5 text-[12px] text-faint">
+          Precision: how often a flag is right. Recall: how many planted fakes it catches. Single checks have low recall on purpose,
+          since each targets one kind of fraud; the combined score fills the queue. Ground truth exists because the data is synthetic;
+          these numbers are scored against planted fraud.
         </p>
       </section>
 
-      <div className="flex min-w-0 flex-col gap-3">
-        {error && <p className="panel p-3 text-[13px] text-crit">{error}</p>}
-        <section aria-label="Detector performance" className="panel overflow-hidden" aria-busy={pending}>
-          <div className="flex items-center gap-2 border-b border-line px-4 py-3">
-            <h2 className="font-display text-sm font-semibold">How each check performs</h2>
-            <span className="text-[12px] text-faint">
-              {result ? `${result.combined.submissions} synthetic submissions, ${result.combined.fabricated} planted fakes` : "Scoring…"}
-            </span>
-            {pending && <span className="ml-auto text-[11.5px] text-muted">Updating…</span>}
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[560px] text-left text-[13px]" data-testid="detector-table">
-              <thead className="text-[11.5px] text-faint">
-                <tr>
-                  <th className="py-2 pr-2 pl-4 font-normal">Check</th>
-                  <th className="px-2 text-right font-normal">Weight</th>
-                  <th className="px-2 text-right font-normal">Fires on</th>
-                  <th className="px-2 text-right font-normal">Precision</th>
-                  <th className="py-2 pr-4 pl-2 text-right font-normal">Recall</th>
-                </tr>
-              </thead>
-              <tbody className={pending ? "opacity-60 transition-opacity" : ""}>
-                {CHECK_ORDER.map((key) => {
-                  const m = result?.per_check[key];
-                  return (
-                    <tr key={key} className="border-t border-line">
-                      <td className="py-2 pr-2 pl-4 text-ink-2">{CHECK_LABEL[key]}</td>
-                      <td className="px-2 text-right font-mono text-[12px] text-muted">{result?.params.weights[key] ?? "—"}</td>
-                      <td className="px-2 text-right tabular-nums text-ink-2">{m?.fires_on ?? "—"}</td>
-                      <td className="px-2 text-right tabular-nums text-ink-2">{fmtPct(m?.precision, 1)}</td>
-                      <td className="py-2 pr-4 pl-2 text-right tabular-nums text-ink-2">{fmtPct(m?.recall, 1)}</td>
-                    </tr>
-                  );
-                })}
-                <tr className="border-t border-line-strong bg-white/[0.025] font-medium">
-                  <td className="py-2.5 pr-2 pl-4 text-ink">Combined at {knobs.threshold.toFixed(1)}</td>
-                  <td className="px-2" />
-                  <td className="px-2 text-right tabular-nums text-ink" data-testid="combined-flagged">
-                    {result?.combined.flagged ?? "—"}
-                  </td>
-                  <td className="px-2 text-right tabular-nums text-accent" data-testid="combined-precision">
-                    {fmtPct(result?.combined.precision, 1)}
-                  </td>
-                  <td className="py-2.5 pr-4 pl-2 text-right tabular-nums text-ok">{fmtPct(result?.combined.recall, 1)}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        <section aria-label="Precision and recall by threshold" className="panel p-4">
-          <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1">
-            <h2 className="font-display text-sm font-semibold">Precision and recall by review threshold</h2>
-            <span className="flex items-center gap-1.5 text-[12px] text-muted">
+      <section aria-label="Precision and recall by threshold" className="panel">
+        <div className="ph">
+          <h2>Precision and recall by review threshold</h2>
+          <span className="flex items-center gap-4 text-[12px] text-muted">
+            <span className="flex items-center gap-1.5">
               <span className="h-0.5 w-4 rounded" style={{ background: COLORS.accent }} /> precision
             </span>
-            <span className="flex items-center gap-1.5 text-[12px] text-muted">
+            <span className="flex items-center gap-1.5">
               <span className="h-0.5 w-4 rounded" style={{ background: COLORS.ok }} /> recall
             </span>
-          </div>
+          </span>
+        </div>
+        <div className="px-4 py-3.5">
           <SweepChart sweep={result?.sweep ?? []} threshold={knobs.threshold} />
-          <p className="mt-3 text-[12px] text-faint">
-            Ground truth exists because the data is synthetic; these numbers are scored against planted fraud.
-          </p>
-        </section>
-      </div>
+        </div>
+      </section>
     </div>
   );
 }

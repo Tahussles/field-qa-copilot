@@ -72,7 +72,7 @@ test("detectors: moving a slider changes the numbers", async ({ page }) => {
   const flagged = page.getByTestId("combined-flagged");
   await expect(flagged).toHaveText(/\d/, { timeout: 30_000 });
   const before = (await flagged.textContent())!;
-  const slider = page.getByLabel(/Review threshold/i);
+  const slider = page.getByLabel(/Send to review at/i);
   await slider.focus();
   for (let i = 0; i < 4; i++) await page.keyboard.press("ArrowRight");
   await expect(flagged).not.toHaveText(before, { timeout: 15_000 });

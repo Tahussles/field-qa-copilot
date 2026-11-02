@@ -7,8 +7,8 @@ import { useAppData } from "@/components/app/AppData";
 import { useWithPasscode } from "@/components/app/Passcode";
 import { useToast } from "@/components/app/Toasts";
 import { api } from "@/lib/api";
-import { CHECK_TITLE, SOURCE_LABEL, scoreColor } from "@/lib/checks";
-import { fmtDuration, fmtScore, shortId } from "@/lib/format";
+import { CHECK_TITLE, SOURCE_LABEL } from "@/lib/checks";
+import { fmtScore, shortId } from "@/lib/format";
 import type { IngestResponse, MapPoint } from "@/lib/types";
 
 const SOURCES = Object.keys(SOURCE_LABEL);
@@ -123,108 +123,96 @@ export function TestSubmission() {
   const set = <K extends keyof Form>(key: K, value: Form[K]) => setForm((f) => ({ ...f, [key]: value }));
 
   return (
-    <div className="mx-auto grid max-w-[1200px] gap-3 lg:grid-cols-[minmax(0,1fr)_380px]">
-      <form onSubmit={submit} className="panel space-y-4 p-4" aria-label="Test submission">
-        <div>
-          <h2 className="font-display text-sm font-semibold">Send a submission through the live pipeline</h2>
-          <p className="mt-1 text-[12.5px] text-muted">
-            A backup for the demo: this posts exactly what a phone would (source <span className="font-mono">live</span>), scores it with
-            the engine, and shows up on the map and in the queue within a second.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {PRESETS.map((p) => (
-            <button key={p.name} type="button" onClick={() => setForm((f) => p.apply(f))}
-              className="rounded-lg border border-line-strong bg-white/[0.03] px-2.5 py-1.5 text-left text-[12.5px] hover:bg-white/[0.07]">
-              <span className="text-ink">{p.name}</span> <span className="text-faint">· {p.note}</span>
-            </button>
-          ))}
-        </div>
-        <div className="grid gap-3 sm:grid-cols-4">
-          <Field label="Enumerator">
-            <select value={form.code} onChange={(e) => setForm((f) => ({ ...f, code: e.target.value, device: `demo-phone-${e.target.value}` }))} className="input">
-              {(enumerators.length ? enumerators : [form.code]).map((c) => <option key={c}>{c}</option>)}
-            </select>
-          </Field>
-          <Field label="Duration (min)">
-            <input type="number" min={1} max={180} value={form.minutes} onChange={(e) => set("minutes", Number(e.target.value))} className="input" />
-          </Field>
-          <Field label={`Captured (today, ${today ?? "…"})`}>
-            <input type="time" value={form.time} onChange={(e) => set("time", e.target.value)} className="input" />
-          </Field>
-          <Field label="Water source">
-            <select value={form.source} onChange={(e) => set("source", e.target.value)} className="input">
-              {SOURCES.map((s) => <option key={s} value={s}>{SOURCE_LABEL[s]}</option>)}
-            </select>
-          </Field>
-        </div>
-        <Field label="Satisfaction (1–5)">
+    <section className="panel" aria-label="Test submission">
+      <div className="ph">
+        <h2>Send a test submission</h2>
+        <span className="ph-caption">Runs through the same checks as the real data</span>
+      </div>
+      <p className="max-w-[76ch] px-4 pt-3.5 text-muted">
+        A backup for the demo: this posts exactly what a phone would (source <span className="font-mono">live</span>), scores it with
+        the engine, and shows up on the map and in the queue within a second. Try a preset, or fake one yourself.
+      </p>
+      <div className="flex flex-wrap gap-2 px-4 pt-3.5">
+        {PRESETS.map((p) => (
+          <button key={p.name} type="button" onClick={() => setForm((f) => p.apply(f))} className="btn btn-sm">
+            {p.name} <span className="text-faint">· {p.note}</span>
+          </button>
+        ))}
+      </div>
+      <form onSubmit={submit} className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-x-4 gap-y-3.5 p-4">
+        <Field label="Enumerator">
+          <select value={form.code} onChange={(e) => setForm((f) => ({ ...f, code: e.target.value, device: `demo-phone-${e.target.value}` }))} className="input">
+            {(enumerators.length ? enumerators : [form.code]).map((c) => <option key={c}>{c}</option>)}
+          </select>
+        </Field>
+        <Field label="Duration (minutes)">
+          <input type="number" min={1} max={180} value={form.minutes} onChange={(e) => set("minutes", Number(e.target.value))} className="input" />
+        </Field>
+        <Field label={`Captured at (today, ${today ?? "…"})`}>
+          <input type="time" value={form.time} onChange={(e) => set("time", e.target.value)} className="input" />
+        </Field>
+        <Field label="Main water source (form)">
+          <select value={form.source} onChange={(e) => set("source", e.target.value)} className="input">
+            {SOURCES.map((s) => <option key={s} value={s}>{SOURCE_LABEL[s]}</option>)}
+          </select>
+        </Field>
+        <Field label="Voice note transcript" full>
+          <input type="text" value={form.transcript} onChange={(e) => set("transcript", e.target.value)} className="input" />
+        </Field>
+        <Field label="Biggest challenge getting water (open-ended)" full>
+          <textarea rows={3} value={form.openText} onChange={(e) => set("openText", e.target.value)} className="input min-h-16 resize-y" />
+        </Field>
+        <Field label="Satisfaction (1 to 5)" full>
           <div className="grid grid-cols-4 gap-2 sm:grid-cols-8">
             {form.satisfaction.map((v, i) => (
-              <label key={i} className="text-[11px] text-faint">
+              <label key={i} className="flex flex-col gap-1 text-[11px] font-normal text-faint">
                 {ITEMS[i]}
-                <input type="number" min={1} max={5} value={v} className="input mt-1"
+                <input type="number" min={1} max={5} value={v} className="input"
                   onChange={(e) => set("satisfaction", form.satisfaction.map((x, j) => (j === i ? Number(e.target.value) : x)))} />
               </label>
             ))}
           </div>
         </Field>
-        <Field label="Open answer">
-          <textarea rows={2} value={form.openText} onChange={(e) => set("openText", e.target.value)} className="input" />
-        </Field>
-        <Field label="Voice transcript">
-          <textarea rows={2} value={form.transcript} onChange={(e) => set("transcript", e.target.value)} className="input" />
-        </Field>
-        <div className="flex flex-wrap items-center gap-3">
-          <label className="flex items-center gap-2 text-[12.5px] text-muted">
-            <input type="checkbox" checked={form.nearLast} onChange={(e) => set("nearLast", e.target.checked)} />
-            At {form.code}&apos;s last location {last ? "" : "(no previous location)"}
-          </label>
-          <button type="submit" disabled={sending || !last || !today}
-            className="ml-auto rounded-lg bg-accent px-4 py-2 text-[13px] font-medium text-white hover:brightness-110 disabled:opacity-50">
-            {sending ? "Scoring…" : "Submit"}
+        <label className="col-span-full flex items-center gap-2 text-ink">
+          <input type="checkbox" checked={form.nearLast} onChange={(e) => set("nearLast", e.target.checked)} />
+          Place it at {form.code}&apos;s last interview spot {last ? "" : "(no previous location)"}
+        </label>
+        <div className="col-span-full flex flex-wrap gap-2">
+          <button type="submit" disabled={sending || !last || !today} className="btn btn-primary">
+            {sending ? "Scoring…" : "Send submission"}
           </button>
         </div>
       </form>
 
-      <section className="panel p-4" aria-label="Result" aria-live="polite">
-        <h2 className="font-display text-sm font-semibold">Result</h2>
-        {!result ? (
-          <p className="mt-2 text-[13px] text-muted">Pick a preset or fill the form, then submit. The passcode is asked once.</p>
-        ) : (
-          <div className="mt-3 space-y-3 text-[13px]">
-            <div className="flex items-center gap-3">
-              <span className="font-mono text-ink">{shortId(result.id)}</span>
-              <span className="rounded-md px-2 py-0.5 font-display font-semibold"
-                style={{ color: scoreColor(result.score ?? 0, result.band ?? "clear"), background: `${scoreColor(result.score ?? 0, result.band ?? "clear")}1a` }}>
-                {fmtScore(result.score)}
-              </span>
-              <span className="text-muted capitalize">{result.band}</span>
-              <Link href={`/app/queue/${result.id}?status=all`} className="ml-auto text-accent hover:brightness-125">Open in queue →</Link>
-            </div>
-            <ul className="space-y-1">
-              {result.fired.length ? result.fired.map((f) => (
-                <li key={f.key} className="flex items-center gap-2">
-                  <span className="dot bg-warn" aria-hidden /> {CHECK_TITLE[f.key]} <span className="font-mono text-faint">+{f.weight}</span>
-                </li>
-              )) : <li className="text-muted">No checks fired.</li>}
-            </ul>
-            {result.changed.length > 0 && (
-              <p className="text-warn">This arrival flipped {result.changed.length} earlier {result.changed.length === 1 ? "submission" : "submissions"} to flagged.</p>
-            )}
-            {result.timing_ms && <p className="text-[11.5px] text-faint">Scored in {result.timing_ms.total} ms · duration {fmtDuration(form.minutes * 60)}</p>}
+      <div className="px-4 pb-4" aria-live="polite">
+        {result && (
+          <div className={`card ${result.flagged ? "card-crit" : ""}`}>
+            <h3>
+              {shortId(result.id)} · score {fmtScore(result.score)} · {result.flagged ? "sent to the review queue" : "passed"}
+            </h3>
+            <p>
+              {result.fired.length
+                ? `Checks that fired: ${result.fired.map((f) => `${CHECK_TITLE[f.key]} (+${f.weight})`).join(", ")}.`
+                : "No checks fired."}
+              {result.changed.length > 0 &&
+                ` This arrival flipped ${result.changed.length} earlier ${result.changed.length === 1 ? "submission" : "submissions"} to flagged.`}
+              {result.timing_ms && ` Scored in ${result.timing_ms.total} ms.`}
+            </p>
+            <Link href={`/app/queue/${result.id}?status=all`} className="btn btn-sm">
+              Open it in the queue
+            </Link>
           </div>
         )}
-      </section>
-    </div>
+      </div>
+    </section>
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, children, full }: { label: string; children: React.ReactNode; full?: boolean }) {
   return (
-    <label className="block text-[12px] text-muted">
+    <label className={`flex flex-col gap-[5px] text-[12px] font-medium text-muted ${full ? "col-span-full" : ""}`}>
       {label}
-      <div className="mt-1">{children}</div>
+      {children}
     </label>
   );
 }
