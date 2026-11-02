@@ -395,7 +395,7 @@ def run_hard(args, params: Params) -> int:
                          ("submissions", "fabricated", "flagged", "precision", "recall", "false_positives",
                           "false_negatives")},
             "per_check": {key: {m: mean(lambda r, key=key, m=m: r[label]["per_check"][key][m])
-                                for m in ("fires_on", "precision", "recall")} for key in CHECK_KEYS},
+                                for m in ("fires_on", "precision", "recall", "targeted_recall")} for key in CHECK_KEYS},
             "misses_by_fraud_type": {ft: mean(lambda r, ft=ft: c(r)["misses_by_fraud_type"][ft]) for ft in FRAUD_TYPES},
             "decided_by_ai": mean(lambda r: r[label]["decided_by_ai"]),
         }

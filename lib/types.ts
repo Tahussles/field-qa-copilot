@@ -339,7 +339,7 @@ export interface BriefState {
 export interface HardSide {
   combined: { submissions: number; fabricated: number; flagged: number; precision: number | null; recall: number | null;
     false_positives: number; false_negatives: number };
-  per_check: Record<CheckKey, { fires_on: number; precision: number | null; recall: number | null }>;
+  per_check: Record<CheckKey, { fires_on: number; precision: number | null; recall: number | null; targeted_recall: number | null }>;
   misses_by_fraud_type: Record<string, number>;
   decided_by_ai: number;
 }

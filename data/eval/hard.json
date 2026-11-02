@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-02T23:34:49+00:00",
+  "generated_at": "2026-11-02T23:37:53+00:00",
   "engine_version": "0.3.0",
   "seeds": [
     201,
@@ -11,14 +11,14 @@
     "total": 3483,
     "consistency": 3319,
     "paraphrase": 164,
-    "verdicts": 3481,
-    "failed": 2,
-    "median_latency_ms": 1385
+    "verdicts": 3482,
+    "failed": 1,
+    "median_latency_ms": 1385.0
   },
   "cost_usd": {
-    "estimated_before_run": 0.8701,
-    "spent_this_run": 0.583,
-    "all_cached_calls": 0.583
+    "estimated_before_run": 0.0005,
+    "spent_this_run": 0.0007,
+    "all_cached_calls": 0.5827
   },
   "planted_per_wave": {
     "speeder": 23.5,
@@ -43,42 +43,50 @@
       "too_fast": {
         "fires_on": 61.5,
         "precision": 0.8208,
-        "recall": 0.3399
+        "recall": 0.3399,
+        "targeted_recall": 1.0
       },
       "same_spot": {
         "fires_on": 72,
         "precision": 0.1935,
-        "recall": 0.0945
+        "recall": 0.0945,
+        "targeted_recall": 0.328
       },
       "copied_text": {
         "fires_on": 73.5,
         "precision": 1.0,
-        "recall": 0.4947
+        "recall": 0.4947,
+        "targeted_recall": 0.993
       },
       "straight_lining": {
         "fires_on": 25,
         "precision": 0.7,
-        "recall": 0.1178
+        "recall": 0.1178,
+        "targeted_recall": 0.7464
       },
       "voice_vs_form": {
         "fires_on": 5,
         "precision": 0.0,
-        "recall": 0.0
+        "recall": 0.0,
+        "targeted_recall": 0.0
       },
       "off_hours": {
         "fires_on": 13.5,
         "precision": 0.7033,
-        "recall": 0.064
+        "recall": 0.064,
+        "targeted_recall": 1.0
       },
       "shared_device": {
         "fires_on": 29,
         "precision": 1.0,
-        "recall": 0.1952
+        "recall": 0.1952,
+        "targeted_recall": 1.0
       },
       "burst": {
         "fires_on": 27.5,
         "precision": 1.0,
-        "recall": 0.1854
+        "recall": 0.1854,
+        "targeted_recall": 1.0
       }
     },
     "misses_by_fraud_type": {
@@ -96,64 +104,72 @@
     "combined": {
       "submissions": 1678.5,
       "fabricated": 148.5,
-      "flagged": 145.5,
-      "precision": 0.8794,
-      "recall": 0.8616,
+      "flagged": 146,
+      "precision": 0.8799,
+      "recall": 0.8651,
       "false_positives": 17.5,
-      "false_negatives": 20.5
+      "false_negatives": 20
     },
     "per_check": {
       "too_fast": {
         "fires_on": 61.5,
         "precision": 0.8208,
-        "recall": 0.3399
+        "recall": 0.3399,
+        "targeted_recall": 1.0
       },
       "same_spot": {
         "fires_on": 72,
         "precision": 0.1935,
-        "recall": 0.0945
+        "recall": 0.0945,
+        "targeted_recall": 0.328
       },
       "copied_text": {
         "fires_on": 80,
         "precision": 0.9247,
-        "recall": 0.4981
+        "recall": 0.4981,
+        "targeted_recall": 1.0
       },
       "straight_lining": {
         "fires_on": 25,
         "precision": 0.7,
-        "recall": 0.1178
+        "recall": 0.1178,
+        "targeted_recall": 0.7464
       },
       "voice_vs_form": {
-        "fires_on": 21.5,
-        "precision": 0.9762,
-        "recall": 0.1413
+        "fires_on": 22,
+        "precision": 0.9773,
+        "recall": 0.1448,
+        "targeted_recall": 0.9773
       },
       "off_hours": {
         "fires_on": 13.5,
         "precision": 0.7033,
-        "recall": 0.064
+        "recall": 0.064,
+        "targeted_recall": 1.0
       },
       "shared_device": {
         "fires_on": 29,
         "precision": 1.0,
-        "recall": 0.1952
+        "recall": 0.1952,
+        "targeted_recall": 1.0
       },
       "burst": {
         "fires_on": 27.5,
         "precision": 1.0,
-        "recall": 0.1854
+        "recall": 0.1854,
+        "targeted_recall": 1.0
       }
     },
     "misses_by_fraud_type": {
       "curbstone": 19.5,
       "speeder": 0,
       "copypaste": 0,
-      "contradiction": 1,
+      "contradiction": 0.5,
       "night": 0,
       "multi_account": 0,
       "burst": 0
     },
-    "decided_by_ai": 27.5
+    "decided_by_ai": 28
   },
   "gaps": [
     {

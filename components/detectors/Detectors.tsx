@@ -221,7 +221,8 @@ function HardMode() {
         { label: "Precision (flags that are fakes)", rules: data.rules.combined.precision, ai: data.rules_ai.combined.precision, good: 0.8, pct: true },
         { label: "Recall (fakes that are flagged)", rules: data.rules.combined.recall, ai: data.rules_ai.combined.recall, good: 0.6, pct: true },
         ...AI_CHECKS.flatMap((key) => [
-          { label: `${CHECK_TITLE[key]}: recall`, rules: data.rules.per_check[key].recall, ai: data.rules_ai.per_check[key].recall, good: 0.6, pct: true },
+          { label: `${CHECK_TITLE[key]}: catches its target fraud`, rules: data.rules.per_check[key].targeted_recall,
+            ai: data.rules_ai.per_check[key].targeted_recall, good: 0.6, pct: true },
           { label: `${CHECK_TITLE[key]}: precision`, rules: data.rules.per_check[key].precision, ai: data.rules_ai.per_check[key].precision, good: 0.8, pct: true },
         ]),
       ]
@@ -302,7 +303,8 @@ function HardMode() {
             {data.rules_only_run
               ? "Rules-only run: no model verdicts yet, so both columns match."
               : `${data.calls.verdicts.toLocaleString("en-US")} verdicts, ${data.calls.failed} failed calls, median ${data.calls.median_latency_ms} ms per call; model cost $${data.cost_usd.all_cached_calls.toFixed(2)}.`}{" "}
-            Precision and recall here are scored against planted labels, aggregates only.
+            A check&apos;s target fraud: contradictions for voice vs form; copies, bursts and the device ring for copied text.
+            Scored against planted labels, aggregates only.
           </p>
         </div>
       )}
