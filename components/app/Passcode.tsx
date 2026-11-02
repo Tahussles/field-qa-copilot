@@ -84,9 +84,9 @@ export function PasscodeProvider({ children }: { children: ReactNode }) {
             aria-labelledby="passcode-title"
             onSubmit={submit}
             onKeyDown={(e: React.KeyboardEvent) => e.key === "Escape" && close(null)}
-            className="w-full max-w-sm rounded-2xl p-5"
+            className="w-full max-w-sm rounded-xl p-5"
           >
-            <h2 id="passcode-title" className="font-display text-base font-semibold">
+            <h2 id="passcode-title" className="text-[15px] font-semibold">
               Demo passcode
             </h2>
             <p className="mt-1 text-[13px] text-muted">
@@ -102,7 +102,7 @@ export function PasscodeProvider({ children }: { children: ReactNode }) {
               onChange={(e) => setValue(e.target.value)}
               aria-invalid={Boolean(prompt.error)}
               aria-describedby={prompt.error ? "passcode-error" : undefined}
-              className="mt-4 w-full rounded-lg border border-line-strong bg-black/30 px-3 py-2 font-mono text-sm text-ink outline-none focus:border-accent"
+              className="input mt-4 font-mono"
               placeholder="fqc-…"
             />
             {prompt.error && (
@@ -114,13 +114,13 @@ export function PasscodeProvider({ children }: { children: ReactNode }) {
               <button
                 type="button"
                 onClick={() => close(null)}
-                className="rounded-lg px-3 py-1.5 text-[13px] text-muted hover:text-ink"
+                className="btn btn-ghost"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="rounded-lg bg-accent px-3 py-1.5 text-[13px] font-medium text-white hover:brightness-110"
+                className="btn btn-primary"
               >
                 Unlock
               </button>

@@ -35,19 +35,22 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={value}>
       {children}
+      {/* Bottom-centre glass pills, as in the prototype. */}
       <div
         aria-live="polite"
-        className="pointer-events-none fixed right-4 bottom-20 z-[60] flex w-[min(380px,calc(100vw-2rem))] flex-col gap-2 md:bottom-4"
+        className="pointer-events-none fixed bottom-20 left-1/2 z-[60] flex w-max max-w-[calc(100vw-2rem)] -translate-x-1/2 flex-col items-center gap-2 md:bottom-[18px]"
       >
         {toasts.map((t) => (
-          <Glass key={t.id} role="status" className="toast-in pointer-events-auto rounded-xl px-3.5 py-2.5">
-            <div className="flex items-start gap-2.5">
-              <span className={`dot mt-1.5 ${TONE_DOT[t.tone]}`} aria-hidden />
-              <div className="min-w-0">
-                <p className="truncate text-[13px] font-medium text-ink">{t.title}</p>
-                {t.body && <p className="mt-0.5 text-xs text-muted">{t.body}</p>}
-              </div>
-            </div>
+          <Glass
+            key={t.id}
+            role="status"
+            className="toast-in pointer-events-auto flex max-w-full items-center gap-2 rounded-full px-4 py-2 text-[12.5px] text-ink"
+          >
+            <span className={`dot ${TONE_DOT[t.tone]}`} aria-hidden />
+            <span className="truncate">
+              {t.title}
+              {t.body && <span className="text-muted"> · {t.body}</span>}
+            </span>
           </Glass>
         ))}
       </div>
