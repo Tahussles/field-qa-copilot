@@ -65,7 +65,7 @@ function DemoRunner({ open, onClose }: { open: boolean; onClose: () => void }) {
   const runningRef = useRef(false);
   const speedRef = useRef<number>(speed);
   const anchor = useRef({ wall: 0, field: 0 });
-  const inFlight = useRef(false);
+  const inFlight = useRef<Promise<unknown> | null>(null);
   const next = useRef<number | null>(null);
   const interval = useRef<number | null>(null);
 
@@ -129,9 +129,10 @@ function DemoRunner({ open, onClose }: { open: boolean; onClose: () => void }) {
       return;
     }
     if (inFlight.current || next.current > now) return;
-    inFlight.current = true;
+    const sending = step({ until_field_time: iso(now), count: STEP_MAX });
+    inFlight.current = sending;
     try {
-      const res = await step({ until_field_time: iso(now), count: STEP_MAX });
+      const res = await sending;
       if (!res) pause();
       else if (res.progress.done) {
         pause();
@@ -141,9 +142,15 @@ function DemoRunner({ open, onClose }: { open: boolean; onClose: () => void }) {
       pause();
       toast({ tone: "error", title: "Demo step failed", body: e instanceof Error ? e.message : undefined });
     } finally {
-      inFlight.current = false;
+      inFlight.current = null;
     }
   }, [pause, step, toast]);
+
+  /** Pause, and let a step that is still sending finish first, so reset and skip never race it. */
+  const settle = useCallback(async () => {
+    pause();
+    await inFlight.current?.catch(() => {});
+  }, [pause]);
 
   function start() {
     if (!status || status.progress.done) return;
@@ -171,8 +178,8 @@ function DemoRunner({ open, onClose }: { open: boolean; onClose: () => void }) {
 
   async function skip() {
     if (!upcoming) return;
-    pause();
     setBusy(`Skipping to ${upcoming.label}…`);
+    await settle();
     const target = Date.parse(upcoming.field_time) - 1000;
     try {
       for (;;) {
@@ -188,9 +195,9 @@ function DemoRunner({ open, onClose }: { open: boolean; onClose: () => void }) {
   }
 
   async function reset() {
-    pause();
     setConfirming(false);
     setBusy("Resetting…");
+    await settle();
     try {
       const res = await withPasscode((code) => api.demoReset(code));
       if (res) {
