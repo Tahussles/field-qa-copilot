@@ -6,6 +6,10 @@ Compares, row for row, the submissions, this engine version's check results and
 the scores with the seeded wave scored in memory, and checks that nothing else
 is left: no simulator or live rows, no reviews, the clock at Oct 31 08:00.
 Exits 1 on any difference. Reads the database only.
+
+The wave's model verdicts (scripts/backfill_ai.py) are part of its fresh state:
+they are stored once, a demo reset keeps them, and the in-memory scoring here
+reads the same stored verdicts. Verdicts about anything but wave rows must not exist.
 """
 
 import argparse
@@ -17,6 +21,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from api._lib.postgrest import Supabase  # noqa: E402
+from api._lib.service import verdict_index  # noqa: E402
 from datagen import build_wave, db_rows  # noqa: E402
 from datagen import config as cfg  # noqa: E402
 from engine import Contributor, Params, Submission, __version__, score_all  # noqa: E402
@@ -44,7 +49,14 @@ def main() -> int:
     config = db.select("check_config", "params", **in_project)
     params = Params.from_config(config[0]["params"] if config else None, timezone=project["timezone"])
     contributors = [Contributor.from_row(r) for r in rows["contributors"]]
-    batch = score_all([Submission.from_row(r) for r in rows["submissions"]], contributors, params)
+    stored_verdicts = db.select("ai_verdicts", "submission_id,pair_submission_id,kind,model,verdict,"
+                                               "submissions!inner(project_id)", **joined)
+    wave_ids = {r["id"] for r in rows["submissions"]}
+    outside = [v for v in stored_verdicts if v["submission_id"] not in wave_ids
+               or (v["pair_submission_id"] and v["pair_submission_id"] not in wave_ids)]
+    expect("verdicts about rows outside the wave", len(outside), 0)
+    batch = score_all([Submission.from_row(r) for r in rows["submissions"]], contributors, params,
+                      verdict_index(stored_verdicts))
 
     stored = db.select("submissions", "id,client_submission_id,source,captured_at,duration_sec,lat,lng",
                        order="id", **in_project)
@@ -69,7 +81,8 @@ def main() -> int:
     expect("projects.as_of", db.select("projects", "as_of", id=f"eq.{project['id']}")[0]["as_of"], cfg.PROJECT_AS_OF)
 
     flagged = sum(s.flagged for s in batch)
-    print(f"\nfresh wave: {len(batch)} submissions, {flagged} flagged, engine {__version__}")
+    print(f"\nfresh wave: {len(batch)} submissions, {flagged} flagged, {len(stored_verdicts)} model verdicts, "
+          f"engine {__version__}")
     if problems:
         print("differs: " + ", ".join(problems), file=sys.stderr)
         return 1

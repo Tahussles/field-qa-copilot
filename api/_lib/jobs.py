@@ -130,7 +130,9 @@ def run_consistency(repo, provider: Provider, job):
     verdict, usage = provider.judge_consistency(row["answers"]["water_source"], _open_text(row), row["voice_transcript"])
     data = {**verdict.model_dump(), "latency_ms": usage.latency_ms}
     repo.put_verdict({"submission_id": row["id"], "kind": "voice_vs_form", "model": usage.model, "verdict": data})
-    return {"verdict": data, "rescore": _rescore(repo, row["id"])}, usage
+    # A backfill rescores everything once at the end instead (input.rescore = false).
+    rescore = _rescore(repo, row["id"]) if (job.get("input") or {}).get("rescore", True) else None
+    return {"verdict": data, "rescore": rescore}, usage
 
 
 def run_paraphrase(repo, provider: Provider, job):
@@ -154,7 +156,8 @@ def run_paraphrase(repo, provider: Provider, job):
         judged.append({"other_id": other["id"], **data})
     if errors and not judged:
         raise AIUnavailable("; ".join(errors), total)
-    return {"pairs": judged, "errors": errors, "rescore": _rescore(repo, row["id"]) if judged else None}, total
+    rescore = _rescore(repo, row["id"]) if judged and job["input"].get("rescore", True) else None
+    return {"pairs": judged, "errors": errors, "rescore": rescore}, total
 
 
 def run_transcribe(repo, provider: Provider, job):
