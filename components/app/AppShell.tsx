@@ -2,19 +2,20 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Suspense, useEffect, type ReactNode } from "react";
+import { Suspense, useEffect, useMemo, type ReactNode } from "react";
 
 import { AppDataProvider, useAppData } from "@/components/app/AppData";
+import { Kpis } from "@/components/app/Kpis";
 import { PasscodeProvider } from "@/components/app/Passcode";
 import { ToastProvider } from "@/components/app/Toasts";
 import { Glass } from "@/components/ui/Glass";
-import { fmtDateTime } from "@/lib/format";
+import { DEFAULT_TZ, fmtDateTime, fmtMonthDay } from "@/lib/format";
 
 export const SECTIONS = [
   { href: "/app", label: "Overview", key: "1", icon: IconGrid },
-  { href: "/app/queue", label: "Review queue", key: "2", icon: IconInbox },
-  { href: "/app/detectors", label: "Detectors", key: "3", icon: IconSliders },
-  { href: "/app/test", label: "Test a submission", key: "4", icon: IconSend },
+  { href: "/app/queue", label: "Review queue", key: "2", icon: IconList },
+  { href: "/app/detectors", label: "Detectors", key: "3", icon: IconBars },
+  { href: "/app/test", label: "Test a submission", key: "4", icon: IconPlus },
 ] as const;
 
 function sectionFor(pathname: string) {
@@ -26,6 +27,7 @@ export function isTyping(target: EventTarget | null): boolean {
   return Boolean(el && (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName)));
 }
 
+/** Sidebar + sticky topbar app shell, as in design/prototype.html. The KPI strip sits above every section. */
 export function AppShell({ children }: { children: ReactNode }) {
   return (
     <ToastProvider>
@@ -33,15 +35,18 @@ export function AppShell({ children }: { children: ReactNode }) {
         <AppDataProvider>
           <Shortcuts />
           <div className="ambient" aria-hidden />
-          <div className="relative z-10 flex min-h-screen">
+          <div className="relative z-10 min-h-screen md:grid md:grid-cols-[232px_minmax(0,1fr)]">
             <Suspense fallback={<SidebarFrame active={null} />}>
               <Sidebar />
             </Suspense>
-            <div className="flex min-w-0 flex-1 flex-col md:pl-[244px]">
+            <div className="flex min-w-0 flex-col">
               <Suspense fallback={<TopbarFrame title="" />}>
                 <Topbar />
               </Suspense>
-              <main className="flex-1 px-4 pt-4 pb-24 md:px-6 md:pb-8">{children}</main>
+              <main className="flex-1 p-4 pb-24 md:p-5">
+                <Kpis />
+                {children}
+              </main>
             </div>
           </div>
           <Suspense fallback={null}>
@@ -76,63 +81,87 @@ function Sidebar() {
   return <SidebarFrame active={sectionFor(pathname).href} />;
 }
 
+/** "Oct 25 to 31" from the first and last submission on the map. */
+function useFieldworkDates(): string | null {
+  const { overview, map } = useAppData();
+  return useMemo(() => {
+    const points = map?.points ?? [];
+    if (!points.length) return null;
+    const tz = overview?.project.timezone ?? DEFAULT_TZ;
+    let first = points[0].captured_at;
+    let last = first;
+    for (const p of points) {
+      if (p.captured_at < first) first = p.captured_at;
+      if (p.captured_at > last) last = p.captured_at;
+    }
+    const [m0, d0] = fmtMonthDay(first, tz).split(" ");
+    const [m1, d1] = fmtMonthDay(last, tz).split(" ");
+    return m0 === m1 ? `${m0} ${d0} to ${d1}` : `${m0} ${d0} to ${m1} ${d1}`;
+  }, [map, overview]);
+}
+
 function SidebarFrame({ active }: { active: string | null }) {
   const { overview, live } = useAppData();
+  const dates = useFieldworkDates();
   const pending = overview?.kpis.pending_review;
   return (
-    <Glass
-      as="aside"
-      className="fixed inset-y-3 left-3 z-30 hidden w-[232px] flex-col rounded-2xl p-3 md:flex"
-      aria-label="Sections"
-    >
-      <div className="flex items-center gap-2.5 px-2 pt-1 pb-4">
-        <span className="grid h-7 w-7 place-items-center rounded-lg bg-accent/90 font-display text-[13px] font-bold text-white shadow-[0_0_24px_-4px_rgb(124_132_248/0.7)]">
-          Q
-        </span>
-        <div className="min-w-0">
-          <p className="truncate font-display text-[13px] font-semibold text-ink">Field QA Copilot</p>
-          <p className="truncate text-[11px] text-muted">{overview?.project.region ?? "Kisumu, Kenya"}</p>
-        </div>
+    <aside aria-label="Sections" className="frost-aside sticky top-0 hidden h-screen flex-col gap-1 px-2.5 py-3 md:flex">
+      <div className="flex items-center gap-[9px] px-2 pt-1.5 pb-3 font-display font-semibold">
+        <span className="logo" aria-hidden />
+        Field QA
+      </div>
+      <div className="mb-1.5 border-b border-line px-2 pt-2 pb-2.5 text-[12px] text-muted">
+        <b className="block text-[12.5px] font-medium text-ink">{overview?.project.name ?? "Household Water Access Survey"}</b>
+        {overview?.project.region.split(",")[0] ?? "Kisumu"}
+        {dates && ` · ${dates}`}
       </div>
       <nav className="flex flex-col gap-0.5">
         {SECTIONS.map((s) => {
           const current = active === s.href;
+          const count = s.href === "/app/queue" ? pending : undefined;
           return (
             <Link
               key={s.href}
               href={s.href}
               aria-current={current ? "page" : undefined}
-              className={`group flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-[13px] transition-colors ${
-                current ? "bg-white/[0.07] text-ink" : "text-muted hover:bg-white/[0.04] hover:text-ink"
+              className={`flex items-center gap-[9px] rounded-md px-2 py-1.5 font-medium ${
+                current ? "bg-white/[0.06] text-ink" : "text-muted hover:bg-hover hover:text-ink"
               }`}
             >
-              <s.icon className="h-4 w-4 flex-none opacity-80" />
-              <span className="flex-1 truncate">{s.label}</span>
-              {s.href === "/app/queue" && pending != null && pending > 0 && (
-                <span className="rounded-md bg-warn/15 px-1.5 font-mono text-[10.5px] text-warn">{pending}</span>
-              )}
-              <kbd className="kbd opacity-0 transition-opacity group-hover:opacity-100">{s.key}</kbd>
+              <s.icon className="h-[15px] w-[15px] flex-none" />
+              {s.label}
+              {count != null && <span className="ml-auto font-mono text-[11px] text-muted">{count}</span>}
+              <kbd className={`kbd ${count != null ? "ml-1.5" : "ml-auto"}`}>{s.key}</kbd>
             </Link>
           );
         })}
       </nav>
-      <div className="mt-auto space-y-2 px-2 pb-1 text-[11px] text-faint">
-        <p className="leading-snug">{overview?.project.name ?? "Household Water Access Survey"}</p>
-        <LiveBadge live={live} />
-        {overview && <p className="font-mono">engine {overview.engine_version}</p>}
+      <div className="mt-auto flex flex-col gap-1.5 border-t border-line px-2 pt-2.5 pb-1 text-[11.5px] text-faint">
+        <div>
+          <kbd className="kbd">J</kbd> <kbd className="kbd">K</kbd> move · <kbd className="kbd">A</kbd> approve
+        </div>
+        <div>
+          <kbd className="kbd">B</kbd> back-check · <kbd className="kbd">R</kbd> reject
+        </div>
+        <LiveStatus live={live} engine={overview?.engine_version} />
+        <Link href="/" className="text-muted hover:text-ink">
+          ← Back to intro
+        </Link>
       </div>
-    </Glass>
+    </aside>
   );
 }
 
-function LiveBadge({ live }: { live: "connecting" | "live" | "offline" }) {
-  const color = live === "live" ? "bg-ok" : live === "connecting" ? "bg-warn" : "bg-crit";
+function LiveStatus({ live, engine }: { live: "connecting" | "live" | "offline"; engine?: string }) {
+  const tone = live === "live" ? "st-ok" : live === "connecting" ? "st-warn" : "st-crit";
   const label = live === "live" ? "Live updates on" : live === "connecting" ? "Connecting…" : "Live updates off";
   return (
-    <p className="flex items-center gap-1.5 text-muted">
-      <span className={`dot ${color}`} aria-hidden />
-      {label}
-    </p>
+    <span className={`st ${tone} text-[11.5px]`}>
+      <span className="text-muted">
+        {label}
+        {engine && <span className="font-mono text-faint"> · engine {engine}</span>}
+      </span>
+    </span>
   );
 }
 
@@ -143,23 +172,23 @@ function Topbar() {
 
 function TopbarFrame({ title }: { title: string }) {
   const { overview } = useAppData();
+  const decisions = overview ? overview.kpis.flagged - overview.kpis.pending_review : null;
   return (
-    <Glass
-      as="header"
-      className="sticky top-3 z-20 mx-4 mt-3 flex h-12 items-center gap-3 rounded-xl px-4 md:mx-6"
-    >
-      <h1 className="font-display text-sm font-semibold text-ink">{title}</h1>
-      <span className="hidden text-[13px] text-faint sm:inline">{overview?.project.name}</span>
-      <div className="ml-auto flex items-center gap-3 text-[12px] text-muted">
+    <header className="frost-topbar sticky top-0 z-20 flex h-12 flex-none items-center justify-between gap-3 px-4 md:px-5">
+      <div className="flex min-w-0 items-center gap-2 font-medium">
+        <span className="hidden truncate text-muted sm:inline">{overview?.project.name}</span>
+        <span className="hidden text-faint sm:inline">/</span>
+        <h1 className="truncate font-sans text-[13.5px] font-medium tracking-normal">{title}</h1>
+      </div>
+      <span className="flex-none font-mono text-[11.5px] text-muted">
         {overview?.now_is_fixed && (
-          <span className="hidden items-center gap-1.5 sm:flex" title="The demo project runs on a fixed clock">
-            <span className="dot bg-accent" aria-hidden />
-            Project clock {fmtDateTime(overview.now, overview.project.timezone)}
+          <span className="hidden sm:inline" title="The demo project runs on a fixed clock">
+            clock {fmtDateTime(overview.now, overview.project.timezone)} ·{" "}
           </span>
         )}
-        <span className="rounded-md border border-line-strong px-1.5 py-0.5 text-[11px] text-muted">Synthetic data</span>
-      </div>
-    </Glass>
+        {decisions != null && `${decisions} ${decisions === 1 ? "decision" : "decisions"}`}
+      </span>
+    </header>
   );
 }
 
@@ -185,43 +214,39 @@ function MobileNav() {
   );
 }
 
-// Icons ----------------------------------------------------------------------------
+// Icons: the prototype's 16px line set. --------------------------------------------------
 
 type IconProps = { className?: string };
-const stroke = { fill: "none", stroke: "currentColor", strokeWidth: 1.6, strokeLinecap: "round", strokeLinejoin: "round" } as const;
+const stroke = { fill: "none", stroke: "currentColor", strokeWidth: 1.6 } as const;
 
 function IconGrid({ className }: IconProps) {
   return (
     <svg viewBox="0 0 16 16" className={className} aria-hidden {...stroke}>
-      <rect x="2" y="2" width="5" height="5" rx="1.2" />
-      <rect x="9" y="2" width="5" height="5" rx="1.2" />
-      <rect x="2" y="9" width="5" height="5" rx="1.2" />
-      <rect x="9" y="9" width="5" height="5" rx="1.2" />
+      <rect x="2" y="2" width="5" height="5" rx="1" />
+      <rect x="9" y="2" width="5" height="5" rx="1" />
+      <rect x="2" y="9" width="5" height="5" rx="1" />
+      <rect x="9" y="9" width="5" height="5" rx="1" />
     </svg>
   );
 }
-function IconInbox({ className }: IconProps) {
+function IconList({ className }: IconProps) {
   return (
     <svg viewBox="0 0 16 16" className={className} aria-hidden {...stroke}>
-      <path d="M2 9.5 3.6 3.4A1 1 0 0 1 4.6 2.6h6.8a1 1 0 0 1 1 .8L14 9.5V13a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V9.5Z" />
-      <path d="M2 9.5h3.2l.9 1.6h3.8l.9-1.6H14" />
+      <path d="M2 4h12M2 8h12M2 12h8" />
     </svg>
   );
 }
-function IconSliders({ className }: IconProps) {
+function IconBars({ className }: IconProps) {
   return (
     <svg viewBox="0 0 16 16" className={className} aria-hidden {...stroke}>
-      <path d="M3 4h10M3 8h10M3 12h10" />
-      <circle cx="6" cy="4" r="1.4" fill="currentColor" />
-      <circle cx="10.5" cy="8" r="1.4" fill="currentColor" />
-      <circle cx="5" cy="12" r="1.4" fill="currentColor" />
+      <path d="M3 13V8M8 13V3M13 13v-7" />
     </svg>
   );
 }
-function IconSend({ className }: IconProps) {
+function IconPlus({ className }: IconProps) {
   return (
     <svg viewBox="0 0 16 16" className={className} aria-hidden {...stroke}>
-      <path d="M14 2 7 9M14 2l-4.5 12L7 9 2 6.5 14 2Z" />
+      <path d="M8 3v10M3 8h10" />
     </svg>
   );
 }
