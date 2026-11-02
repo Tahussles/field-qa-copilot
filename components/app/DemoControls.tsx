@@ -201,14 +201,14 @@ function DemoRunner({ open, onClose }: { open: boolean; onClose: () => void }) {
     try {
       const res = await withPasscode((code) => api.demoReset(code));
       if (res) {
+        setClock(null);
+        setLast(null);
+        await load(); // fresh progress first, so the panel never shows the old run next to the toast
         toast({
           tone: "ok",
           title: "Demo reset",
           body: `removed ${res.deleted.submissions} live submissions and ${res.deleted.reviews} reviews`,
         });
-        setClock(null);
-        setLast(null);
-        await load();
       }
     } catch (e) {
       toast({ tone: "error", title: "Reset failed", body: e instanceof Error ? e.message : undefined });
