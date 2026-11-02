@@ -147,8 +147,10 @@ def step(repo: Repository, count: int | None = None, until: datetime | None = No
                 "duplicate": code == 200,
             })
     finally:
-        repo.write_truth(labels)
-        if latest is not None:
+        if repo.write_truth(labels) < len(labels):
+            # A reset ran while this step was sending: its rows are gone, so leave the clock alone.
+            error = "the demo was reset while this step ran; it stopped"
+        elif latest is not None:
             repo.set_as_of(_iso(latest), forward_only=True)
     return {
         "results": results,

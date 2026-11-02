@@ -200,3 +200,28 @@ def test_landing_replays_yesterday_with_aggregate_counters(wave):
     assert counters["fabricated"] == sum(s.is_fabricated for s in wave.submissions)
     assert 0 < counters["precision"] <= 1 and 0 < counters["recall"] <= 1
     assert "fraud_type" not in response.text and "is_fabricated" not in response.text
+
+
+def test_a_reset_during_a_step_stops_the_step_cleanly(wave, live, monkeypatch):
+    """A reset from another tab deletes rows a running step just sent: the step ends without an error
+    status, flags it, and leaves the clock where the reset put it."""
+    repo = fresh_repo(wave)
+    ingest = demo.service.ingest
+    calls = []
+
+    def ingest_then_reset(repo_, body):
+        out = ingest(repo_, body)
+        calls.append(body.client_submission_id)
+        if len(calls) == 2:
+            demo.reset(repo_)
+        return out
+
+    monkeypatch.setattr(demo.service, "ingest", ingest_then_reset)
+    with client_for(repo) as client:
+        response = client.post("/api/py/demo/step", json={"count": 4}, headers=AUTH)
+    body = response.json()
+    assert response.status_code == 200 and "reset" in body["error"]
+    assert repo.as_of() == cfg.PROJECT_AS_OF
+    # What the step sent after the reset is stored with its labels; what the reset removed is gone.
+    stored = {r["id"] for r in repo.submissions(source="simulator")}
+    assert stored == {r["id"] for r in body["results"][2:]} and set(repo._truth) >= stored

@@ -68,7 +68,7 @@ class Repository(Protocol):
 
     # Demo controls (/demo/*) ----------------------------------------------------
     def client_ids(self, sources: Iterable[str]) -> dict[str, str]: ...  # client_submission_id -> id
-    def write_truth(self, rows: list[dict]) -> None: ...  # upsert ground truth for rows the demo sent
+    def write_truth(self, rows: list[dict]) -> int: ...  # upsert labels for rows the demo sent; skips deleted rows
     def delete_submissions(self, sources: Iterable[str]) -> dict[str, int]: ...  # with dependents; counts per table
     def delete_reviews(self) -> int: ...  # every review in the project
 
@@ -283,8 +283,10 @@ class InMemoryRepo:
 
     def write_truth(self, rows):
         with self._mutex:
-            for row in rows:
+            kept = [r for r in rows if r["submission_id"] in self._submissions]
+            for row in kept:
                 self._truth[row["submission_id"]] = dict(row)
+            return len(kept)
 
     def delete_submissions(self, sources):
         wanted = set(sources)
@@ -382,7 +384,10 @@ class SupabaseRepo:
         if source:
             filters["source"] = f"eq.{source}"
         columns = LIGHT_COLUMNS if light else ENGINE_COLUMNS + ",client_submission_id,gps_accuracy_m,source,project_id"
-        return self._db.select("submissions", columns, **filters)
+        # Paged reads: a row inserted mid-read (a phone syncing) can shift a page boundary
+        # and repeat a row on the next page. Keep each submission once.
+        rows = self._db.select("submissions", columns, **filters)
+        return list({r["id"]: r for r in rows}.values())
 
     def scores(self, submission_ids=None):
         columns = "submission_id,score,flagged,engine_version,scored_at"
@@ -476,8 +481,22 @@ class SupabaseRepo:
         return {r["client_submission_id"]: r["id"] for r in rows}
 
     def write_truth(self, rows):
-        if rows:
+        try:
             self._db.upsert("synthetic_truth", rows, on_conflict="submission_id")
+            return len(rows)
+        except SupabaseError as error:
+            if error.code != "23503":
+                raise
+        # A reset deleted some of these submissions meanwhile: write the rest one by one.
+        written = 0
+        for row in rows:
+            try:
+                self._db.upsert("synthetic_truth", [row], on_conflict="submission_id")
+                written += 1
+            except SupabaseError as error:
+                if error.code != "23503":
+                    raise
+        return written
 
     def delete_submissions(self, sources):
         """Counts first (dependents through an inner join), then one delete that cascades to all of them."""
