@@ -97,6 +97,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       .channel("dashboard")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "submissions" }, () => refresh())
       .on("postgres_changes", { event: "*", schema: "public", table: "scores" }, (payload) => {
+        // A demo reset deletes rows (cascading to scores): DELETE carries no new row, just refresh.
+        if (payload.eventType === "DELETE") return refresh();
         const row = payload.new as { submission_id?: string; flagged?: boolean };
         if (!row?.submission_id) return;
         const was = flagged.current.get(row.submission_id) ?? false;

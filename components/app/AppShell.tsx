@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Suspense, useEffect, useMemo, type ReactNode } from "react";
 
 import { AppDataProvider, useAppData } from "@/components/app/AppData";
+import { DemoProvider, useDemo } from "@/components/app/DemoControls";
 import { Kpis } from "@/components/app/Kpis";
 import { PasscodeProvider } from "@/components/app/Passcode";
 import { ToastProvider } from "@/components/app/Toasts";
@@ -33,25 +34,27 @@ export function AppShell({ children }: { children: ReactNode }) {
     <ToastProvider>
       <PasscodeProvider>
         <AppDataProvider>
-          <Shortcuts />
-          <div className="ambient" aria-hidden />
-          <div className="relative z-10 min-h-screen md:grid md:grid-cols-[232px_minmax(0,1fr)]">
-            <Suspense fallback={<SidebarFrame active={null} />}>
-              <Sidebar />
-            </Suspense>
-            <div className="flex min-w-0 flex-col">
-              <Suspense fallback={<TopbarFrame title="" />}>
-                <Topbar />
+          <DemoProvider>
+            <Shortcuts />
+            <div className="ambient" aria-hidden />
+            <div className="relative z-10 min-h-screen md:grid md:grid-cols-[232px_minmax(0,1fr)]">
+              <Suspense fallback={<SidebarFrame active={null} />}>
+                <Sidebar />
               </Suspense>
-              <main className="flex-1 p-4 pb-24 md:p-5">
-                <Kpis />
-                {children}
-              </main>
+              <div className="flex min-w-0 flex-col">
+                <Suspense fallback={<TopbarFrame title="" />}>
+                  <Topbar />
+                </Suspense>
+                <main className="flex-1 p-4 pb-24 md:p-5">
+                  <Kpis />
+                  {children}
+                </main>
+              </div>
             </div>
-          </div>
-          <Suspense fallback={null}>
-            <MobileNav />
-          </Suspense>
+            <Suspense fallback={null}>
+              <MobileNav />
+            </Suspense>
+          </DemoProvider>
         </AppDataProvider>
       </PasscodeProvider>
     </ToastProvider>
@@ -60,10 +63,16 @@ export function AppShell({ children }: { children: ReactNode }) {
 
 function Shortcuts() {
   const router = useRouter();
+  const { toggle } = useDemo();
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       if (event.metaKey || event.ctrlKey || event.altKey || isTyping(event.target)) return;
       if (document.querySelector("[aria-modal='true']")) return;
+      if (event.key === "d" || event.key === "D") {
+        event.preventDefault();
+        toggle();
+        return;
+      }
       const section = SECTIONS.find((s) => s.key === event.key);
       if (section) {
         event.preventDefault();
@@ -72,7 +81,7 @@ function Shortcuts() {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [router]);
+  }, [router, toggle]);
   return null;
 }
 
@@ -102,6 +111,7 @@ function useFieldworkDates(): string | null {
 
 function SidebarFrame({ active }: { active: string | null }) {
   const { overview, live } = useAppData();
+  const demo = useDemo();
   const dates = useFieldworkDates();
   const pending = overview?.kpis.pending_review;
   return (
@@ -144,6 +154,14 @@ function SidebarFrame({ active }: { active: string | null }) {
           <kbd className="kbd">B</kbd> back-check · <kbd className="kbd">R</kbd> reject
         </div>
         <LiveStatus live={live} engine={overview?.engine_version} />
+        <button
+          type="button"
+          onClick={demo.toggle}
+          aria-expanded={demo.open}
+          className="flex items-center text-left text-muted hover:text-ink"
+        >
+          Demo controls <kbd className="kbd ml-auto">D</kbd>
+        </button>
         <Link href="/" className="text-muted hover:text-ink">
           ← Back to intro
         </Link>
@@ -172,6 +190,7 @@ function Topbar() {
 
 function TopbarFrame({ title }: { title: string }) {
   const { overview } = useAppData();
+  const demo = useDemo();
   const decisions = overview ? overview.kpis.flagged - overview.kpis.pending_review : null;
   return (
     <header className="frost-topbar sticky top-0 z-20 flex h-12 flex-none items-center justify-between gap-3 px-4 md:px-5">
@@ -187,6 +206,9 @@ function TopbarFrame({ title }: { title: string }) {
           </span>
         )}
         {decisions != null && `${decisions} ${decisions === 1 ? "decision" : "decisions"}`}
+        <button type="button" onClick={demo.toggle} aria-expanded={demo.open} className="btn btn-sm ml-2 font-sans md:hidden">
+          Demo
+        </button>
       </span>
     </header>
   );

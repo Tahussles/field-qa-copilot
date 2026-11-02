@@ -229,3 +229,76 @@ export interface IngestResponse {
   healed: boolean;
   timing_ms?: Record<string, number>;
 }
+
+// Demo controls (/demo/*) and the landing stage (/landing) -----------------------------
+
+export interface DemoProgress {
+  sent: number;
+  total: number;
+  /** Live-day submissions sent so far that are flagged now. */
+  flagged: number;
+  /** projects.as_of: the latest field time sent. */
+  field_clock: string | null;
+  /** When the next pending submission syncs in the field; null when the live day is done. */
+  next_field_time: string | null;
+  done: boolean;
+}
+
+export interface DemoMoment {
+  key: string;
+  label: string;
+  codes: string[];
+  field_time: string;
+  client_submission_id: string;
+  submissions: number;
+  sent: boolean;
+}
+
+export interface DemoStatus {
+  seed: number;
+  progress: DemoProgress;
+  moments: DemoMoment[];
+}
+
+export interface DemoStepResult {
+  results: {
+    id: string;
+    code: string;
+    field_time: string;
+    score: number;
+    band: Band;
+    flagged: boolean;
+    fired: CheckKey[];
+    changed: { submission_id: string; flagged: boolean }[];
+    duplicate: boolean;
+  }[];
+  error: string | null;
+  progress: DemoProgress;
+  timing_ms: number;
+}
+
+export interface DemoResetResult {
+  deleted: Record<string, number>;
+  rescored: { submissions: number; flagged: number; rows_written: number };
+  as_of: string;
+  timing_ms: number;
+}
+
+export interface LandingPoint {
+  id: string;
+  code: string;
+  lat: number;
+  lng: number;
+  score: number;
+  band: Band;
+  fired: CheckKey[];
+  captured_at: string;
+}
+
+export interface LandingData {
+  project: { name: string; region: string };
+  date: string;
+  thresholds: { review: number; watch: number };
+  points: LandingPoint[];
+  counters: { submissions: number; fabricated: number; flagged: number; precision: number | null; recall: number | null };
+}
