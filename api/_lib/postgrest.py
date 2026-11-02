@@ -51,7 +51,8 @@ class Supabase:
         return cls(url, key)
 
     def _check(self, response: httpx.Response) -> httpx.Response:
-        if response.is_error:
+        # 3xx counts too: PostgREST answers 300 for an ambiguous embed.
+        if response.status_code >= 300:
             code = None
             try:
                 code = response.json().get("code")

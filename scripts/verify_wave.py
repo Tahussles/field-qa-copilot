@@ -50,7 +50,7 @@ def main() -> int:
     params = Params.from_config(config[0]["params"] if config else None, timezone=project["timezone"])
     contributors = [Contributor.from_row(r) for r in rows["contributors"]]
     stored_verdicts = db.select("ai_verdicts", "submission_id,pair_submission_id,kind,model,verdict,"
-                                               "submissions!inner(project_id)", **joined)
+                                               "submissions!ai_verdicts_submission_id_fkey!inner(project_id)", **joined)
     wave_ids = {r["id"] for r in rows["submissions"]}
     outside = [v for v in stored_verdicts if v["submission_id"] not in wave_ids
                or (v["pair_submission_id"] and v["pair_submission_id"] not in wave_ids)]

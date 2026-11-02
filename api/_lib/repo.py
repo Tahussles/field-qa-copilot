@@ -662,10 +662,12 @@ class SupabaseRepo:
     # AI layer -------------------------------------------------------------------------
 
     _VERDICT_COLUMNS = "id,submission_id,pair_submission_id,kind,model,verdict,created_at"
+    # ai_verdicts has two keys into submissions (the pair): embed through submission_id.
+    _VERDICT_PROJECT = "submissions!ai_verdicts_submission_id_fkey!inner(project_id)"
 
     def verdicts(self, submission_ids=None):
         if submission_ids is None:
-            rows = self._db.select("ai_verdicts", self._VERDICT_COLUMNS + ",submissions!inner(project_id)",
+            rows = self._db.select("ai_verdicts", self._VERDICT_COLUMNS + "," + self._VERDICT_PROJECT,
                                    order="id", **{"submissions.project_id": f"eq.{self._pid}"})
             for row in rows:
                 row.pop("submissions", None)
@@ -680,7 +682,7 @@ class SupabaseRepo:
         return list(out.values())
 
     def verdict_version(self):
-        row, count = self._db.first("ai_verdicts", "created_at,submissions!inner(project_id)", order="created_at.desc",
+        row, count = self._db.first("ai_verdicts", "created_at," + self._VERDICT_PROJECT, order="created_at.desc",
                                     **{"submissions.project_id": f"eq.{self._pid}"})
         return count, row["created_at"] if row else None
 
