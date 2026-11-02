@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { api } from "@/lib/api";
-import { CHECK_TITLE, COLORS, SOURCE_LABEL } from "@/lib/checks";
+import { CHECK_STRONG, CHECK_TITLE, COLORS, SOURCE_LABEL } from "@/lib/checks";
 import { fmtDuration, fmtLocalDate, fmtPct, fmtTime, localDate, localHours, median, shortId } from "@/lib/format";
 import type { CheckResult, MapData, MapPoint, SubmissionDetail } from "@/lib/types";
 
@@ -17,18 +17,20 @@ interface CardProps {
   tz: string;
 }
 
+/** The prototype's evidence card: hairline box, coloured left edge, title with its weight. */
 function Card({ check, children }: { check: CheckResult; children: ReactNode }) {
   return (
-    <section className="panel p-4" aria-label={CHECK_TITLE[check.key]}>
-      <div className="mb-3 flex items-center gap-2">
-        <span className="dot bg-warn" aria-hidden />
-        <h3 className="text-[13px] font-medium text-ink">{CHECK_TITLE[check.key]}</h3>
-        <span className="ml-auto font-mono text-[11px] text-faint">+{check.weight}</span>
-      </div>
+    <section className={`card ${CHECK_STRONG.has(check.key) ? "card-crit" : ""}`} aria-label={CHECK_TITLE[check.key]}>
+      <h3>
+        {CHECK_TITLE[check.key]}
+        <span className="w">+{check.weight}</span>
+      </h3>
       {children}
     </section>
   );
 }
+
+const B = ({ children }: { children: ReactNode }) => <b className="font-mono font-medium text-ink">{children}</b>;
 
 const num = (v: unknown) => (typeof v === "number" ? v : Number(v ?? 0));
 
@@ -73,24 +75,22 @@ function TooFast({ check, detail, map }: CardProps) {
   ];
   return (
     <Card check={check}>
-      <p className="text-[13px] text-ink-2">
-        <span className="font-display text-xl font-semibold text-warn">{fmtDuration(duration)}</span>{" "}
-        <span className="text-muted">
-          against a {fmtDuration(threshold)} minimum for {kind}s. Typical {kind}: {fmtDuration(kindMedian)}.
-        </span>
+      <p>
+        Took <B>{fmtDuration(duration)}</B>. Typical {kind}: {fmtDuration(kindMedian)}; the check flags anything under{" "}
+        {fmtDuration(threshold)}.
       </p>
-      <div className="relative mt-4 h-9" aria-hidden>
-        <div className="absolute inset-x-0 top-3 h-2 rounded-full bg-white/[0.05]" />
-        <div className="absolute top-3 left-0 h-2 rounded-full bg-warn" style={{ width: `${(duration / max) * 100}%` }} />
+      <div className="relative mt-2 h-7 max-w-[420px]" aria-hidden>
+        <div className="absolute inset-x-0 top-3 h-1 rounded-sm bg-white/[0.07]" />
+        <div className="absolute top-3 left-0 h-1 rounded-sm bg-crit" style={{ width: `${(duration / max) * 100}%` }} />
         {markers.map((m) =>
           m.value == null ? null : (
-            <div key={m.label} className="absolute top-0 h-8" style={{ left: `${(m.value / max) * 100}%` }}>
-              <div className="h-7 border-l-2" style={{ borderColor: m.color, borderStyle: m.dashed ? "dashed" : "solid" }} />
+            <div key={m.label} className="absolute top-0.5" style={{ left: `${(m.value / max) * 100}%` }}>
+              <div className="h-6 border-l-2" style={{ borderColor: m.color, borderStyle: m.dashed ? "dashed" : "solid" }} />
             </div>
           ),
         )}
       </div>
-      <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[11.5px] text-muted">
+      <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[11.5px] text-faint">
         {markers.map((m) => (
           <span key={m.label} className="flex items-center gap-1.5">
             <span className="h-3 border-l-2" style={{ borderColor: m.color, borderStyle: m.dashed ? "dashed" : "solid" }} />
@@ -144,21 +144,20 @@ function SameSpot({ check, detail, map, tz }: CardProps) {
     <Card check={check}>
       <div className="flex flex-col gap-4 sm:flex-row">
         <figure className="flex-none">
-          <svg viewBox={`${-size / 2} ${-size / 2} ${size} ${size}`} className="h-[220px] w-[220px]" role="img"
+          <svg viewBox={`${-size / 2} ${-size / 2} ${size} ${size}`} className="mt-1.5 h-[220px] w-[220px] rounded-md border border-line bg-bg" role="img"
             aria-label={`${e.neighbour_count} other interviews within ${e.radius_m} metres on the same day`}>
-            <rect x={-size / 2} y={-size / 2} width={size} height={size} rx="10" fill="rgba(255,255,255,0.02)" />
             <circle r={outer} fill="none" stroke="rgba(255,255,255,0.06)" />
-            <circle r={ring} fill="rgba(235,90,87,0.07)" stroke={COLORS.crit} strokeDasharray="4 4" />
+            <circle r={ring} fill={COLORS.crit} fillOpacity="0.1" stroke={COLORS.crit} strokeOpacity="0.7" strokeDasharray="3 3" />
             {placed.map(({ p, x, y }) => {
               const near = neighbourIds.has(p.id);
               const { cx, cy, beyond } = project(x, y);
               return beyond ? (
-                <circle key={p.id} cx={cx} cy={cy} r={3} fill="#0e0f11" stroke={COLORS.pass} />
+                <circle key={p.id} cx={cx} cy={cy} r={3} fill="#08090a" stroke={COLORS.pass} />
               ) : (
-                <circle key={p.id} cx={cx} cy={cy} r={near ? 4.5 : 3.2} fill={near ? COLORS.warn : COLORS.pass} stroke="#08090a" />
+                <circle key={p.id} cx={cx} cy={cy} r={3} fill={near ? COLORS.crit : COLORS.pass} fillOpacity="0.9" />
               );
             })}
-            <circle r="5.5" fill={COLORS.crit} stroke="#f1f2f4" strokeWidth="1.5" />
+            <circle r="4.5" fill={COLORS.accent} fillOpacity="0.9" />
             <text x={ring * 0.72 + 3} y={-ring * 0.72 - 3} fill={COLORS.muted} fontSize="10">
               {Math.round(e.radius_m)} m
             </text>
@@ -168,15 +167,16 @@ function SameSpot({ check, detail, map, tz }: CardProps) {
           </svg>
           <figcaption className="mt-1 text-center text-[10.5px] text-faint">square-root scale · hollow = farther away</figcaption>
         </figure>
-        <div className="min-w-0 flex-1 text-[13px]">
-          <p className="text-ink-2">
-            {e.neighbour_count} other {e.neighbour_count === 1 ? "interview" : "interviews"} by {detail.contributor.code} within{" "}
-            {Math.round(e.radius_m)} m on {fmtLocalDate(e.local_date)}. {sameDay.length + 1} that day in total.
+        <div className="min-w-0 flex-1">
+          <p>
+            <B>{e.neighbour_count}</B> other {e.neighbour_count === 1 ? "interview" : "interviews"} by {detail.contributor.code} on{" "}
+            {fmtLocalDate(e.local_date)} were logged within {Math.round(e.radius_m)} m ({sameDay.length + 1} that day in total).
+            Households are usually hundreds of metres apart.
           </p>
           <ul className="mt-2 space-y-1 text-[12.5px]">
             {e.neighbours.slice(0, 8).map((n) => (
               <li key={n.submission_id} className="flex items-center gap-2">
-                <span className="dot bg-warn" aria-hidden />
+                <span className="dot bg-crit" aria-hidden />
                 <Link href={`/app/queue/${n.submission_id}`} className="font-mono text-ink hover:text-accent">
                   {shortId(n.submission_id)}
                 </Link>
@@ -199,9 +199,7 @@ function Highlighted({ text, words }: { text: string; words: Set<string> }) {
     <>
       {parts.map((part, i) =>
         words.has(part.toLowerCase()) ? (
-          <mark key={i} className="rounded-[3px] bg-warn/20 px-0.5 text-ink">
-            {part}
-          </mark>
+          <mark key={i}>{part}</mark>
         ) : (
           <span key={i}>{part}</span>
         ),
@@ -231,23 +229,21 @@ function CopiedText({ check, detail }: CardProps) {
   const shown = partner?.id === best.submission_id ? partner : null;
   return (
     <Card check={check}>
-      <p className="text-[13px] text-muted">
-        <span className="font-display text-xl font-semibold text-warn">{fmtPct(best.similarity)}</span> similar to{" "}
+      <p>
+        <B>{fmtPct(best.similarity)}</B> word overlap with{" "}
         <Link href={`/app/queue/${best.submission_id}`} className="font-mono text-ink hover:text-accent">
           {shortId(best.submission_id)}
         </Link>{" "}
-        ({best.relation === "same_device" ? "same phone, another account" : "same contributor"}). Shared words highlighted.
+        ({best.relation === "same_device" ? "same phone, another account" : "same contributor"}).
       </p>
-      <div className="mt-3 grid gap-2 md:grid-cols-2">
+      <div className="grid gap-2 md:grid-cols-2">
         {[
-          { label: `This submission · ${detail.contributor.code}`, text: detail.submission.answers.open_text ?? "" },
-          { label: shown ? `${shortId(shown.id)} · ${shown.code}` : "Matched submission", text: shown?.text ?? "Loading…" },
+          { label: shortId(detail.submission.id), text: detail.submission.answers.open_text ?? "" },
+          { label: shown ? `${shortId(shown.id)} · ${shown.code}` : shortId(best.submission_id), text: shown?.text ?? "Loading…" },
         ].map((side) => (
-          <div key={side.label} className="rounded-lg border border-line bg-black/20 p-3">
-            <p className="mb-1.5 text-[11px] text-faint">{side.label}</p>
-            <p className="text-[13px] leading-relaxed text-ink-2">
-              <Highlighted text={side.text} words={words} />
-            </p>
+          <div key={side.label} className="side-box">
+            <span className="lbl">{side.label}</span>
+            <Highlighted text={side.text} words={words} />
           </div>
         ))}
       </div>
@@ -261,13 +257,14 @@ function StraightLining({ check }: CardProps) {
   const values = (check.evidence.values as number[]) ?? [];
   return (
     <Card check={check}>
-      <p className="mb-3 text-[13px] text-muted">All 8 satisfaction answers are the same.</p>
-      <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-8">
+      <p>
+        All 8 satisfaction items answered <B>{values[0]}</B>. Real respondents almost always vary.
+      </p>
+      <div className="likert">
         {values.map((v, i) => (
-          <div key={i} className="rounded-md border border-line bg-black/20 px-1 py-1.5 text-center">
-            <p className="font-display text-base font-semibold text-warn">{v}</p>
-            <p className="truncate text-[10px] text-faint">{SATISFACTION_ITEMS[i]}</p>
-          </div>
+          <span key={i} title={SATISFACTION_ITEMS[i]}>
+            {v}
+          </span>
         ))}
       </div>
     </Card>
@@ -284,27 +281,26 @@ function VoiceVsForm({ check, detail }: CardProps) {
   return (
     <Card check={check}>
       <div className="grid gap-2 sm:grid-cols-2">
-        <div className="rounded-lg border border-line bg-black/20 p-3">
-          <p className="text-[11px] text-faint">Form answer</p>
-          <p className="mt-1 text-[13px] text-ink">{SOURCE_LABEL[e.form_source] ?? e.form_source}</p>
+        <div className="side-box">
+          <span className="lbl">Form says</span>
+          {SOURCE_LABEL[e.form_source] ?? e.form_source}
         </div>
-        <div className="rounded-lg border border-warn/30 bg-warn/[0.05] p-3">
-          <p className="text-[11px] text-faint">Voice note says</p>
-          <p className="mt-1 text-[13px] text-warn">{SOURCE_LABEL[e.voice_source] ?? e.voice_source}</p>
+        <div className="side-box">
+          <span className="lbl">Voice note says ({SOURCE_LABEL[e.voice_source] ?? e.voice_source})</span>
+          {at >= 0 ? (
+            <>
+              {transcript.slice(0, at)}
+              <mark>{transcript.slice(at, end)}</mark>
+              {transcript.slice(end)}
+            </>
+          ) : (
+            transcript
+          )}
         </div>
       </div>
-      <blockquote className="mt-3 border-l-2 border-line-strong pl-3 text-[13px] leading-relaxed text-ink-2">
-        “{at >= 0 ? (
-          <>
-            {transcript.slice(0, at)}
-            <mark className="rounded-[3px] bg-warn/25 px-0.5 text-ink">{transcript.slice(at, end)}</mark>
-            {transcript.slice(end)}
-          </>
-        ) : (
-          transcript
-        )}”
-      </blockquote>
-      <p className="mt-2 text-[11.5px] text-faint">Keyword match: the first source word in the transcript decides. Round 7 replaces this with a model.</p>
+      <p className="mt-2 text-[12px] !text-faint">
+        Keyword match: the first source word in the transcript decides. Round 7 has a model judge the contradiction.
+      </p>
     </Card>
   );
 }
@@ -316,18 +312,18 @@ function OffHours({ check, detail, tz }: CardProps) {
   const pct = (h: number) => `${(h / 24) * 100}%`;
   return (
     <Card check={check}>
-      <p className="text-[13px] text-muted">
-        Captured at <span className="font-display text-xl font-semibold text-warn">{fmtTime(detail.submission.captured_at, tz)}</span>{" "}
-        local time. Fieldwork runs roughly 08:00 to 19:30; the check fires from 21:00 to 06:00.
+      <p>
+        Captured at <B>{fmtTime(detail.submission.captured_at, tz)}</B> local time. Fieldwork runs roughly 08:00 to 19:30; the
+        check fires from 21:00 to 06:00.
       </p>
-      <div className="relative mt-4 h-8" aria-hidden>
+      <div className="relative mt-2 h-8 max-w-[520px]" aria-hidden>
         <div className="absolute inset-x-0 top-2.5 h-3 rounded-full bg-white/[0.04]" />
         <div className="absolute top-2.5 h-3 rounded-l-full bg-crit/25" style={{ left: 0, width: pct(6) }} />
         <div className="absolute top-2.5 h-3 rounded-r-full bg-crit/25" style={{ left: pct(21), width: pct(3) }} />
         <div className="absolute top-2.5 h-3 bg-ok/25" style={{ left: pct(8), width: pct(11.5) }} />
         <div className="absolute top-0 h-8 border-l-2 border-warn" style={{ left: pct(hour) }} />
       </div>
-      <div className="mt-1 flex justify-between font-mono text-[10.5px] text-faint">
+      <div className="mt-1 flex max-w-[520px] justify-between font-mono text-[10.5px] text-faint">
         {["00", "06", "12", "18", "24"].map((h) => (
           <span key={h}>{h}:00</span>
         ))}
@@ -342,15 +338,15 @@ function SharedDevice({ check }: CardProps) {
   const e = check.evidence as { device_id: string; accounts: { code: string; kind: string; submissions: number }[] };
   return (
     <Card check={check}>
-      <p className="text-[13px] text-muted">
-        Phone <span className="font-mono text-ink-2">{e.device_id}</span> has submitted for {e.accounts.length} accounts.
+      <p>
+        Phone <B>{e.device_id}</B> has submitted for <B>{e.accounts.length}</B> accounts.
       </p>
-      <ul className="mt-3 divide-y divide-line rounded-lg border border-line">
+      <ul className="divide-y divide-line rounded-md border border-line bg-bg">
         {e.accounts.map((a) => (
-          <li key={a.code} className="flex items-center gap-3 px-3 py-2 text-[13px]">
+          <li key={a.code} className="flex items-center gap-3 px-2.5 py-1.5 text-[12.5px]">
             <span className="font-mono text-ink">{a.code}</span>
             <span className="text-muted capitalize">{a.kind}</span>
-            <span className="ml-auto tabular-nums text-muted">{a.submissions} submissions</span>
+            <span className="ml-auto font-mono tabular-nums text-muted">{a.submissions} submissions</span>
           </li>
         ))}
       </ul>
@@ -370,11 +366,11 @@ function Burst({ check, detail, map, tz }: CardProps) {
     .filter((t): t is { id: string; at: string } => Boolean(t.at));
   return (
     <Card check={check}>
-      <p className="text-[13px] text-muted">
-        <span className="font-display text-xl font-semibold text-warn">{e.max_in_window}</span> submissions by{" "}
-        {detail.contributor.code} inside {e.window_minutes} minutes ({fmtTime(e.window_start, tz)}–{fmtTime(e.window_end, tz)}).
+      <p>
+        <B>{e.max_in_window}</B> submissions by {detail.contributor.code} inside {e.window_minutes} minutes (
+        {fmtTime(e.window_start, tz)}–{fmtTime(e.window_end, tz)}).
       </p>
-      <div className="relative mt-4 h-10" aria-hidden>
+      <div className="relative mt-2 h-10 max-w-[520px]" aria-hidden>
         <div className="absolute inset-x-0 top-4 h-px bg-line-strong" />
         {times.map((t) => {
           const left = ((new Date(t.at).getTime() - start) / Math.max(end - start, 1)) * 100;
@@ -388,7 +384,7 @@ function Burst({ check, detail, map, tz }: CardProps) {
           );
         })}
       </div>
-      <div className="flex justify-between font-mono text-[10.5px] text-faint">
+      <div className="flex max-w-[520px] justify-between font-mono text-[10.5px] text-faint">
         <span>{fmtTime(e.window_start, tz)}</span>
         <span>{fmtTime(e.window_end, tz)}</span>
       </div>
