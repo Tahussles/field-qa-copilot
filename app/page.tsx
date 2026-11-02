@@ -44,7 +44,7 @@ export default function Home() {
         <section className="how" aria-label="How it works">
           <div>
             <span className="n">01 · Check</span>
-            <h3>Eight checks on every interview</h3>
+            <h2>Eight checks on every interview</h2>
             <p>
               Too fast, same spot, copied answers, straight-lining, voice note vs form, off-hours, shared device and bursts.
               Cheap, explainable, run the moment data syncs.
@@ -52,7 +52,7 @@ export default function Home() {
           </div>
           <div>
             <span className="n">02 · Explain</span>
-            <h3>Evidence, not a black box</h3>
+            <h2>Evidence, not a black box</h2>
             <p>
               Each flag shows why: the cluster on a map, the two copied answers side by side, the voice note that contradicts
               the form.
@@ -60,7 +60,7 @@ export default function Home() {
           </div>
           <div>
             <span className="n">03 · Decide</span>
-            <h3>A human makes every call</h3>
+            <h2>A human makes every call</h2>
             <p>
               Reviewers approve, reject or send a supervisor to back-check. A morning brief tells the lead researcher who to
               look at first.
