@@ -1,0 +1,166 @@
+{
+  "generated_at": "2026-11-02T23:34:49+00:00",
+  "engine_version": "0.3.0",
+  "seeds": [
+    201,
+    202
+  ],
+  "model": "claude-haiku-5-5",
+  "rules_only_run": false,
+  "calls": {
+    "total": 3483,
+    "consistency": 3319,
+    "paraphrase": 164,
+    "verdicts": 3481,
+    "failed": 2,
+    "median_latency_ms": 1385
+  },
+  "cost_usd": {
+    "estimated_before_run": 0.8701,
+    "spent_this_run": 0.583,
+    "all_cached_calls": 0.583
+  },
+  "planted_per_wave": {
+    "speeder": 23.5,
+    "contradiction": 22.0,
+    "copypaste": 19.5,
+    "multi_account": 29.0,
+    "curbstone": 19.5,
+    "night": 9.5,
+    "burst": 25.5
+  },
+  "rules": {
+    "combined": {
+      "submissions": 1678.5,
+      "fabricated": 148.5,
+      "flagged": 122.5,
+      "precision": 0.869,
+      "recall": 0.7169,
+      "false_positives": 16,
+      "false_negatives": 42
+    },
+    "per_check": {
+      "too_fast": {
+        "fires_on": 61.5,
+        "precision": 0.8208,
+        "recall": 0.3399
+      },
+      "same_spot": {
+        "fires_on": 72,
+        "precision": 0.1935,
+        "recall": 0.0945
+      },
+      "copied_text": {
+        "fires_on": 73.5,
+        "precision": 1.0,
+        "recall": 0.4947
+      },
+      "straight_lining": {
+        "fires_on": 25,
+        "precision": 0.7,
+        "recall": 0.1178
+      },
+      "voice_vs_form": {
+        "fires_on": 5,
+        "precision": 0.0,
+        "recall": 0.0
+      },
+      "off_hours": {
+        "fires_on": 13.5,
+        "precision": 0.7033,
+        "recall": 0.064
+      },
+      "shared_device": {
+        "fires_on": 29,
+        "precision": 1.0,
+        "recall": 0.1952
+      },
+      "burst": {
+        "fires_on": 27.5,
+        "precision": 1.0,
+        "recall": 0.1854
+      }
+    },
+    "misses_by_fraud_type": {
+      "curbstone": 19.5,
+      "speeder": 0,
+      "copypaste": 0.5,
+      "contradiction": 22,
+      "night": 0,
+      "multi_account": 0,
+      "burst": 0
+    },
+    "decided_by_ai": 0
+  },
+  "rules_ai": {
+    "combined": {
+      "submissions": 1678.5,
+      "fabricated": 148.5,
+      "flagged": 145.5,
+      "precision": 0.8794,
+      "recall": 0.8616,
+      "false_positives": 17.5,
+      "false_negatives": 20.5
+    },
+    "per_check": {
+      "too_fast": {
+        "fires_on": 61.5,
+        "precision": 0.8208,
+        "recall": 0.3399
+      },
+      "same_spot": {
+        "fires_on": 72,
+        "precision": 0.1935,
+        "recall": 0.0945
+      },
+      "copied_text": {
+        "fires_on": 80,
+        "precision": 0.9247,
+        "recall": 0.4981
+      },
+      "straight_lining": {
+        "fires_on": 25,
+        "precision": 0.7,
+        "recall": 0.1178
+      },
+      "voice_vs_form": {
+        "fires_on": 21.5,
+        "precision": 0.9762,
+        "recall": 0.1413
+      },
+      "off_hours": {
+        "fires_on": 13.5,
+        "precision": 0.7033,
+        "recall": 0.064
+      },
+      "shared_device": {
+        "fires_on": 29,
+        "precision": 1.0,
+        "recall": 0.1952
+      },
+      "burst": {
+        "fires_on": 27.5,
+        "precision": 1.0,
+        "recall": 0.1854
+      }
+    },
+    "misses_by_fraud_type": {
+      "curbstone": 19.5,
+      "speeder": 0,
+      "copypaste": 0,
+      "contradiction": 1,
+      "night": 0,
+      "multi_account": 0,
+      "burst": 0
+    },
+    "decided_by_ai": 27.5
+  },
+  "gaps": [
+    {
+      "fraud_type": "curbstone",
+      "planted": 19.5,
+      "missed": 19.5,
+      "missed_by_rules": 19.5
+    }
+  ]
+}
