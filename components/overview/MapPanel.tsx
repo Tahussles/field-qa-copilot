@@ -7,14 +7,16 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Glass } from "@/components/ui/Glass";
-import { CHECK_LABEL, COLORS, mainSignal, scoreColor } from "@/lib/checks";
-import { fmtDateTime, fmtDuration, fmtLocalDate, shortId } from "@/lib/format";
+import { CHECK_LABEL, CHECK_TITLE, COLORS, mainSignal, scoreColor } from "@/lib/checks";
+import { fmtDuration, fmtStamp, shortId } from "@/lib/format";
 import type { ContributorRow, Hotspot, MapData, MapPoint } from "@/lib/types";
 
 // OpenFreeMap: free vector tiles, no API key. Attribution comes from the tile source.
 const STYLE_URL = "https://tiles.openfreemap.org/styles/dark";
-const CARD = { w: 264, h: 168 };
-const CHIP_H = 28;
+const PASSED = "#9aa0aa"; // the prototype's passed-dot grey (drawn at 35% opacity)
+const CARD = { w: 236, h: 132 };
+const CHIP = { w: 252, h: 34 };
+const NARROW = 560; // below this map width, chips use short text
 
 type Rect = { x: number; y: number; w: number; h: number };
 interface PlacedHotspot {
@@ -35,14 +37,23 @@ interface Pulse {
 interface Tip {
   x: number;
   y: number;
-  width: number; // container width when the tooltip opened, to keep it inside
+  width: number; // map size when the tooltip opened, to keep it inside
+  height: number;
   point: MapPoint;
 }
 
 const hotspotKey = (h: Hotspot) => `${h.contributor_code}-${h.first_date}-${h.centroid.lat}`;
-const NARROW = 560; // below this map width, chips drop "interviews"
-const chipNote = (h: Hotspot, compact: boolean) => `· ${h.count} ${compact ? "in one spot" : "interviews in one spot"}`;
-const chipWidth = (h: Hotspot, compact: boolean) => Math.round(36 + (h.contributor_code.length + chipNote(h, compact).length) * 6.7);
+const compactWidth = (h: Hotspot) => Math.round(70 + `${h.count} in one spot`.length * 6.6);
+
+/** "Oct 27" or "Oct 27 to 31" from local dates (YYYY-MM-DD). */
+function dateSpan(first: string, last: string): string {
+  const month = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleString("en-US", { month: "short", timeZone: "UTC" });
+  const day = (d: string) => Number(d.slice(8, 10));
+  if (first === last) return `${month(first)} ${day(first)}`;
+  return month(first) === month(last)
+    ? `${month(first)} ${day(first)} to ${day(last)}`
+    : `${month(first)} ${day(first)} to ${month(last)} ${day(last)}`;
+}
 
 function reducedMotion(): boolean {
   return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -73,7 +84,14 @@ function pointFeatures(points: MapPoint[]) {
     features: points.map((p) => ({
       type: "Feature" as const,
       geometry: { type: "Point" as const, coordinates: [p.lng, p.lat] },
-      properties: { id: p.id, code: p.code, band: p.band, score: p.score, color: scoreColor(p.score, p.band) },
+      properties: {
+        id: p.id,
+        code: p.code,
+        band: p.band,
+        flagged: p.band === "flagged",
+        score: p.score,
+        color: p.score >= 5 ? COLORS.crit : p.band === "flagged" ? COLORS.warn : PASSED,
+      },
     })),
   };
 }
@@ -101,7 +119,7 @@ function areaFeatures(data: MapData) {
   };
 }
 
-/** Recolour OpenFreeMap's dark style to our palette. */
+/** Recolour OpenFreeMap's dark style to the prototype's map palette. */
 function tuneBasemap(map: MlMap) {
   const paint = (id: string, prop: string, value: unknown) => {
     try {
@@ -112,22 +130,22 @@ function tuneBasemap(map: MlMap) {
   };
   for (const layer of map.getStyle().layers ?? []) {
     const id = layer.id;
-    if (layer.type === "background") paint(id, "background-color", "#08090a");
-    else if (id === "water") paint(id, "fill-color", "#0a0f15");
-    else if (id === "waterway") paint(id, "line-color", "#0a0f15");
+    if (layer.type === "background") paint(id, "background-color", "#0b0c0f");
+    else if (id === "water") paint(id, "fill-color", "#131823"); // rgba(90,130,210,.10) over the map ground
+    else if (id === "waterway") paint(id, "line-color", "#1a2130");
     else if (id === "building") {
       paint(id, "fill-color", "#0d0e11");
-      paint(id, "fill-outline-color", "#16181c");
-    } else if (layer.type === "fill") paint(id, "fill-color", "#0b0c0e");
+      paint(id, "fill-outline-color", "#121317");
+    } else if (layer.type === "fill") paint(id, "fill-color", "#0c0d10");
     else if (layer.type === "line" && id.startsWith("highway")) {
-      paint(id, "line-color", id.includes("major") || id.includes("motorway") ? "#23262d" : "#191b20");
-    } else if (layer.type === "line") paint(id, "line-color", "#16181c");
+      paint(id, "line-color", id.includes("major") || id.includes("motorway") || id.includes("trunk") ? "#1e1f23" : "#151619");
+    } else if (layer.type === "line") paint(id, "line-color", "#141518");
     else if (/^place_(other|suburb|village)$/.test(id)) {
       // Real neighbourhood names would sit next to our survey area labels.
       map.setLayoutProperty(id, "visibility", "none");
     } else if (layer.type === "symbol") {
-      paint(id, "text-color", "#4b5059");
-      paint(id, "text-halo-color", "#08090a");
+      paint(id, "text-color", "#54565b");
+      paint(id, "text-halo-color", "#0b0c0f");
     }
   }
 }
@@ -146,15 +164,19 @@ export function MapPanel({
   pulses: string[];
 }) {
   const router = useRouter();
+  const wrap = useRef<HTMLDivElement>(null);
   const container = useRef<HTMLDivElement>(null);
   const pill = useRef<HTMLDivElement>(null);
-  const controls = useRef<HTMLDivElement>(null);
+  const seg = useRef<HTMLDivElement>(null);
+  const reset = useRef<HTMLButtonElement>(null);
+  const legend = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MlMap | null>(null);
   const dataRef = useRef<MapData | null>(null);
   const viewRef = useRef({ expanded: null as string | null, pulses: [] as string[] });
   const frame = useRef<number | null>(null);
 
   const [ready, setReady] = useState(false);
+  const [moved, setMoved] = useState(false);
   const [flaggedOnly, setFlaggedOnly] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [placed, setPlaced] = useState<PlacedHotspot[]>([]);
@@ -169,32 +191,34 @@ export function MapPanel({
     return boundsOf(areas.flatMap((a) => (a.boundary?.coordinates[0] ?? []) as [number, number][]));
   }, []);
 
-  // Place hotspot chips (or the expanded card) so they never overlap each other,
-  // the info pill or the controls; prefer not to cover another hotspot ring.
+  // Place hotspot chips (or the open card) so they never overlap each other, the
+  // info pill, the controls or the legend; prefer not to cover another ring.
+  // Candidates follow the prototype: above, below, right, left of the ring.
   const layout = useCallback(() => {
     if (frame.current) cancelAnimationFrame(frame.current);
     frame.current = requestAnimationFrame(() => {
       frame.current = null;
       const map = mapRef.current;
-      const box = container.current;
+      const box = wrap.current;
       const current = dataRef.current;
       if (!map || !box || !current) return;
       const width = box.clientWidth;
       const height = box.clientHeight;
+      const compact = width < NARROW;
       const relative = (el: HTMLElement | null): Rect | null => {
-        if (!el) return null;
+        if (!el || !el.offsetParent) return null;
         const a = el.getBoundingClientRect();
         const b = box.getBoundingClientRect();
         return { x: a.left - b.left, y: a.top - b.top, w: a.width, h: a.height };
       };
-      const fixed = [relative(pill.current), relative(controls.current)].filter(Boolean) as Rect[];
+      const fixed = [pill, seg, reset, legend].map((r) => relative(r.current)).filter(Boolean) as Rect[];
       const zoom = map.getZoom();
       const spots = [...current.hotspots]
         .sort((a, b) => b.count - a.count)
         .map((h) => {
           const p = map.project([h.centroid.lng, h.centroid.lat]);
           const metresPerPixel = (40075016.686 * Math.cos((h.centroid.lat * Math.PI) / 180)) / (512 * 2 ** zoom);
-          const r = Math.min(64, Math.max(13, h.radius_m / metresPerPixel + 7));
+          const r = Math.min(64, Math.max(9, h.radius_m / metresPerPixel + 3));
           return { h, x: p.x, y: p.y, r };
         })
         .filter((s) => s.x > -40 && s.y > -40 && s.x < width + 40 && s.y < height + 40);
@@ -203,19 +227,20 @@ export function MapPanel({
       const out: PlacedHotspot[] = [];
       for (const [i, s] of spots.entries()) {
         const key = hotspotKey(s.h);
-        const size = viewRef.current.expanded === key ? CARD : { w: chipWidth(s.h, width < NARROW), h: CHIP_H };
-        const gap = 9;
+        const open = viewRef.current.expanded === key;
+        const size = open ? CARD : compact ? { w: compactWidth(s.h), h: CHIP.h } : CHIP;
+        const gap = 12;
         const candidates: Rect[] = [
-          { x: s.x + s.r + gap, y: s.y - size.h / 2 },
-          { x: s.x - s.r - gap - size.w, y: s.y - size.h / 2 },
           { x: s.x - size.w / 2, y: s.y - s.r - gap - size.h },
           { x: s.x - size.w / 2, y: s.y + s.r + gap },
+          { x: s.x + s.r + gap, y: s.y - size.h / 2 },
+          { x: s.x - s.r - gap - size.w, y: s.y - size.h / 2 },
           { x: s.x + s.r * 0.7 + gap, y: s.y - s.r - size.h },
           { x: s.x + s.r * 0.7 + gap, y: s.y + s.r },
           { x: s.x - s.r * 0.7 - gap - size.w, y: s.y - s.r - size.h },
           { x: s.x - s.r * 0.7 - gap - size.w, y: s.y + s.r },
         ].map((c) => ({ ...c, ...size }));
-        const inside = (c: Rect) => c.x >= 6 && c.y >= 6 && c.x + c.w <= width - 6 && c.y + c.h <= height - 6;
+        const inside = (c: Rect) => c.x >= 8 && c.y >= 8 && c.x + c.w <= width - 8 && c.y + c.h <= height - 8;
         const clear = (c: Rect, avoidRings: boolean) =>
           inside(c) &&
           ![...fixed, ...chips].some((o) => overlaps(c, o)) &&
@@ -226,15 +251,15 @@ export function MapPanel({
         const chosen =
           candidates.find((c) => clear(c, true)) ??
           candidates.find((c) => clear(c, false)) ??
-          (viewRef.current.expanded === key
+          (open
             ? {
                 ...candidates[0],
-                x: Math.min(Math.max(candidates[0].x, 6), width - size.w - 6),
-                y: Math.min(Math.max(candidates[0].y, 6), height - size.h - 6),
+                x: Math.min(Math.max(candidates[0].x, 8), width - size.w - 8),
+                y: Math.min(Math.max(candidates[0].y, 8), height - size.h - 8),
               }
             : null);
         if (chosen) chips.push(chosen);
-        out.push({ key, hotspot: s.h, x: s.x, y: s.y, r: s.r, box: chosen, compact: width < NARROW });
+        out.push({ key, hotspot: s.h, x: s.x, y: s.y, r: s.r, box: chosen, compact });
       }
       setPlaced(out);
       const byId = new Map(current.points.map((p) => [p.id, p]));
@@ -270,6 +295,7 @@ export function MapPanel({
       map = instance;
       mapRef.current = instance;
       instance.touchZoomRotate.disableRotation();
+      instance.addControl(new maplibregl.ScaleControl({ maxWidth: 90, unit: "metric" }), "bottom-right");
       instance.on("load", () => {
         if (!map) return;
         tuneBasemap(map);
@@ -277,16 +303,12 @@ export function MapPanel({
         const areas = current ? areaFeatures(current) : null;
         map.addSource("areas", { type: "geojson", data: areas?.shapes ?? { type: "FeatureCollection", features: [] } });
         map.addSource("area-labels", { type: "geojson", data: areas?.labels ?? { type: "FeatureCollection", features: [] } });
-        map.addSource("points", {
-          type: "geojson",
-          data: pointFeatures(current?.points ?? []),
-        });
-        map.addLayer({ id: "area-fill", type: "fill", source: "areas", paint: { "fill-color": "#ffffff", "fill-opacity": 0.012 } });
+        map.addSource("points", { type: "geojson", data: pointFeatures(current?.points ?? []) });
         map.addLayer({
           id: "area-line",
           type: "line",
           source: "areas",
-          paint: { "line-color": "rgba(255,255,255,0.24)", "line-width": 1, "line-dasharray": [3, 3] },
+          paint: { "line-color": "rgba(255,255,255,0.16)", "line-width": 1, "line-dasharray": [4, 4] },
         });
         map.addLayer({
           id: "area-label",
@@ -294,12 +316,12 @@ export function MapPanel({
           source: "area-labels",
           layout: {
             "text-field": ["get", "name"],
-            "text-font": ["Noto Sans Regular"],
-            "text-size": 10,
-            "text-letter-spacing": 0.18,
+            "text-font": ["Noto Sans Bold"],
+            "text-size": 9.5,
+            "text-letter-spacing": 0.13,
             "text-anchor": "top",
           },
-          paint: { "text-color": "#6b707a", "text-halo-color": "#08090a", "text-halo-width": 1.2 },
+          paint: { "text-color": "rgba(255,255,255,0.36)", "text-halo-color": "#0b0c0f", "text-halo-width": 1 },
         });
         map.addLayer({
           id: "points",
@@ -308,19 +330,26 @@ export function MapPanel({
           layout: { "circle-sort-key": ["get", "score"] },
           paint: {
             "circle-color": ["get", "color"],
-            "circle-radius": ["interpolate", ["linear"], ["zoom"], 11, 2.2, 14, 4, 17, 7],
-            "circle-stroke-color": "#08090a",
-            "circle-stroke-width": ["interpolate", ["linear"], ["zoom"], 11, 0.3, 15, 1],
-            "circle-opacity": 0.92,
+            "circle-radius": [
+              "interpolate", ["linear"], ["zoom"],
+              11, ["case", ["get", "flagged"], 2.3, 1.6],
+              14, ["case", ["get", "flagged"], 3.4, 2.4],
+              17, ["case", ["get", "flagged"], 6.5, 5],
+            ],
+            "circle-opacity": ["case", ["get", "flagged"], 0.95, 0.35],
           },
         });
         const home = homeBounds();
         if (home) map.fitBounds(home, { padding: 28, duration: 0 });
+        map.on("movestart", (e) => {
+          if ((e as { originalEvent?: Event }).originalEvent) setMoved(true);
+        });
         map.on("mousemove", "points", (e: MapLayerMouseEvent) => {
           const id = e.features?.[0]?.properties?.id as string | undefined;
           const point = id ? dataRef.current?.points.find((p) => p.id === id) : undefined;
           if (map) map.getCanvas().style.cursor = point ? "pointer" : "";
-          setTip(point ? { x: e.point.x, y: e.point.y, width: container.current?.clientWidth ?? 600, point } : null);
+          const box = wrap.current;
+          setTip(point ? { x: e.point.x, y: e.point.y, width: box?.clientWidth ?? 600, height: box?.clientHeight ?? 400, point } : null);
         });
         map.on("mouseleave", "points", () => {
           if (map) map.getCanvas().style.cursor = "";
@@ -368,20 +397,31 @@ export function MapPanel({
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready) return;
-    map.setPaintProperty("points", "circle-opacity", focus ? ["case", ["==", ["get", "code"], focus], 0.95, 0.1] : 0.92);
+    map.setPaintProperty(
+      "points",
+      "circle-opacity",
+      focus
+        ? ["case", ["==", ["get", "code"], focus], ["case", ["get", "flagged"], 0.95, 0.6], 0.07]
+        : ["case", ["get", "flagged"], 0.95, 0.35],
+    );
     map.setFilter("points", flaggedOnly ? ["==", ["get", "band"], "flagged"] : null);
-    const duration = reducedMotion() ? 0 : 700;
     if (focus) {
       const coords = (dataRef.current?.points ?? []).filter((p) => p.code === focus).map((p) => [p.lng, p.lat] as [number, number]);
       const bounds = boundsOf(coords);
-      if (bounds) map.fitBounds(bounds, { padding: 70, maxZoom: 16, duration });
+      if (bounds) map.fitBounds(bounds, { padding: 70, maxZoom: 16, duration: reducedMotion() ? 0 : 700 });
     }
   }, [focus, flaggedOnly, ready]);
+
+  // The controls above can change size (Reset view appears); re-place the chips.
+  useEffect(() => {
+    layout();
+  }, [moved, focus, layout]);
 
   function resetView() {
     const map = mapRef.current;
     const home = homeBounds();
     setExpanded(null);
+    setMoved(false);
     onFocus(null);
     if (map && home) map.fitBounds(home, { padding: 28, duration: reducedMotion() ? 0 : 700 });
   }
@@ -389,6 +429,7 @@ export function MapPanel({
   function openHotspot(item: PlacedHotspot) {
     const map = mapRef.current;
     setExpanded(item.key);
+    setMoved(true);
     map?.flyTo({
       center: [item.hotspot.centroid.lng, item.hotspot.centroid.lat],
       zoom: Math.max(map.getZoom(), 15.6),
@@ -396,178 +437,216 @@ export function MapPanel({
     });
   }
 
-  const flaggedCount = data?.points.filter((p) => p.band === "flagged").length ?? 0;
+  const showReset = moved || Boolean(focus) || Boolean(expanded);
+  const caption = focus
+    ? `${focus} ${contributors[focus]?.display_name ?? ""} · click the row again to clear`
+    : data
+      ? `${data.hotspots.length} hotspots · ${data.points.length} submissions`
+      : "";
 
   return (
-    <section aria-label="Map of submissions" className="panel relative h-[420px] overflow-hidden p-0 md:h-[560px] xl:h-[600px]">
+    <section aria-label="Map of submissions" className="panel overflow-hidden">
+      <div className="ph">
+        <h2>Where interviews are piling up</h2>
+        <span className="ph-caption truncate">{caption}</span>
+      </div>
       <div
-        ref={container}
-        className="relative h-full w-full"
+        ref={wrap}
+        className="relative aspect-[4/3] overflow-hidden rounded-b-[10px] bg-[#0b0c0f] lg:aspect-[3/2]"
         data-map-ready={ready}
         data-points={data?.points.length ?? 0}
         data-rendered-points={rendered}
-      />
+      >
+        {/* Full size, not absolute: MapLibre's own CSS sets position: relative on this element. */}
+        <div ref={container} className="h-full w-full" />
 
-      {/* Hotspot rings, chips and the expanded card. */}
-      <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden={!placed.length}>
-        {placed.map((item) => (
-          <div
-            key={`ring-${item.key}`}
-            className="hotspot-ring"
-            style={{ left: item.x, top: item.y, width: item.r * 2, height: item.r * 2 }}
-          />
-        ))}
-        {pulseSpots.map((p) => (
-          <span key={`pulse-${p.id}`} className="point-pulse" style={{ left: p.x, top: p.y, color: p.color }} />
-        ))}
-        {placed.map((item) =>
-          !item.box ? null : expanded === item.key ? (
-            <Glass
-              key={`card-${item.key}`}
-              role="dialog"
-              aria-label={`Hotspot for ${item.hotspot.contributor_code}`}
-              className="pointer-events-auto absolute rounded-xl p-3 text-[12.5px]"
-              style={{ left: item.box.x, top: item.box.y, width: CARD.w }}
+        {/* Hotspot rings (dashed, pulsing), live pulses, chips and the open card. */}
+        <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden={!placed.length}>
+          {placed.map((item) => (
+            <svg
+              key={`ring-${item.key}`}
+              className="absolute"
+              style={{ left: item.x - item.r - 2, top: item.y - item.r - 2, width: item.r * 2 + 4, height: item.r * 2 + 4 }}
+              aria-hidden
             >
-              <div className="flex items-start gap-2">
-                <span className="dot mt-1 bg-crit" aria-hidden />
-                <div className="min-w-0 flex-1">
-                  <p className="font-medium text-ink">
-                    <span className="font-mono">{item.hotspot.contributor_code}</span>{" "}
-                    {contributors[item.hotspot.contributor_code]?.display_name ?? ""}
-                  </p>
-                  <p className="text-muted">{item.hotspot.count} interviews within {Math.round(item.hotspot.radius_m)} m</p>
+              <circle
+                className="hring"
+                cx={item.r + 2}
+                cy={item.r + 2}
+                r={item.r}
+                fill="rgba(235,90,87,0.08)"
+                stroke={COLORS.crit}
+                strokeWidth="1.5"
+                strokeDasharray="3 3"
+              />
+            </svg>
+          ))}
+          {pulseSpots.map((p) => (
+            <span key={`pulse-${p.id}`} className="point-pulse" style={{ left: p.x, top: p.y, color: p.color }} />
+          ))}
+          {placed.map((item) =>
+            !item.box ? null : expanded === item.key ? (
+              <Glass
+                key={`card-${item.key}`}
+                role="dialog"
+                aria-label={`Hotspot for ${item.hotspot.contributor_code}`}
+                className="pointer-events-auto absolute z-[4] rounded-xl px-3 py-2.5 text-[12px] text-[#d9dbe0]"
+                style={{ left: item.box.x, top: item.box.y, width: CARD.w }}
+              >
+                <div className="flex items-center gap-2 text-[11.5px] text-muted">
+                  <span className="st st-crit">
+                    <span>Hotspot</span>
+                  </span>
+                  <span className="truncate">
+                    {item.hotspot.contributor_code} {contributors[item.hotspot.contributor_code]?.display_name}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label="Close"
+                    onClick={() => setExpanded(null)}
+                    className="-my-1 ml-auto px-1 text-faint hover:text-ink"
+                  >
+                    ×
+                  </button>
                 </div>
+                <b className="mt-[3px] mb-px block text-[13px] font-semibold text-white">
+                  {item.hotspot.count} interviews in one spot
+                </b>
+                <div className="text-muted">
+                  {dateSpan(item.hotspot.first_date, item.hotspot.last_date)}
+                  {item.hotspot.avg_duration_sec != null && ` · avg ${Math.round(item.hotspot.avg_duration_sec / 60)} min`}
+                  {item.hotspot.mostly_off_hours && " · mostly after 22:00"}
+                </div>
+                <MainSignalLine checks={contributors[item.hotspot.contributor_code]?.checks_fired} />
                 <button
                   type="button"
-                  aria-label="Close"
-                  onClick={() => setExpanded(null)}
-                  className="-mt-1 -mr-1 rounded-md px-1.5 text-muted hover:text-ink"
+                  onClick={() => router.push(`/app/queue?contributor=${item.hotspot.contributor_code}`)}
+                  className="glass glass-btn mt-2 flex w-full justify-center rounded-md px-2.5 py-1 text-[12px] text-ink"
                 >
-                  ×
+                  Review these {item.hotspot.count} →
                 </button>
-              </div>
-              <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[12px]">
-                <dt className="text-faint">Dates</dt>
-                <dd className="text-ink-2">
-                  {fmtLocalDate(item.hotspot.first_date)}
-                  {item.hotspot.last_date !== item.hotspot.first_date && ` – ${fmtLocalDate(item.hotspot.last_date)}`} ·{" "}
-                  {item.hotspot.days} {item.hotspot.days === 1 ? "day" : "days"}
-                </dd>
-                <MainSignalRow checks={contributors[item.hotspot.contributor_code]?.checks_fired} />
-                <dt className="text-faint">Avg duration</dt>
-                <dd className="text-ink-2">{fmtDuration(item.hotspot.avg_duration_sec)}</dd>
-                {item.hotspot.mostly_off_hours && (
-                  <>
-                    <dt className="text-faint">Time</dt>
-                    <dd className="text-warn">Mostly after 22:00</dd>
-                  </>
-                )}
-              </dl>
-              <button
+              </Glass>
+            ) : (
+              <Glass
+                key={`chip-${item.key}`}
+                as="button"
                 type="button"
-                onClick={() => router.push(`/app/queue?contributor=${item.hotspot.contributor_code}`)}
-                className="mt-2.5 text-[12.5px] font-medium text-accent hover:brightness-125"
+                onClick={() => openHotspot(item)}
+                aria-label={`${item.hotspot.contributor_code} · ${item.hotspot.count} interviews in one spot`}
+                className="glass-btn pointer-events-auto absolute z-[4] flex items-center gap-2 rounded-full px-3 text-[12px] whitespace-nowrap text-white"
+                style={{ left: item.box.x, top: item.box.y, height: CHIP.h, width: item.box.w }}
               >
-                Review these {item.hotspot.count} →
-              </button>
-            </Glass>
-          ) : (
-            <Glass
-              key={`chip-${item.key}`}
-              as="button"
-              type="button"
-              onClick={() => openHotspot(item)}
-              aria-label={`${item.hotspot.contributor_code} · ${item.hotspot.count} interviews in one spot`}
-              className="pointer-events-auto absolute flex items-center gap-1.5 rounded-full px-2.5 text-[12px] whitespace-nowrap text-ink hover:brightness-125"
-              style={{ left: item.box.x, top: item.box.y, height: CHIP_H }}
-            >
-              <span className="dot bg-crit" aria-hidden />
-              <span className="font-mono">{item.hotspot.contributor_code}</span>
-              <span className="text-muted">{chipNote(item.hotspot, item.compact)}</span>
-            </Glass>
-          ),
-        )}
-      </div>
+                <span className="st st-crit">
+                  <span className="font-mono">{item.hotspot.contributor_code}</span>
+                </span>
+                {item.compact ? `${item.hotspot.count} in one spot` : `${item.hotspot.count} interviews in one spot`}
+                {!item.compact && <span className="ml-auto text-faint">Zoom</span>}
+              </Glass>
+            ),
+          )}
+        </div>
 
-      {/* Controls. */}
-      <div ref={controls} className="absolute top-3 right-3 flex items-center gap-2">
-        <Glass className="flex rounded-lg p-0.5 text-[12px]" role="group" aria-label="Which points to show">
+        {/* What am I looking at. */}
+        <Glass
+          ref={pill}
+          className="absolute top-3 left-3 z-[3] max-w-[calc(100%-24px)] rounded-[10px] px-[11px] py-[7px] text-[11.5px] leading-[1.45] text-[#cfd2d6] lg:max-w-[min(300px,55%)]"
+        >
+          <b className="font-medium text-white">Each dot is one submission</b> at the GPS spot it was recorded. Homes are spread
+          out, so a tight orange pile means forms filled in at one place.
+        </Glass>
+
+        {/* Controls. */}
+        <Glass
+          ref={seg}
+          className="absolute bottom-3 left-3 z-[3] flex gap-0.5 rounded-full p-[3px] lg:top-3 lg:right-3 lg:bottom-auto lg:left-auto"
+          role="group"
+          aria-label="Which submissions to show"
+        >
           {[
             { label: "All", value: false },
-            { label: `Flagged only · ${flaggedCount}`, value: true },
+            { label: "Flagged only", value: true },
           ].map((option) => (
             <button
               key={option.label}
               type="button"
               aria-pressed={flaggedOnly === option.value}
               onClick={() => setFlaggedOnly(option.value)}
-              className={`rounded-md px-2.5 py-1 ${flaggedOnly === option.value ? "bg-white/[0.1] text-ink" : "text-muted hover:text-ink"}`}
+              className={`rounded-full px-[11px] py-1 text-[12px] ${
+                flaggedOnly === option.value
+                  ? "bg-white/[0.14] text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.2)]"
+                  : "text-muted hover:text-ink"
+              }`}
             >
               {option.label}
             </button>
           ))}
         </Glass>
-        <Glass as="button" type="button" onClick={resetView} className="rounded-lg px-2.5 py-1.5 text-[12px] text-muted hover:text-ink">
-          Reset view
-        </Glass>
-      </div>
+        {showReset && (
+          <Glass
+            ref={reset}
+            as="button"
+            type="button"
+            onClick={resetView}
+            className="glass-btn absolute top-3 right-3 z-[3] rounded-full px-3 py-1 text-[12px] text-ink lg:top-[50px]"
+          >
+            Reset view
+          </Glass>
+        )}
 
-      {/* What am I looking at. */}
-      <Glass
-        ref={pill}
-        className="absolute bottom-3 left-3 flex items-center gap-3 rounded-full px-3 py-1.5 text-[11.5px] whitespace-nowrap text-muted"
-      >
-        <span className="flex items-center gap-1.5">
-          <span className="dot" style={{ background: COLORS.pass }} /> passed
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="dot bg-warn" /> flagged
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="dot bg-crit" /> score ≥ 5
-        </span>
-        <span className="hidden text-faint sm:inline">· one dot per submission</span>
-      </Glass>
-
-      {tip && (
         <Glass
-          role="tooltip"
-          className="pointer-events-none absolute z-10 w-60 rounded-lg px-3 py-2 text-[12px]"
-          style={{
-            left: Math.min(tip.x + 14, tip.width - 250),
-            top: Math.max(tip.y - 16, 8),
-          }}
+          ref={legend}
+          className="absolute bottom-3 left-3 z-[3] hidden items-center gap-3 rounded-full px-3 py-1.5 text-[11.5px] text-[#cfd2d6] lg:flex"
         >
-          <p className="flex items-center gap-1.5 text-ink">
-            <span className="font-mono">{shortId(tip.point.id)}</span>
-            <span className="text-faint">·</span>
-            <span className="font-mono">{tip.point.code}</span>
-            <span className="truncate text-muted">{contributors[tip.point.code]?.display_name}</span>
-          </p>
-          <p className="mt-0.5 text-muted">
-            {fmtDateTime(tip.point.captured_at, data?.project.timezone)} · {fmtDuration(tip.point.duration_sec)}
-          </p>
-          <p className="mt-1" style={{ color: scoreColor(tip.point.score, tip.point.band) }}>
-            {tip.point.fired.length ? tip.point.fired.map((k) => CHECK_LABEL[k]).join(" + ") : "No checks fired"}
-            <span className="text-faint"> · score {tip.point.score}</span>
-          </p>
+          {[
+            ["Passed", COLORS.pass],
+            ["Flagged", COLORS.warn],
+            ["Score 5+", COLORS.crit],
+          ].map(([label, color]) => (
+            <span key={label} className="flex items-center gap-1.5">
+              <span className="inline-block h-2 w-2 rounded-full" style={{ background: color }} />
+              {label}
+            </span>
+          ))}
+          <span>Hover a dot for details</span>
         </Glass>
-      )}
 
-      {!data && <p className="absolute inset-0 grid place-items-center text-sm text-muted">Loading the map…</p>}
-      {data && pointsById.size === 0 && <p className="absolute inset-0 grid place-items-center text-sm text-muted">No submissions yet.</p>}
+        {tip && (
+          <Glass
+            role="tooltip"
+            className="pointer-events-none absolute z-[6] min-w-[170px] rounded-[10px] px-2.5 py-2 text-[12px] text-[#d9dbe0]"
+            style={{
+              left: tip.x + 14 > tip.width - 214 ? tip.x - 200 : tip.x + 14,
+              top: tip.y + 14 > tip.height - 90 ? tip.y - 86 : tip.y + 14,
+            }}
+          >
+            <b className="font-mono font-medium text-white">{shortId(tip.point.id)}</b> · {tip.point.code}{" "}
+            {contributors[tip.point.code]?.display_name}
+            <br />
+            <span className="text-muted">
+              {fmtStamp(tip.point.captured_at, data?.project.timezone)} · {fmtDuration(tip.point.duration_sec)}
+            </span>
+            <br />
+            {tip.point.fired.length ? (
+              <span className="text-warn">{tip.point.fired.map((k) => CHECK_TITLE[k]).join(" · ")}</span>
+            ) : (
+              <span className="text-ok">Passed all checks</span>
+            )}
+          </Glass>
+        )}
+
+        {!data && <p className="absolute inset-0 grid place-items-center text-sm text-muted">Loading the map…</p>}
+        {data && pointsById.size === 0 && <p className="absolute inset-0 grid place-items-center text-sm text-muted">No submissions yet.</p>}
+      </div>
     </section>
   );
 }
 
-function MainSignalRow({ checks }: { checks: ContributorRow["checks_fired"] | undefined }) {
+function MainSignalLine({ checks }: { checks: ContributorRow["checks_fired"] | undefined }) {
   const signal = mainSignal(checks ?? {});
   if (!signal) return null;
   return (
-    <>
-      <dt className="text-faint">Main signal</dt>
-      <dd className="text-ink-2">{CHECK_LABEL[signal]}</dd>
-    </>
+    <div className="text-muted">
+      Main signal <span className="text-ink-2">{CHECK_LABEL[signal]}</span>
+    </div>
   );
 }
