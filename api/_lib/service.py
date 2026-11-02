@@ -7,7 +7,8 @@ from datetime import date, datetime, timedelta, timezone
 from statistics import median
 from zoneinfo import ZoneInfo
 
-from engine import CheckResult, Contributor, Params, ScoredSubmission, Submission, __version__, score_all, score_incremental
+from engine import (CheckResult, Contributor, Params, ScoredSubmission, Submission, Verdict, __version__, score_all,
+                    score_incremental)
 from engine.insights import area_rates, contributor_stats, hotspots
 
 from .repo import Repository
@@ -83,6 +84,17 @@ def _result_rows(scored: list[ScoredSubmission], params: Params, scored_at: str)
         for s in scored
     ]
     return checks, scores
+
+
+def verdict_index(rows: list[dict]) -> dict[str, list[Verdict]]:
+    """ai_verdicts rows as engine inputs, by submission. A pair verdict is handed to both sides."""
+    out: dict[str, list[Verdict]] = {}
+    for row in sorted(rows, key=lambda r: (r["submission_id"], r["kind"], r.get("pair_submission_id") or "")):
+        a, b = row["submission_id"], row.get("pair_submission_id")
+        out.setdefault(a, []).append(Verdict(row["kind"], row["model"], row["verdict"], b))
+        if b:
+            out.setdefault(b, []).append(Verdict(row["kind"], row["model"], row["verdict"], a))
+    return out
 
 
 def _contributor_view(ctx: ProjectContext, contributor_id: str) -> dict:
@@ -165,6 +177,7 @@ def ingest(repo: Repository, payload: SubmissionIn) -> tuple[int, dict]:
         "answers": payload.answers.model_dump(),
         "voice_transcript": payload.voice_transcript,
         "transcript_lang": "en" if payload.voice_transcript else None,
+        "voice_note_path": payload.voice_note_path,
         "source": payload.source,
     }
     holder = str(uuid.uuid4())
@@ -183,32 +196,65 @@ def ingest(repo: Repository, payload: SubmissionIn) -> tuple[int, dict]:
         healed = True
         mark("heal_begin")
 
+    scored, changed = _score_and_commit(repo, ctx, begun, holder)
+    mark("commit")
+    # Model work (transcription, meaning checks) is queued, never awaited: the rules have already scored this.
+    from . import jobs  # noqa: PLC0415  (jobs imports this module)
+    queued = jobs.queue_for_arrival(repo, ctx, begun["submission"], begun["group"])
+    mark("queue")
+    mine = scored[0]
+    fired = [{"key": r.key, "weight": r.weight, "evidence": r.evidence} for r in mine.results if r.fired]
+    return (200 if healed else 201), _view(
+        ctx, begun["submission"], mine.score, mine.flagged, mine.engine_version, fired,
+        changed=changed, rescored=len(scored) - 1, duplicate=healed, healed=healed, ai_jobs=queued,
+        timing_ms=timing())
+
+
+def _score_and_commit(repo: Repository, ctx: ProjectContext, begun: dict,
+                      holder: str) -> tuple[list[ScoredSubmission], list[dict]]:
+    """Score the leased group around begun["submission"] (with its verdicts) and write it, fenced by the lease."""
     try:
         new = Submission.from_row(begun["submission"])
         group = [Submission.from_row(r) for r in begun["group"] if r["id"] != new.id]
-        scored = score_incremental(new, group, ctx.contributors, ctx.params)
-        mark("score")
+        scored = score_incremental(new, group, ctx.contributors, ctx.params, verdict_index(begun.get("verdicts") or []))
         check_rows, score_rows = _result_rows(scored, ctx.params, _iso(datetime.now(timezone.utc)))
         repo.ingest_commit(check_rows, score_rows, holder, len(begun["lock_keys"]))
-        mark("commit")
     except Exception as error:
         try:
             repo.release_locks(holder)
         except Exception:
             pass  # the leases expire after LOCK_TTL_SECONDS anyway
         raise ScoringIncomplete(str(error)) from error
-
     before = {s["submission_id"]: s["flagged"] for s in begun["scores"]}
-    mine = scored[0]
     changed = [
         {"submission_id": s.submission_id, "flagged": s.flagged, "previously_flagged": before.get(s.submission_id, False),
          "score": s.score}
         for s in scored[1:] if before.get(s.submission_id, False) != s.flagged
     ]
-    fired = [{"key": r.key, "weight": r.weight, "evidence": r.evidence} for r in mine.results if r.fired]
-    return (200 if healed else 201), _view(
-        ctx, begun["submission"], mine.score, mine.flagged, mine.engine_version, fired,
-        changed=changed, rescored=len(scored) - 1, duplicate=healed, healed=healed, timing_ms=timing())
+    return scored, changed
+
+
+def rescore_submission(repo: Repository, submission_id: str) -> dict:
+    """Rescore a stored submission and its group through the incremental path (leases, fenced commit).
+
+    Used when a verdict lands after arrival: the score can change, and Realtime
+    tells the dashboard. Returns the new score and every flag that flipped,
+    including this submission's own.
+    """
+    ctx = context(repo)
+    row = repo.submission(submission_id)
+    if row is None:
+        raise LookupError(submission_id)
+    holder = str(uuid.uuid4())
+    begun = _begin(repo, row, holder, heal=True)
+    before = {s["submission_id"]: s for s in begun["scores"]}
+    scored, changed = _score_and_commit(repo, ctx, begun, holder)
+    mine, was = scored[0], before.get(submission_id)
+    if was is None or was["flagged"] != mine.flagged:
+        changed.insert(0, {"submission_id": submission_id, "flagged": mine.flagged,
+                           "previously_flagged": bool(was and was["flagged"]), "score": mine.score})
+    return {"submission_id": submission_id, "score": mine.score, "band": ctx.params.band(mine.score),
+            "previous_score": was["score"] if was else None, "changed": changed, "rescored": len(scored)}
 
 
 # GET /submissions/{id} -------------------------------------------------------------
@@ -447,7 +493,7 @@ def rescore(repo: Repository) -> dict:
     started = time.perf_counter()
     ctx = context(repo)
     subs = [Submission.from_row(r) for r in repo.submissions()]
-    scored = score_all(subs, ctx.contributors, ctx.params)
+    scored = score_all(subs, ctx.contributors, ctx.params, verdict_index(repo.verdicts()))
     score_ms = (time.perf_counter() - started) * 1000
     check_rows, score_rows = _result_rows(scored, ctx.params, _iso(datetime.now(timezone.utc)))
     written = repo.write_results(check_rows, score_rows)

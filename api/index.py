@@ -4,6 +4,7 @@ Read endpoints are public. Write endpoints need the X-Demo-Passcode header.
 """
 
 import hmac
+import json
 import sys
 from datetime import date
 from pathlib import Path
@@ -16,10 +17,11 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query, Response  # noqa: E402
+from fastapi import APIRouter, Body, Depends, FastAPI, Header, HTTPException, Query, Response  # noqa: E402
 
 import engine  # noqa: E402
-from api._lib import demo, service  # noqa: E402
+from api._lib import demo, jobs, service  # noqa: E402
+from api._lib.ai import AIUnavailable, LiveProvider, Provider, jobs_secret  # noqa: E402
 from api._lib.evaluation import evaluate as run_evaluation  # noqa: E402
 from api._lib.postgrest import Supabase  # noqa: E402
 from api._lib.repo import Conflict, NotFound, Repository, SupabaseRepo  # noqa: E402
@@ -34,6 +36,8 @@ app = FastAPI(
 )
 router = APIRouter(prefix="/api/py")
 _repo: Repository | None = None
+_provider: Provider | None = None
+HARD_EVAL = ROOT / "data" / "eval" / "hard.json"
 
 
 def get_repo() -> Repository:
@@ -45,6 +49,26 @@ def get_repo() -> Repository:
         _repo = SupabaseRepo(Supabase(settings.supabase_url, settings.service_key, timeout=settings.db_timeout),
                              settings.project_id)
     return _repo
+
+
+def get_provider() -> Provider:
+    global _provider
+    if _provider is None:
+        settings = get_settings()
+        _provider = LiveProvider(settings.anthropic_key, settings.elevenlabs_key)
+    return _provider
+
+
+def jobs_secret_value() -> str | None:
+    key = get_settings().service_key
+    return jobs_secret(key) if key else None
+
+
+def require_jobs_secret(x_jobs_secret: str | None = Header(default=None),
+                        expected: str | None = Depends(jobs_secret_value)) -> None:
+    """The database's job hook (pg_net) sends this; it is derived from the service key."""
+    if not expected or not x_jobs_secret or not hmac.compare_digest(x_jobs_secret, expected):
+        raise HTTPException(401, "missing or wrong X-Jobs-Secret")
 
 
 def passcode_value() -> str | None:
@@ -101,8 +125,15 @@ def get_queue(status: Literal["pending", "decided", "all"] = "pending",
               band: Literal["flagged", "watch"] = "flagged",
               limit: int = Query(default=50, ge=1, le=500),
               repo: Repository = Depends(get_repo)) -> dict:
-    """Flagged (score >= review threshold) or watch-band submissions, highest score first."""
-    return service.queue(repo, status, contributor, band, limit)
+    """Flagged (score >= review threshold) or watch-band submissions, highest score first.
+
+    ai_pending marks items a model job (transcription, meaning check) is still working on.
+    """
+    out = service.queue(repo, status, contributor, band, limit)
+    pending = {j["submission_id"] for j in repo.pending_jobs() if j.get("submission_id")}
+    for item in out["items"]:
+        item["ai_pending"] = item["submission_id"] in pending
+    return out
 
 
 @router.post("/reviews", status_code=201, dependencies=[Depends(require_passcode)])
@@ -187,6 +218,68 @@ def post_demo_reset(repo: Repository = Depends(get_repo)) -> dict:
     """Delete simulator and live submissions (with their results, reviews and labels) and every review,
     rescore the wave (only changed rows are written), and set the project clock back to Oct 31, 08:00."""
     return demo.reset(repo)
+
+
+# AI jobs ---------------------------------------------------------------------------
+
+@router.post("/jobs/run", dependencies=[Depends(require_jobs_secret)])
+def post_jobs_run(job_id: UUID = Body(embed=True), repo: Repository = Depends(get_repo),
+                  provider: Provider = Depends(get_provider)) -> dict:
+    """Run one queued job. Called by the database (pg_net) the moment a job is queued."""
+    return jobs.run_job(repo, provider, job_id=str(job_id))
+
+
+@router.post("/jobs/drain", dependencies=[Depends(require_passcode)])
+def post_jobs_drain(limit: int = Query(default=10, ge=1, le=50), repo: Repository = Depends(get_repo),
+                    provider: Provider = Depends(get_provider)) -> dict:
+    """Safety net: run queued (or abandoned) jobs, oldest first."""
+    return {"ran": jobs.drain(repo, provider, limit)}
+
+
+@router.post("/jobs/{job_id}/rerun", dependencies=[Depends(require_passcode)])
+def post_job_rerun(job_id: UUID, repo: Repository = Depends(get_repo)) -> dict:
+    """Force a finished job to run again (the database hook picks it up)."""
+    job = repo.requeue_job(str(job_id))
+    if job is None:
+        raise HTTPException(409, "no finished job with that id")
+    return {"id": job["id"], "status": job["status"]}
+
+
+# The morning brief ------------------------------------------------------------------
+
+@router.get("/brief")
+def get_brief(repo: Repository = Depends(get_repo)) -> dict:
+    """Today's brief (model-written, or the template fallback), the facts it was written from, and its state."""
+    return jobs.brief_state(repo)
+
+
+@router.post("/brief/regenerate", dependencies=[Depends(require_passcode)])
+def post_brief_regenerate(repo: Repository = Depends(get_repo)) -> dict:
+    job = jobs.queue_brief(repo, force=True)
+    return {"queued": job is not None, "job_id": job and job["id"]}
+
+
+@router.post("/brief/{brief_id}/audio")
+def post_brief_audio(brief_id: UUID, repo: Repository = Depends(get_repo),
+                     provider: Provider = Depends(get_provider)) -> dict:
+    """The brief read aloud: a signed URL, synthesised on first use and cached in Storage."""
+    try:
+        return jobs.brief_audio(repo, provider, str(brief_id))
+    except NotFound:
+        raise HTTPException(404, "no model-written brief with that id")
+    except AIUnavailable as error:
+        raise HTTPException(503, f"text to speech is unavailable: {error}")
+
+
+# Hard-mode evaluation (scripts/evaluate.py --hard) ------------------------------------
+
+@router.get("/eval/hard")
+def get_eval_hard(response: Response) -> dict:
+    """Rules only vs rules + AI on the hard synthetic waves. Aggregates only."""
+    if not HARD_EVAL.exists():
+        raise HTTPException(404, "no hard-mode evaluation has been run yet")
+    response.headers["Cache-Control"] = "public, max-age=60, s-maxage=600"
+    return json.loads(HARD_EVAL.read_text())
 
 
 app.include_router(router)

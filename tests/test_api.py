@@ -9,6 +9,7 @@ from api._lib import service
 from api._lib.repo import InMemoryRepo
 from api._lib.schemas import SubmissionIn
 from api.index import app, get_repo, passcode_value
+import engine
 from engine import CHECK_KEYS, Contributor, Params, Submission, score_all
 from tests.test_engine import LNG, north
 
@@ -121,7 +122,7 @@ def test_third_same_spot_arrival_flips_earlier_ones(client):
     flips = {c["submission_id"]: c for c in third["changed"]}
     assert set(flips) == {first["id"], second["id"]}
     assert all(c["flagged"] is True and c["previously_flagged"] is False and c["score"] == 2.5 for c in flips.values())
-    assert set(third["timing_ms"]) == {"begin", "score", "commit", "total"}
+    assert set(third["timing_ms"]) == {"begin", "commit", "queue", "total"}
 
 
 # Queue and reviews ----------------------------------------------------------------------
@@ -349,8 +350,8 @@ def test_retry_heals_a_score_from_an_older_engine(client, repo):
     created = post(client, body).json()
     repo._scores[created["id"]]["engine_version"] = "0.1.0"  # scored by an older engine
     retry = post(client, body).json()
-    assert retry["healed"] is True and retry["engine_version"] == "0.2.0"
-    assert repo.scores([created["id"]])[0]["engine_version"] == "0.2.0"
+    assert retry["healed"] is True and retry["engine_version"] == engine.__version__
+    assert repo.scores([created["id"]])[0]["engine_version"] == engine.__version__
 
 
 def test_commit_after_the_lease_expired_is_refused():

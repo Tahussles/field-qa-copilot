@@ -39,6 +39,9 @@ class SubmissionIn(BaseModel):
     gps_accuracy_m: float | None = Field(default=None, ge=0, le=100_000, strict=True)
     answers: Answers
     voice_transcript: str | None = Field(default=None, max_length=4000)
+    voice_note_path: str | None = Field(default=None, max_length=300, pattern=r"^[\w./-]+$",
+                                        description="Audio already uploaded to the voice-notes bucket; transcribed "
+                                                    "when there is no transcript")
     source: Literal["simulator", "live"]
 
     @field_validator("captured_at")

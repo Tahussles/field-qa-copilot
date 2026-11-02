@@ -73,6 +73,27 @@ class Repository(Protocol):
     def delete_submissions(self, sources: Iterable[str]) -> dict[str, int]: ...  # with dependents; counts per table
     def delete_reviews(self) -> int: ...  # every review in the project
 
+    # AI layer: verdicts are inputs to the checks; jobs drive the model work ------
+    def verdicts(self, submission_ids: Iterable[str] | None = None) -> list[dict]: ...  # either side of a pair
+    def verdict_version(self) -> tuple[int, str | None]: ...  # (count, latest created_at)
+    def put_verdict(self, row: dict) -> dict: ...  # replaces the verdict about the same subject
+    def set_transcript(self, submission_id: str, transcript: str, lang: str | None) -> None: ...
+    def queue_jobs(self, rows: list[dict]) -> list[dict]: ...  # skips dedupe_keys already queued; returns new rows
+    def job(self, job_id: str) -> dict | None: ...
+    def job_by_key(self, dedupe_key: str) -> dict | None: ...
+    def claim_job(self, job_id: str) -> dict | None: ...  # queued (or abandoned) -> running, attempts + 1
+    def claim_jobs(self, limit: int) -> list[dict]: ...
+    def finish_job(self, job_id: str, values: dict) -> None: ...
+    def requeue_job(self, job_id: str) -> dict | None: ...  # a forced rerun
+    def pending_jobs(self) -> list[dict]: ...  # queued or running: id, submission_id, kind, status
+    def briefs(self, for_date: str) -> list[dict]: ...  # newest first
+    def save_brief(self, row: dict) -> dict: ...  # one per (project, for_date, data_version)
+    def brief(self, brief_id: str) -> dict | None: ...
+    def set_brief_audio(self, brief_id: str, path: str) -> None: ...
+    def download(self, bucket: str, path: str) -> bytes: ...
+    def upload(self, bucket: str, path: str, data: bytes, content_type: str) -> None: ...
+    def signed_url(self, bucket: str, path: str, seconds: int) -> str: ...
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -96,6 +117,10 @@ class InMemoryRepo:
         self._check_results: dict[tuple[str, str, str], dict] = {}
         self._scores: dict[str, dict] = {}
         self._reviews: dict[str, dict] = {}
+        self._verdicts: dict[tuple[str, str, str | None], dict] = {}
+        self._jobs: dict[str, dict] = {}
+        self._briefs: dict[str, dict] = {}
+        self.files: dict[tuple[str, str], bytes] = {}
         self.locks: dict[str, tuple[str, float]] = {}  # key -> (holder, expires_at)
         self._mutex = threading.Lock()
         self._write_delay = write_delay  # widens race windows in concurrency tests
@@ -227,8 +252,10 @@ class InMemoryRepo:
             ids = {r["id"] for r in group}
             scores = [{k: s[k] for k in ("submission_id", "score", "flagged", "engine_version")}
                       for s in self._scores.values() if s["submission_id"] in ids]
+            verdicts = [{k: v.get(k) for k in ("submission_id", "pair_submission_id", "kind", "model", "verdict")}
+                        for v in self._verdicts.values() if v["submission_id"] in ids]
             return {"status": "heal" if existing else "inserted", "submission": dict(stored), "lock_keys": keys,
-                    "group": sorted(group, key=lambda r: r["id"]), "scores": scores}
+                    "group": sorted(group, key=lambda r: r["id"]), "scores": scores, "verdicts": verdicts}
 
     def ingest_commit(self, check_rows, score_rows, holder, expected_locks):
         if self._write_delay:
@@ -310,6 +337,9 @@ class InMemoryRepo:
                 self._truth.pop(sid, None)
             self._check_results = {k: v for k, v in self._check_results.items() if k[0] not in ids}
             self._reviews = {k: v for k, v in self._reviews.items() if v["submission_id"] not in ids}
+            self._verdicts = {k: v for k, v in self._verdicts.items()
+                              if v["submission_id"] not in ids and v.get("pair_submission_id") not in ids}
+            self._jobs = {k: v for k, v in self._jobs.items() if v.get("submission_id") not in ids}
             return counts
 
     def delete_reviews(self):
@@ -317,6 +347,114 @@ class InMemoryRepo:
             removed = len(self._reviews)
             self._reviews.clear()
             return removed
+
+    # AI layer -------------------------------------------------------------------------
+
+    def verdicts(self, submission_ids=None):
+        wanted = set(submission_ids) if submission_ids is not None else None
+        with self._mutex:
+            rows = [dict(v) for v in self._verdicts.values()
+                    if v["submission_id"] in self._submissions
+                    and (wanted is None or v["submission_id"] in wanted or v.get("pair_submission_id") in wanted)]
+        return sorted(rows, key=lambda v: (v["submission_id"], v["kind"], v.get("pair_submission_id") or ""))
+
+    def verdict_version(self):
+        rows = self.verdicts()
+        return len(rows), max((v["created_at"] for v in rows), default=None)
+
+    def put_verdict(self, row):
+        with self._mutex:
+            if row["submission_id"] not in self._submissions:
+                raise NotFound(row["submission_id"])
+            stored = {"id": str(uuid.uuid4()), "created_at": _now(), "pair_submission_id": None, **row}
+            self._verdicts[(row["submission_id"], row["kind"], stored["pair_submission_id"])] = stored
+            return dict(stored)
+
+    def set_transcript(self, submission_id, transcript, lang):
+        with self._mutex:
+            self._submissions[submission_id].update(voice_transcript=transcript, transcript_lang=lang)
+
+    def queue_jobs(self, rows):
+        with self._mutex:
+            taken = {j["dedupe_key"] for j in self._jobs.values()}
+            new = []
+            for row in rows:
+                if row["dedupe_key"] in taken:
+                    continue
+                job = {"id": str(uuid.uuid4()), "status": "queued", "attempts": 0, "notify": True, "created_at": _now(),
+                       "started_at": None, "finished_at": None, "output": None, "error": None, "submission_id": None,
+                       "project_id": None, "input": None, **row}
+                self._jobs[job["id"]] = job
+                taken.add(row["dedupe_key"])
+                new.append(dict(job))
+            return new
+
+    def job(self, job_id):
+        row = self._jobs.get(job_id)
+        return dict(row) if row else None
+
+    def job_by_key(self, dedupe_key):
+        row = next((j for j in self._jobs.values() if j["dedupe_key"] == dedupe_key), None)
+        return dict(row) if row else None
+
+    def claim_job(self, job_id):
+        with self._mutex:
+            row = self._jobs.get(job_id)
+            if row is None or row["status"] != "queued":
+                return None
+            row.update(status="running", attempts=row["attempts"] + 1, started_at=_now(), error=None)
+            return dict(row)
+
+    def claim_jobs(self, limit):
+        queued = sorted((j for j in self._jobs.values() if j["status"] == "queued"), key=lambda j: j["created_at"])
+        return [c for c in (self.claim_job(j["id"]) for j in queued[:limit]) if c]
+
+    def finish_job(self, job_id, values):
+        with self._mutex:
+            if job_id in self._jobs:
+                self._jobs[job_id].update(values, finished_at=_now())
+
+    def requeue_job(self, job_id):
+        with self._mutex:
+            row = self._jobs.get(job_id)
+            if row is None or row["status"] == "running":
+                return None
+            row.update(status="queued", error=None)
+            return dict(row)
+
+    def pending_jobs(self):
+        return [{k: j[k] for k in ("id", "submission_id", "kind", "status")}
+                for j in self._jobs.values() if j["status"] in ("queued", "running")]
+
+    def briefs(self, for_date):
+        rows = [dict(b) for b in self._briefs.values() if b["for_date"] == for_date]
+        return sorted(rows, key=lambda b: b["created_at"], reverse=True)
+
+    def save_brief(self, row):
+        with self._mutex:
+            existing = next((b for b in self._briefs.values() if (b["for_date"], b["data_version"]) ==
+                             (row["for_date"], row["data_version"])), None)
+            stored = {**(existing or {"id": str(uuid.uuid4()), "audio_path": None}), **row, "created_at": _now()}
+            self._briefs[stored["id"]] = stored
+            return dict(stored)
+
+    def brief(self, brief_id):
+        row = self._briefs.get(brief_id)
+        return dict(row) if row else None
+
+    def set_brief_audio(self, brief_id, path):
+        self._briefs[brief_id]["audio_path"] = path
+
+    def download(self, bucket, path):
+        if (bucket, path) not in self.files:
+            raise NotFound(f"{bucket}/{path}")
+        return self.files[(bucket, path)]
+
+    def upload(self, bucket, path, data, content_type):
+        self.files[(bucket, path)] = data
+
+    def signed_url(self, bucket, path, seconds):
+        return f"memory://{bucket}/{path}?expires={seconds}"
 
 
 # Supabase ---------------------------------------------------------------------
@@ -520,3 +658,100 @@ class SupabaseRepo:
         for start in range(0, len(ids), 100):
             self._db.delete("reviews", id=in_list(ids[start:start + 100]))
         return len(ids)
+
+    # AI layer -------------------------------------------------------------------------
+
+    _VERDICT_COLUMNS = "id,submission_id,pair_submission_id,kind,model,verdict,created_at"
+
+    def verdicts(self, submission_ids=None):
+        if submission_ids is None:
+            rows = self._db.select("ai_verdicts", self._VERDICT_COLUMNS + ",submissions!inner(project_id)",
+                                   order="id", **{"submissions.project_id": f"eq.{self._pid}"})
+            for row in rows:
+                row.pop("submissions", None)
+            return rows
+        ids = sorted(set(submission_ids))
+        out: dict[str, dict] = {}
+        for start in range(0, len(ids), 100):
+            chunk = in_list(ids[start:start + 100])
+            for row in self._db.select("ai_verdicts", self._VERDICT_COLUMNS,
+                                       **{"or": f"(submission_id.{chunk},pair_submission_id.{chunk})"}):
+                out[row["id"]] = row
+        return list(out.values())
+
+    def verdict_version(self):
+        row, count = self._db.first("ai_verdicts", "created_at,submissions!inner(project_id)", order="created_at.desc",
+                                    **{"submissions.project_id": f"eq.{self._pid}"})
+        return count, row["created_at"] if row else None
+
+    def put_verdict(self, row):
+        pair = row.get("pair_submission_id")
+        filters = {"submission_id": f"eq.{row['submission_id']}", "kind": f"eq.{row['kind']}",
+                   "pair_submission_id": f"eq.{pair}" if pair else "is.null"}
+        self._db.delete("ai_verdicts", **filters)
+        try:
+            return self._db.insert("ai_verdicts", [row], returning=True)[0]
+        except SupabaseError as error:
+            if error.code == "23503":  # the submission was deleted meanwhile (a demo reset)
+                raise NotFound(row["submission_id"]) from error
+            raise
+
+    def set_transcript(self, submission_id, transcript, lang):
+        self._db.update("submissions", {"voice_transcript": transcript, "transcript_lang": lang},
+                        id=f"eq.{submission_id}")
+
+    def queue_jobs(self, rows):
+        if not rows:
+            return []
+        return self._db.upsert_returning("ai_jobs", [{"project_id": self._pid, **r} for r in rows],
+                                         on_conflict="dedupe_key", ignore=True)
+
+    def job(self, job_id):
+        rows = self._db.select("ai_jobs", "*", id=f"eq.{job_id}")
+        return rows[0] if rows else None
+
+    def job_by_key(self, dedupe_key):
+        rows = self._db.select("ai_jobs", "*", dedupe_key=f"eq.{dedupe_key}")
+        return rows[0] if rows else None
+
+    def claim_job(self, job_id):
+        rows = self._db.rpc("claim_ai_job", {"job_id": job_id})
+        return rows[0] if rows else None
+
+    def claim_jobs(self, limit):
+        return self._db.rpc("claim_ai_jobs", {"max_jobs": limit}) or []
+
+    def finish_job(self, job_id, values):
+        self._db.update("ai_jobs", {**values, "finished_at": _now()}, id=f"eq.{job_id}")
+
+    def requeue_job(self, job_id):
+        rows = self._db.update("ai_jobs", {"status": "queued", "error": None}, id=f"eq.{job_id}",
+                               status="in.(done,failed)")
+        return rows[0] if rows else None
+
+    def pending_jobs(self):
+        return self._db.select("ai_jobs", "id,submission_id,kind,status", status="in.(queued,running)",
+                               project_id=f"eq.{self._pid}")
+
+    def briefs(self, for_date):
+        return self._db.select("briefs", "*", order="created_at.desc", for_date=f"eq.{for_date}", **self._in_project())
+
+    def save_brief(self, row):
+        return self._db.upsert_returning("briefs", [{"project_id": self._pid, **row, "created_at": _now()}],
+                                         on_conflict="project_id,for_date,data_version")[0]
+
+    def brief(self, brief_id):
+        rows = self._db.select("briefs", "*", id=f"eq.{brief_id}", **self._in_project())
+        return rows[0] if rows else None
+
+    def set_brief_audio(self, brief_id, path):
+        self._db.update("briefs", {"audio_path": path}, id=f"eq.{brief_id}")
+
+    def download(self, bucket, path):
+        return self._db.download(bucket, path)
+
+    def upload(self, bucket, path, data, content_type):
+        self._db.upload(bucket, path, data, content_type)
+
+    def signed_url(self, bucket, path, seconds):
+        return self._db.signed_url(bucket, path, seconds)

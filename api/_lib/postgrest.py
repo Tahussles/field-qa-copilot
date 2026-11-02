@@ -38,6 +38,9 @@ class Supabase:
             headers={"apikey": service_key, "Content-Type": "application/json"},
             timeout=timeout,
         )
+        self._storage = httpx.Client(base_url=f"{url.rstrip('/')}/storage/v1", headers={"apikey": service_key},
+                                     timeout=timeout)
+        self.service_key = service_key
 
     @classmethod
     def from_env_file(cls, path: Path) -> "Supabase":
@@ -111,6 +114,26 @@ class Supabase:
         response = self._check(self._http.patch(f"/{table}", params=filters, json=values,
                                                 headers={"Prefer": "return=representation"}))
         return response.json()
+
+    def upsert_returning(self, table: str, rows: list[dict], on_conflict: str, ignore: bool = False) -> list[dict]:
+        """Upsert and return the rows written. ignore=True keeps existing rows and returns only new ones."""
+        resolution = "ignore-duplicates" if ignore else "merge-duplicates"
+        response = self._check(self._http.post(f"/{table}", params={"on_conflict": on_conflict}, json=rows,
+                                               headers={"Prefer": f"resolution={resolution},return=representation"}))
+        return response.json()
+
+    # Storage (private buckets, service role)
+    def download(self, bucket: str, path: str) -> bytes:
+        return self._check(self._storage.get(f"/object/{bucket}/{path}")).content
+
+    def upload(self, bucket: str, path: str, data: bytes, content_type: str) -> None:
+        self._check(self._storage.post(f"/object/{bucket}/{path}", content=data,
+                                       headers={"Content-Type": content_type, "x-upsert": "true"}))
+
+    def signed_url(self, bucket: str, path: str, seconds: int) -> str:
+        """An absolute URL the browser can fetch for `seconds`."""
+        signed = self._check(self._storage.post(f"/object/sign/{bucket}/{path}", json={"expiresIn": seconds})).json()
+        return str(self._storage.base_url).rstrip("/") + signed["signedURL"]
 
     def rpc(self, function: str, args: dict[str, Any]) -> Any:
         response = self._check(self._http.post(f"/rpc/{function}", json=args))

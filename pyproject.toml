@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Detection engine and API for Field QA Copilot"
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "anthropic>=2.3.0",
     "fastapi>=0.120",
     "httpx>=0.28.1",
     "tzdata>=2025.2",

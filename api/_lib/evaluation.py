@@ -5,8 +5,10 @@ carry aggregates only (counts, precision, recall), never submission ids or
 per-row labels.
 
 Results are cached per (params, engine_version, data version). The data
-version is the synthetic row count plus the latest synced_at, so new or
-deleted data invalidates both the cached dataset and the cached results.
+version is the synthetic row count plus the latest synced_at, and the verdict
+count plus the latest verdict, so new or deleted data (or a model verdict
+landing) invalidates both the cached dataset and the cached results. Scoring
+reads the stored verdicts, as production does.
 """
 
 import json
@@ -19,7 +21,7 @@ from engine import Params, Submission, __version__, score_all
 from engine.metrics import combined, per_check
 
 from .repo import Repository
-from .service import context
+from .service import context, verdict_index
 
 SWEEP_THRESHOLDS = tuple(1.0 + 0.5 * i for i in range(15))  # 1.0 to 8.0
 RESULT_CACHE_SIZE = 64
@@ -38,7 +40,7 @@ def _state(repo: Repository) -> dict:
 def _data_version(repo: Repository, state: dict) -> tuple:
     ttl = VERSION_TTL_SECONDS if getattr(repo, "cache_ttl", 0) else 0
     if state["version"] is None or time.monotonic() - state["version_checked"] > ttl:
-        state["version"] = repo.data_version("synthetic")
+        state["version"] = (*repo.data_version("synthetic"), *repo.verdict_version())
         state["version_checked"] = time.monotonic()
     return state["version"]
 
@@ -47,7 +49,8 @@ def _dataset(repo: Repository, state: dict, version: tuple):
     if state["dataset_version"] != version:
         submissions = [Submission.from_row(r) for r in repo.submissions(source="synthetic")]
         labels = repo.truth_labels()
-        state["dataset"] = ([s for s in submissions if s.id in labels], labels)
+        verdicts = verdict_index([v for v in repo.verdicts() if v["submission_id"] in labels])
+        state["dataset"] = ([s for s in submissions if s.id in labels], labels, verdicts)
         state["dataset_version"] = version
     return state["dataset"]
 
@@ -69,15 +72,15 @@ def evaluate(repo: Repository, overrides: dict, sweep: bool = False) -> dict:
             state["results"].move_to_end(key)
             return {**cached, "cached": True,
                     "timing_ms": {"total": round((time.perf_counter() - started) * 1000)}}
-        submissions, labels = _dataset(repo, state, version)
+        submissions, labels, verdicts = _dataset(repo, state, version)
 
     loaded = time.perf_counter()
-    scored = score_all(submissions, ctx.contributors, params)
+    scored = score_all(submissions, ctx.contributors, params, verdicts)
     scores = {s.submission_id: s.score for s in scored}
     result = {
         "engine_version": __version__,
         "params": params.to_config(),
-        "data_version": {"rows": version[0], "latest_synced_at": version[1]},
+        "data_version": {"rows": version[0], "latest_synced_at": version[1], "verdicts": version[2]},
         "combined": combined(scores, labels, params.review_threshold, params.watch_threshold),
         "per_check": per_check(scored, labels),
     }

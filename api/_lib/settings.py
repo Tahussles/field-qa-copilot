@@ -19,6 +19,8 @@ class Settings:
     # Seconds per Supabase request. Vercel (yul1) sits next to the database; a laptop
     # can be far slower, so local dev waits longer (reads also retry once).
     db_timeout: float
+    anthropic_key: str | None
+    elevenlabs_key: str | None
 
 
 @lru_cache(maxsize=1)
@@ -35,4 +37,6 @@ def get_settings() -> Settings:
         demo_passcode=value("DEMO_PASSCODE"),
         project_id=value("PROJECT_ID"),
         db_timeout=20.0 if os.environ.get("VERCEL") else 45.0,
+        anthropic_key=value("ANTHROPIC_API_KEY"),
+        elevenlabs_key=value("ELEVENLABS_API_KEY"),
     )
