@@ -1,19 +1,77 @@
 import Link from "next/link";
 
+import { OpenOnEnter } from "@/components/landing/OpenOnEnter";
+import { Stage } from "@/components/landing/Stage";
+import { Glass } from "@/components/ui/Glass";
+
+/** The landing page: the prototype's #home view, with a stage that replays (or shows live) real submissions. */
 export default function Home() {
   return (
-    <main className="relative flex min-h-screen flex-col items-center justify-center gap-4 px-6 text-center">
-      <div className="ambient" aria-hidden />
-      <h1 className="relative font-display text-3xl font-semibold tracking-tight">Field QA Copilot</h1>
-      <p className="relative max-w-md text-muted">
-        Fabrication checks for field data submissions. The landing page is coming soon.
-      </p>
-      <Link
-        href="/app"
-        className="relative rounded-lg border border-line-strong bg-panel px-4 py-2 text-sm text-ink hover:bg-raised"
-      >
-        Open the dashboard
-      </Link>
+    <main className="landing">
+      <div className="landing-glow" aria-hidden />
+      <div className="intro">
+        <Glass as="header" className="introbar">
+          <div className="brand">
+            <span className="logo" aria-hidden />
+            Field QA Copilot
+          </div>
+          <Link href="/app" className="btn btn-ghost">
+            Open the app <kbd className="kbd">↵</kbd>
+          </Link>
+        </Glass>
+
+        <section className="hero">
+          <span className="badge">
+            <b>Prototype</b> Built for community data collection teams
+          </span>
+          <h1>Catch fabricated field data before it reaches the analysis.</h1>
+          <p>
+            When people are rewarded per submission, some submissions get invented. The copilot checks every interview as it
+            arrives, explains what looks wrong, and hands reviewers a short list instead of a spreadsheet.
+          </p>
+          <div className="cta">
+            <Link href="/app" className="btn btn-primary">
+              Open the app
+            </Link>
+            <Glass as={Link} href="/app/detectors" className="btn btn-glass">
+              See how it is scored
+            </Glass>
+          </div>
+        </section>
+
+        <Stage />
+
+        <section className="how" aria-label="How it works">
+          <div>
+            <span className="n">01 · Check</span>
+            <h3>Eight checks on every interview</h3>
+            <p>
+              Too fast, same spot, copied answers, straight-lining, voice note vs form, off-hours, shared device and bursts.
+              Cheap, explainable, run the moment data syncs.
+            </p>
+          </div>
+          <div>
+            <span className="n">02 · Explain</span>
+            <h3>Evidence, not a black box</h3>
+            <p>
+              Each flag shows why: the cluster on a map, the two copied answers side by side, the voice note that contradicts
+              the form.
+            </p>
+          </div>
+          <div>
+            <span className="n">03 · Decide</span>
+            <h3>A human makes every call</h3>
+            <p>
+              Reviewers approve, reject or send a supervisor to back-check. A morning brief tells the lead researcher who to
+              look at first.
+            </p>
+          </div>
+        </section>
+        <footer className="foot">
+          Synthetic data with fraud planted on purpose, so every check can be scored. Prototype by Taha Hussain.
+        </footer>
+      </div>
+      <OpenOnEnter />
     </main>
   );
 }

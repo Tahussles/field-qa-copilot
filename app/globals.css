@@ -579,3 +579,337 @@ mark {
     display: none;
   }
 }
+
+/* Landing page (/), the prototype's #home view. --------------------------------------- */
+@layer components {
+  .landing {
+    position: relative;
+    min-height: 100vh;
+    overflow: hidden;
+  }
+  .landing-glow {
+    position: absolute;
+    inset: -200px 0 auto 0;
+    height: 620px;
+    pointer-events: none;
+    background: radial-gradient(60% 55% at 50% 30%, rgb(124 132 248 / 0.2), transparent 70%);
+  }
+  .intro {
+    position: relative;
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 22px 24px 64px;
+  }
+  .introbar {
+    position: sticky;
+    top: 12px;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 56px;
+    padding: 7px 8px 7px 14px;
+    border-radius: 999px;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 13.5px;
+  }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--color-muted);
+    border: 1px solid var(--color-line-strong);
+    border-radius: 999px;
+    padding: 3px 12px 3px 4px;
+    background: rgb(255 255 255 / 0.02);
+  }
+  .badge b {
+    font-weight: 500;
+    color: var(--color-ink);
+    background: var(--color-accent-soft);
+    border-radius: 999px;
+    padding: 1px 8px;
+  }
+  .hero {
+    max-width: 760px;
+  }
+  .hero h1 {
+    font-size: clamp(34px, 5.4vw, 58px);
+    line-height: 1.04;
+    font-weight: 600;
+    margin: 18px 0;
+    background: linear-gradient(180deg, #fff 30%, rgb(255 255 255 / 0.55));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .hero p {
+    font-size: 17px;
+    color: var(--color-muted);
+    max-width: 58ch;
+    margin: 0 0 26px;
+  }
+  .cta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .cta .btn {
+    padding: 9px 16px;
+    font-size: 14px;
+  }
+  /* The prototype's button.glass: glass recipe with the lighter button fill. */
+  .btn-glass {
+    background: linear-gradient(135deg, rgb(255 255 255 / 0.12), rgb(255 255 255 / 0.04));
+    border-color: rgb(255 255 255 / 0.14);
+  }
+  .btn-glass:hover {
+    background: linear-gradient(135deg, rgb(255 255 255 / 0.18), rgb(255 255 255 / 0.07));
+    border-color: rgb(255 255 255 / 0.14);
+  }
+  .stage {
+    margin-top: 56px;
+    border: 1px solid var(--color-line-strong);
+    border-radius: 14px;
+    background: linear-gradient(180deg, rgb(255 255 255 / 0.03), rgb(255 255 255 / 0.005));
+    box-shadow:
+      0 30px 80px -30px rgb(0 0 0 / 0.8),
+      0 0 0 1px rgb(0 0 0 / 0.6);
+    overflow: hidden;
+  }
+  .stagebar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--color-line);
+    font-size: 12px;
+    color: var(--color-muted);
+  }
+  .stagebar .dots {
+    flex: none;
+    display: inline-flex;
+  }
+  .stagebar .dots i {
+    display: inline-block;
+    width: 9px;
+    height: 9px;
+    margin-right: 5px;
+    border-radius: 50%;
+    background: rgb(255 255 255 / 0.12);
+  }
+  .stage-mode {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+  }
+  .stage-mode::before {
+    content: "";
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--color-faint);
+  }
+  /* Only real Realtime arrivals get the green ping; a replay never does. */
+  .stage-mode.is-live {
+    color: var(--color-ink-2);
+  }
+  .stage-mode.is-live::before {
+    background: var(--color-ok);
+    box-shadow: 0 0 0 0 rgb(76 183 130 / 0.6);
+    animation: stage-ping 1.8s infinite;
+  }
+  .stagegrid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+    min-height: 340px;
+  }
+  .stagecanvas {
+    position: relative;
+    min-height: 300px;
+    overflow: hidden;
+    background: #0b0c0f;
+  }
+  .stagecanvas img,
+  .stagecanvas canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+  .stagecanvas img {
+    object-fit: cover;
+  }
+  .stage-pill {
+    position: absolute;
+    left: 14px;
+    top: 14px;
+    border-radius: 999px;
+    padding: 5px 12px;
+    font-size: 11.5px;
+    color: #d9dbe0;
+  }
+  .stage-attrib {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    padding: 2px 6px;
+    font-size: 10px;
+    color: var(--color-faint);
+    background: rgb(8 9 10 / 0.7);
+    border-top-left-radius: 6px;
+  }
+  .stage-attrib a {
+    color: var(--color-muted);
+  }
+  .feed {
+    position: relative;
+    border-left: 1px solid var(--color-line);
+    padding: 6px 0;
+    overflow: hidden;
+  }
+  .feed::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 70px;
+    pointer-events: none;
+    background: linear-gradient(transparent, var(--color-bg));
+    opacity: 0.85;
+  }
+  .frow {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 10px;
+    align-items: center;
+    padding: 9px 14px;
+    border-bottom: 1px solid var(--color-line);
+    font-size: 12.5px;
+  }
+  .frow.is-new {
+    animation: slide 0.45s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  .frow .id {
+    font-family: var(--font-mono);
+    color: var(--color-muted);
+    font-size: 11.5px;
+  }
+  .frow .what {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .counters {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    border-top: 1px solid var(--color-line);
+  }
+  .counters > div {
+    padding: 14px 16px;
+    border-right: 1px solid var(--color-line);
+  }
+  .counters > div:last-child {
+    border-right: 0;
+  }
+  .counters b {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 20px;
+    font-weight: 500;
+  }
+  .counters span {
+    font-size: 12px;
+    color: var(--color-muted);
+  }
+  .how {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1px;
+    margin-top: 56px;
+    background: var(--color-line);
+    border: 1px solid var(--color-line);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .how > div {
+    background: var(--color-bg);
+    padding: 20px;
+  }
+  .how .n {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--color-accent);
+  }
+  .how h3 {
+    font-size: 15px;
+    margin: 8px 0 6px;
+  }
+  .how p {
+    margin: 0;
+    color: var(--color-muted);
+    max-width: 40ch;
+  }
+  .foot {
+    margin-top: 28px;
+    font-size: 12px;
+    color: var(--color-faint);
+  }
+  @media (max-width: 960px) {
+    .stagegrid,
+    .how {
+      grid-template-columns: 1fr;
+    }
+    .feed {
+      border-left: 0;
+      border-top: 1px solid var(--color-line);
+      max-height: 280px;
+    }
+    .counters {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .counters > div:nth-child(2) {
+      border-right: 0;
+    }
+    .counters > div:nth-child(-n + 2) {
+      border-bottom: 1px solid var(--color-line);
+    }
+  }
+  @media (max-width: 420px) {
+    .intro {
+      padding-left: 16px;
+      padding-right: 16px;
+    }
+  }
+}
+@keyframes stage-ping {
+  0% {
+    box-shadow: 0 0 0 0 rgb(76 183 130 / 0.6);
+  }
+  80%,
+  100% {
+    box-shadow: 0 0 0 7px rgb(76 183 130 / 0);
+  }
+}
+@keyframes slide {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
