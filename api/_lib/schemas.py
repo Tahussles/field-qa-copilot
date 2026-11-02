@@ -64,3 +64,12 @@ class EvaluateIn(BaseModel):
     params: dict[str, Any] = Field(default_factory=dict, examples=[{"weights": {"same_spot": 3}, "review_threshold": 2.5}],
                                    description="Overrides merged over the project's check_config")
     sweep: bool = Field(default=False, description="Also return precision/recall/flagged for thresholds 1.0 to 8.0")
+
+
+class DemoStepIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    count: int | None = Field(default=None, ge=1, le=50, strict=True,
+                              description="How many pending live-day submissions to send (default 1, or 50 with until)")
+    until_field_time: AwareDatetime | None = Field(default=None,
+                                                   description="Send what phones had synced by this field time")

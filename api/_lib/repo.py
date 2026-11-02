@@ -35,7 +35,9 @@ class LeaseLost(Exception):
 class Repository(Protocol):
     cache_ttl: float  # seconds the service may cache slow-changing reads (0 = never)
 
-    def project(self) -> dict: ...  # id, name, region, timezone, as_of
+    def project(self) -> dict: ...  # id, name, region, timezone, as_of (as_of may be cached; see as_of())
+    def as_of(self) -> str | None: ...  # projects.as_of, read fresh
+    def set_as_of(self, value: str, forward_only: bool = False) -> None: ...
     def check_params(self) -> dict | None: ...
     def areas(self, boundary: bool = False) -> list[dict]: ...  # id, name (+ boundary GeoJSON)
     def contributors(self) -> list[dict]: ...  # id, code, display_name, kind, area_id
@@ -63,6 +65,12 @@ class Repository(Protocol):
     def insert_review(self, row: dict) -> dict: ...  # Conflict if the submission has an active review
     def revoke_review(self, review_id: str) -> dict: ...  # NotFound if missing or already revoked
     def truth_labels(self) -> dict[str, dict]: ...  # only /evaluate may call this
+
+    # Demo controls (/demo/*) ----------------------------------------------------
+    def client_ids(self, sources: Iterable[str]) -> dict[str, str]: ...  # client_submission_id -> id
+    def write_truth(self, rows: list[dict]) -> None: ...  # upsert ground truth for rows the demo sent
+    def delete_submissions(self, sources: Iterable[str]) -> dict[str, int]: ...  # with dependents; counts per table
+    def delete_reviews(self) -> int: ...  # every review in the project
 
 
 def _now() -> str:
@@ -95,6 +103,15 @@ class InMemoryRepo:
 
     def project(self) -> dict:
         return dict(self._project)
+
+    def as_of(self):
+        return self._project.get("as_of")
+
+    def set_as_of(self, value, forward_only=False):
+        current = self._project.get("as_of")
+        if forward_only and (current is None or datetime.fromisoformat(current) >= datetime.fromisoformat(value)):
+            return
+        self._project = {**self._project, "as_of": value}
 
     def check_params(self) -> dict | None:
         return self._check_params
@@ -257,6 +274,44 @@ class InMemoryRepo:
                 for sid, t in self._truth.items()
                 if self._submissions.get(sid, {}).get("source") == "synthetic"}
 
+    # Demo controls ----------------------------------------------------------------
+
+    def client_ids(self, sources):
+        wanted = set(sources)
+        with self._mutex:
+            return {r["client_submission_id"]: r["id"] for r in self._submissions.values() if r.get("source") in wanted}
+
+    def write_truth(self, rows):
+        with self._mutex:
+            for row in rows:
+                self._truth[row["submission_id"]] = dict(row)
+
+    def delete_submissions(self, sources):
+        wanted = set(sources)
+        with self._mutex:
+            ids = {sid for sid, r in self._submissions.items() if r.get("source") in wanted}
+            counts = {
+                "submissions": len(ids),
+                "check_results": sum(sid in ids for sid, _, _ in self._check_results),
+                "scores": sum(sid in ids for sid in self._scores),
+                "reviews": sum(r["submission_id"] in ids for r in self._reviews.values()),
+                "ai_jobs": 0,  # not modelled in memory
+                "synthetic_truth": sum(sid in ids for sid in self._truth),
+            }
+            for sid in ids:
+                del self._submissions[sid]
+                self._scores.pop(sid, None)
+                self._truth.pop(sid, None)
+            self._check_results = {k: v for k, v in self._check_results.items() if k[0] not in ids}
+            self._reviews = {k: v for k, v in self._reviews.items() if v["submission_id"] not in ids}
+            return counts
+
+    def delete_reviews(self):
+        with self._mutex:
+            removed = len(self._reviews)
+            self._reviews.clear()
+            return removed
+
 
 # Supabase ---------------------------------------------------------------------
 
@@ -280,6 +335,16 @@ class SupabaseRepo:
     @property
     def _pid(self) -> str:
         return self.project()["id"]
+
+    def as_of(self):
+        rows = self._db.select("projects", "as_of", id=f"eq.{self._pid}")
+        return rows[0]["as_of"] if rows else None
+
+    def set_as_of(self, value, forward_only=False):
+        filters = {"id": f"eq.{self._pid}"}
+        if forward_only:
+            filters["as_of"] = f"lt.{value}"  # never moves the clock back when two tabs step at once
+        self._db.update("projects", {"as_of": value}, **filters)
 
     def _in_project(self) -> dict:
         return {"project_id": f"eq.{self._pid}"}
@@ -402,3 +467,30 @@ class SupabaseRepo:
         rows = self._db.select("synthetic_truth", "submission_id,fraud_type,noise_tag,submissions!inner(project_id,source)",
                                **{"submissions.project_id": f"eq.{self._pid}", "submissions.source": "eq.synthetic"})
         return {r["submission_id"]: {"fraud_type": r["fraud_type"], "noise_tag": r["noise_tag"]} for r in rows}
+
+    # Demo controls ----------------------------------------------------------------
+
+    def client_ids(self, sources):
+        rows = self._db.select("submissions", "id,client_submission_id", order="id",
+                               source=in_list(sorted(set(sources))), **self._in_project())
+        return {r["client_submission_id"]: r["id"] for r in rows}
+
+    def write_truth(self, rows):
+        if rows:
+            self._db.upsert("synthetic_truth", rows, on_conflict="submission_id")
+
+    def delete_submissions(self, sources):
+        """Counts first (dependents through an inner join), then one delete that cascades to all of them."""
+        source = in_list(sorted(set(sources)))
+        joined = {"submissions.project_id": f"eq.{self._pid}", "submissions.source": source}
+        counts = {"submissions": self._db.count("submissions", "id", source=source, **self._in_project())}
+        for table in ("check_results", "scores", "reviews", "ai_jobs", "synthetic_truth"):
+            counts[table] = self._db.count(table, "submission_id,submissions!inner(project_id,source)", **joined)
+        self._db.delete("submissions", source=source, **self._in_project())
+        return counts
+
+    def delete_reviews(self):
+        ids = [r["id"] for r in self.reviews()]
+        for start in range(0, len(ids), 100):
+            self._db.delete("reviews", id=in_list(ids[start:start + 100]))
+        return len(ids)

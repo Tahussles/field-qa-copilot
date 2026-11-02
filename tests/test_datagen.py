@@ -191,11 +191,13 @@ def test_engine_does_not_import_datagen():
 def test_detection_code_never_mentions_the_truth_table():
     # The engine never sees ground truth. In the API only the /evaluate path reads
     # it (server-side, aggregates out): the repo query and api/_lib/evaluation.py.
+    # /demo/step writes the generator's labels through repo.write_truth and never reads them.
     allowed = {ROOT / "api" / "_lib" / "repo.py", ROOT / "api" / "_lib" / "evaluation.py"}
     for path in [*(ROOT / "engine").rglob("*.py"), *(ROOT / "api").rglob("*.py")]:
         if path not in allowed:
             assert "synthetic_truth" not in path.read_text(), path
-    assert "truth_labels" not in (ROOT / "api" / "_lib" / "service.py").read_text()
+    for name in ("service.py", "demo.py"):
+        assert "truth_labels" not in (ROOT / "api" / "_lib" / name).read_text()
 
 
 # Live day ---------------------------------------------------------------------

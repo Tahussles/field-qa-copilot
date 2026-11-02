@@ -19,11 +19,11 @@ if str(ROOT) not in sys.path:
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query, Response  # noqa: E402
 
 import engine  # noqa: E402
-from api._lib import service  # noqa: E402
+from api._lib import demo, service  # noqa: E402
 from api._lib.evaluation import evaluate as run_evaluation  # noqa: E402
 from api._lib.postgrest import Supabase  # noqa: E402
 from api._lib.repo import Conflict, NotFound, Repository, SupabaseRepo  # noqa: E402
-from api._lib.schemas import EvaluateIn, ReviewIn, SubmissionIn  # noqa: E402
+from api._lib.schemas import DemoStepIn, EvaluateIn, ReviewIn, SubmissionIn  # noqa: E402
 from api._lib.settings import get_settings  # noqa: E402
 
 app = FastAPI(
@@ -149,6 +149,40 @@ def post_evaluate(body: EvaluateIn, repo: Repository = Depends(get_repo)) -> dic
 def post_rescore(repo: Repository = Depends(get_repo)) -> dict:
     """Rescore the whole project with the current check_config. A safety net."""
     return service.rescore(repo)
+
+
+@router.get("/landing")
+def get_landing(response: Response, repo: Repository = Depends(get_repo)) -> dict:
+    """The landing page's stage: yesterday's scored submissions to replay, and the wave's /evaluate counters."""
+    response.headers["Cache-Control"] = "public, max-age=60, s-maxage=300, stale-while-revalidate=86400"
+    combined = run_evaluation(repo, {})["combined"]
+    return {**service.replay_day(repo), "counters": {
+        k: combined[k] for k in ("submissions", "fabricated", "flagged", "precision", "recall")}}
+
+
+# Demo controls: the presenter's panel in the dashboard. All need the passcode.
+
+@router.get("/demo/status", dependencies=[Depends(require_passcode)])
+def get_demo_status(repo: Repository = Depends(get_repo)) -> dict:
+    """Live-day progress (sent, total, field clock, next sync) and the key moments with their field times."""
+    return demo.status(repo)
+
+
+@router.post("/demo/step", dependencies=[Depends(require_passcode)])
+def post_demo_step(body: DemoStepIn, repo: Repository = Depends(get_repo)) -> dict:
+    """Send the next pending live-day submissions through the same ingest as POST /submissions.
+
+    Pending means not in the database yet (by client_submission_id), so repeating
+    a step, or two tabs stepping at once, never sends anything twice.
+    """
+    return demo.step(repo, body.count, body.until_field_time)
+
+
+@router.post("/demo/reset", dependencies=[Depends(require_passcode)])
+def post_demo_reset(repo: Repository = Depends(get_repo)) -> dict:
+    """Delete simulator and live submissions (with their results, reviews and labels) and every review,
+    rescore the wave (only changed rows are written), and set the project clock back to Oct 31, 08:00."""
+    return demo.reset(repo)
 
 
 app.include_router(router)

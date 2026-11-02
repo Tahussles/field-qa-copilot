@@ -296,9 +296,8 @@ def create_review(repo: Repository, body: ReviewIn) -> dict:
 
 # GET /overview --------------------------------------------------------------------------
 
-def project_now(ctx: ProjectContext) -> datetime:
+def project_now(as_of: str | None) -> datetime:
     """The project's "now": projects.as_of when set (demos), otherwise the wall clock."""
-    as_of = ctx.project.get("as_of")
     return datetime.fromisoformat(as_of) if as_of else datetime.now(timezone.utc)
 
 
@@ -341,7 +340,8 @@ def overview(repo: Repository, day: date | None = None) -> dict:
     snap = snapshot(repo)
     params = snap.ctx.params
     tz = ZoneInfo(params.timezone)
-    now = project_now(snap.ctx)
+    as_of = repo.as_of()  # read fresh: the demo moves it while the context is cached
+    now = project_now(as_of)
     today = now.astimezone(tz).date()
     bands = [params.band(s.score) for s in snap.scored]
     flagged_ids = {s.submission_id for s, b in zip(snap.scored, bands) if b == "flagged"}
@@ -350,10 +350,10 @@ def overview(repo: Repository, day: date | None = None) -> dict:
     area_of = {cid: snap.ctx.area_names.get(r.get("area_id"), "unknown") for cid, r in snap.ctx.contributor_rows.items()}
 
     return {
-        "project": snap.ctx.project,
+        "project": {**snap.ctx.project, "as_of": as_of},
         "engine_version": __version__,
         "now": _iso(now),
-        "now_is_fixed": bool(snap.ctx.project.get("as_of")),
+        "now_is_fixed": bool(as_of),
         "thresholds": {"review": params.review_threshold, "watch": params.watch_threshold},
         "kpis": {
             "received": len(snap.scored),
@@ -402,6 +402,34 @@ def map_view(repo: Repository) -> dict:
         "areas": [{"id": a["id"], "name": a["name"], "boundary": a.get("boundary")} for a in repo.areas(boundary=True)],
         "hotspots": hotspots(snap.scored, list(snap.submissions.values()), snap.ctx.contributors, params),
     }
+
+
+# GET /landing --------------------------------------------------------------------------
+
+def replay_day(repo: Repository) -> dict:
+    """Yesterday's scored submissions (relative to the project clock), in capture order, for the landing replay."""
+    snap = snapshot(repo)
+    params = snap.ctx.params
+    tz = ZoneInfo(params.timezone)
+    day = project_now(repo.as_of()).astimezone(tz).date() - timedelta(days=1)
+    points = []
+    for s in snap.scored:
+        sub = snap.submissions[s.submission_id]
+        if sub.lat is None or sub.lng is None or sub.local_date(tz) != day:
+            continue
+        points.append({
+            "id": s.submission_id,
+            "code": snap.ctx.contributor_rows[sub.contributor_id]["code"],
+            "lat": round(sub.lat, 6),
+            "lng": round(sub.lng, 6),
+            "score": s.score,
+            "band": params.band(s.score),
+            "fired": snap.fired.get(s.submission_id, []),
+            "captured_at": _iso(sub.captured_at),
+        })
+    points.sort(key=lambda p: (p["captured_at"], p["id"]))
+    return {"project": {k: snap.ctx.project.get(k) for k in ("name", "region")}, "date": day.isoformat(),
+            "thresholds": {"review": params.review_threshold, "watch": params.watch_threshold}, "points": points}
 
 
 # POST /rescore ------------------------------------------------------------------------
