@@ -13,6 +13,7 @@ import type { IngestResponse, MapPoint } from "@/lib/types";
 
 const SOURCES = Object.keys(SOURCE_LABEL);
 const ITEMS = ["Reliability", "Distance", "Cost", "Quality", "Waiting", "Safety", "Hours", "Overall"];
+const VARIED = [3, 2, 3, 4, 2, 3, 4, 3];
 
 interface Form {
   code: string;
@@ -30,7 +31,7 @@ const PRESETS: { name: string; note: string; apply: (f: Form) => Form }[] = [
   {
     name: "Typical interview",
     note: "Should pass",
-    apply: (f) => ({ ...f, minutes: 27, source: "public_tap", satisfaction: [3, 2, 3, 4, 2, 3, 4, 3],
+    apply: (f) => ({ ...f, minutes: 27, source: "public_tap", satisfaction: [...VARIED],
       openText: "The queue at the kiosk is long in the evenings, so my daughter fetches water before school.",
       transcript: "We fetch from the public tap near the market.", nearLast: false }),
   },
@@ -67,7 +68,7 @@ export function TestSubmission() {
     minutes: 27,
     time: DEFAULT_TIME,
     source: "public_tap",
-    satisfaction: [3, 2, 3, 4, 2, 3, 4, 3],
+    satisfaction: [...VARIED],
     openText: "The queue at the kiosk is long in the evenings, so my daughter fetches water before school.",
     transcript: "We fetch from the public tap near the market.",
     nearLast: false,
@@ -120,6 +121,8 @@ export function TestSubmission() {
     }
   }
 
+  // Checked whenever all 8 match, so the Speeder preset shows up here too.
+  const sameAll = form.satisfaction.every((v) => v === form.satisfaction[0]);
   const set = <K extends keyof Form>(key: K, value: Form[K]) => setForm((f) => ({ ...f, [key]: value }));
 
   return (
@@ -162,8 +165,17 @@ export function TestSubmission() {
         <Field label="Biggest challenge getting water (open-ended)" full>
           <textarea rows={3} value={form.openText} onChange={(e) => set("openText", e.target.value)} className="input min-h-16 resize-y" />
         </Field>
-        <Field label="Satisfaction (1 to 5)" full>
-          <div className="grid grid-cols-4 gap-2 sm:grid-cols-8">
+        <label className="col-span-full flex items-center gap-2 text-ink">
+          <input
+            type="checkbox"
+            checked={sameAll}
+            onChange={(e) => set("satisfaction", e.target.checked ? Array(8).fill(3) : [...VARIED])}
+          />
+          Answer all 8 satisfaction questions with the same score
+        </label>
+        <details className="col-span-full -mt-1.5 text-[12px] text-muted">
+          <summary className="w-max cursor-pointer select-none hover:text-ink">Adjust answers</summary>
+          <div className="mt-2 grid grid-cols-4 gap-2 sm:grid-cols-8">
             {form.satisfaction.map((v, i) => (
               <label key={i} className="flex flex-col gap-1 text-[11px] font-normal text-faint">
                 {ITEMS[i]}
@@ -172,7 +184,7 @@ export function TestSubmission() {
               </label>
             ))}
           </div>
-        </Field>
+        </details>
         <label className="col-span-full flex items-center gap-2 text-ink">
           <input type="checkbox" checked={form.nearLast} onChange={(e) => set("nearLast", e.target.checked)} />
           Place it at {form.code}&apos;s last interview spot {last ? "" : "(no previous location)"}
