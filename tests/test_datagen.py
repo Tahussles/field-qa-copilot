@@ -239,3 +239,31 @@ def test_live_day_rows_are_sane(live):
         assert s.captured_at <= s.synced_at and s.duration_sec > 0
         assert s.noise_tag is None or not s.is_fabricated
     assert [s.synced_at for s in live.submissions] == sorted(s.synced_at for s in live.submissions)
+
+
+# Hard mode ---------------------------------------------------------------------
+
+def test_hard_mode_rewrites_three_actors_and_never_the_demo_wave():
+    from datagen.hard import build_hard_wave
+    from engine.checks.voice_vs_form import voice_source
+
+    with pytest.raises(ValueError):
+        build_hard_wave(20261031)
+    normal, hard = build_wave(201), build_hard_wave(201)
+    assert [(s.id, s.fraud_type) for s in sorted(normal.submissions, key=lambda s: s.id)] == \
+           [(s.id, s.fraud_type) for s in sorted(hard.submissions, key=lambda s: s.id)]
+    assert [s.answers for s in build_hard_wave(201).submissions] == [s.answers for s in hard.submissions]
+    by_id = {s.id: s for s in normal.submissions}
+    for sub in hard.submissions:
+        before = by_id[sub.id]
+        if sub.fraud_type == "copypaste":
+            assert sub.answers["open_text"] != before.answers["open_text"]
+        elif sub.fraud_type == "contradiction":
+            # The keyword rule hears the home pipe first and agrees with the form.
+            assert voice_source(sub.voice_transcript)[0] == "piped_home" == sub.answers["water_source"]
+        elif sub.fraud_type is None:
+            assert (sub.answers, sub.voice_transcript, sub.point) == (before.answers, before.voice_transcript, before.point)
+    fakes = sorted((s for s in hard.submissions if s.fraud_type == "curbstone"), key=lambda s: s.captured_at)
+    same_day = [(a, b) for a, b in zip(fakes, fakes[1:]) if a.captured_at.date() == b.captured_at.date()]
+    assert same_day and all(geo.distance_m(a.point, b.point) >= 55 for a, b in same_day)
+    assert all((b.captured_at - a.captured_at).total_seconds() >= 20 * 60 for a, b in same_day)
