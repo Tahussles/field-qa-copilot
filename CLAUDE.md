@@ -10,7 +10,7 @@ Field QA Copilot checks every submission as it syncs, flags likely fabrication w
 - **API and detection engine**: Python 3.12 FastAPI at `api/index.py`, deployed as a Vercel Python function. A Next.js rewrite sends `/api/py/:path*` to it (to uvicorn on `127.0.0.1:8000` in dev). Python deps are managed with uv (`pyproject.toml`, `uv.lock`, `.python-version`).
 - **Data**: Supabase Postgres, Realtime and Storage (private `voice-notes` bucket).
 - **Hosting**: Vercel. `vercel.json` bundles `engine/` and `datagen/` (the demo replays its live day) into the Python function and pins functions to `yul1` (Montréal), next to the Supabase project in `ca-central-1`.
-- **Later rounds**: the Claude API (contradiction checks and the daily brief) and ElevenLabs (voice transcription). All detection checks are plain code, never AI.
+- **AI** (round 7): the Claude API (meaning checks with a Haiku-class model, the brief with a Sonnet-class model) and ElevenLabs (Scribe speech to text, text to speech). All detection checks stay plain code; see "AI layer" below. Keys: `ANTHROPIC_API_KEY`, `ELEVENLABS_API_KEY`.
 
 ## Folder layout
 
@@ -25,7 +25,8 @@ tests-e2e/                Playwright smoke test (playwright.config.ts at the roo
 public/vendor/            MapLibre worker copied from node_modules before dev and build (gitignored)
 public/landing/           pre-rendered stage basemap (webp) and its bounds and areas (json), committed
 api/index.py              FastAPI routes, all under /api/py (docs at /api/py/docs)
-api/_lib/                 Repository (Supabase + in-memory), service logic, schemas, /evaluate, demo controls
+api/_lib/                 Repository (Supabase + in-memory), service logic, schemas, /evaluate, demo controls,
+                          ai.py (every model call), jobs.py (ai_jobs runner), brief.py (facts and checks)
                           (underscore: Vercel does not turn these files into functions)
 engine/                   detection engine: stdlib only, no I/O (engine.__version__)
   config.py               Params defaults; check_config.params merges over them
@@ -34,8 +35,10 @@ engine/                   detection engine: stdlib only, no I/O (engine.__versio
   scoring.py              score_all (batch) and score_incremental (live arrivals)
   insights.py             hotspots, contributor stats, area rates
   metrics.py              precision/recall against labels the caller supplies
-datagen/                  seeded synthetic wave with planted fraud (may import engine, never the reverse)
-scripts/                  generate.py, score.py, evaluate.py, simulate.py, verify_wave.py, realtime-probe.mjs,
+datagen/                  seeded synthetic wave with planted fraud (may import engine, never the reverse);
+                          hard.py: hard-mode waves for evaluation only (seeds 201-202)
+scripts/                  generate.py, score.py, evaluate.py, simulate.py, verify_wave.py, backfill_ai.py,
+                          set_job_hook.py, ai_models.py, realtime-probe.mjs,
                           vendor-maplibre.mjs, render-basemap.mjs
 tests/                    pytest suite
 data/synthetic/           generator output: CSVs, summary.json, preview.png (gitignored)
@@ -69,6 +72,11 @@ uv run scripts/evaluate.py --tuning-only --param 'same_spot_radius_m=30'   # try
 uv run scripts/simulate.py --target local --speed 0 --limit 40   # replay the Oct 31 live day via the API
 uv run scripts/simulate.py --target prod --reset-live            # full live day against production
 uv run scripts/verify_wave.py                        # is the database exactly the fresh wave? (after a demo reset)
+uv run scripts/ai_models.py                          # check the model ids against the providers' lists
+uv run scripts/set_job_hook.py                       # point the database's job hook at production
+uv run scripts/backfill_ai.py --estimate             # model verdicts over the wave: cost first, then without --estimate
+uv run scripts/evaluate.py --hard                    # rules only vs rules + AI on hard-mode waves (cost guard $5)
+RUN_LIVE_AI=1 uv run pytest -k live                  # the one test that calls a real model (prompt injection)
 node scripts/render-basemap.mjs                      # re-render public/landing/basemap.* (areas or palette changed)
 node --env-file=.env.local scripts/realtime-probe.mjs 600        # watch Realtime events
 ```
@@ -76,6 +84,19 @@ node --env-file=.env.local scripts/realtime-probe.mjs 600        # watch Realtim
 Python deps: anything `api/` or `engine/` needs at runtime goes in `[project] dependencies`. Generator and test tools live in the `datagen` and `dev` dependency groups, which `uv sync` installs locally but Vercel does not.
 
 After cloning, wire the commit hook once: `git config core.hooksPath .githooks`.
+
+## AI layer (principles)
+
+- Checks stay deterministic code. A model is used only for speech to text, judging meaning (voice vs form, reworded copies) and writing the brief (plus reading it aloud).
+- The engine stays pure: model results are stored as inputs (`ai_verdicts`) that a check reads (`engine.Verdict`); with no verdict, the rule-based check stands. Same input, same output. Evidence records `decided_by` (`ai` / `ai_paraphrase` / `rules`). voice_vs_form uses a verdict only at confidence >= `ai_min_confidence` (0.7).
+- Every model call (`api/_lib/ai.py`): strict structured output validated with pydantic, 12 s timeout, at most 3 attempts with backoff (the brief: regenerated once), then the rule or the template. Never block ingest: jobs are queued after the commit and a queueing failure is swallowed.
+- Transcripts and answers are untrusted user data: wrapped in tags (look-alike tags neutralised), the system prompt says they are data only, and a verdict whose quote is not an exact substring of the transcript is rejected.
+- Send only what's needed: contributor codes, never names. The brief gets aggregates only (`brief.facts`), and every number it writes must appear in them.
+- Every `ai_jobs` row logs model, tokens, latency and estimated cost (`ai.PRICES`, ElevenLabs per hour / per character).
+- Model ids live in `api/_lib/ai.py` (`JUDGE_MODEL`, `BRIEF_MODEL`, `SCRIBE_MODEL`, `TTS_MODEL`); check them with `scripts/ai_models.py`.
+- Jobs: `ai_jobs` (queued, running, done, failed) with a unique `dedupe_key`, so queueing is idempotent and a finished job never reruns unless forced (`POST /jobs/{id}/rerun`). The database POSTs each new job to `/api/py/jobs/run` (pg_net trigger, migration 0007) with `X-Jobs-Secret` (in Vault, derived from the service key, set by `scripts/set_job_hook.py`); `/api/py/jobs/drain` (passcode) is the safety net. A verdict landing rescores through `service.rescore_submission` (the leased incremental path), so a score can change after arrival and Realtime tells the UI.
+- The wave's verdicts (`scripts/backfill_ai.py`) are part of its fresh state: a demo reset keeps them and `verify_wave.py` scores the generated wave with the stored verdicts. `generate.py --reset` deletes them (cascade): re-run the backfill after.
+- Hard mode (`datagen/hard.py`, seeds 201-202, never the demo seed) is the honest test: `evaluate.py --hard` writes `data/eval/hard.json` (committed, aggregates only, served at `/api/py/eval/hard`); model verdicts are cached in `data/eval/hard-verdicts.json`.
 
 ## Git rules (non-negotiable)
 
@@ -97,6 +118,7 @@ After cloning, wire the commit hook once: `git config core.hooksPath .githooks`.
 
 - Secrets live only in `.env.local`, which is never committed. `.env.example` lists the keys with empty values. Vercel holds the deployed values.
 - The browser uses the anon key and can only read. All writes go through the server with the service role key.
+- `synthetic_truth` has no anon access. `ai_jobs` and `ai_verdicts` are readable by anon (Realtime drives the UI; they hold no ground truth).
 - `engine/` never reads ground truth or imports `datagen`. In `api/`, only the /evaluate path (`api/_lib/evaluation.py` through `repo.truth_labels()`) reads `synthetic_truth`, server-side, and it returns aggregates only. `/demo/step` writes the generator's labels for what it sends (`repo.write_truth`) and never reads them. Scripts may read it (`evaluate.py`, `verify_wave.py`; `simulate.py` writes it). Tests enforce this.
 - API: endpoints depend on the `Repository` interface, never on Supabase directly. Writes need the `X-Demo-Passcode` header (`DEMO_PASSCODE` in `.env.local` and on Vercel). Reads are public.
 - Ingest is two database calls: `ingest_begin` (lease, idempotent insert, fetch the scoring context) and `ingest_commit` (fenced write of the results, release). SQL only fetches and writes; every check and scoring decision stays in Python.
