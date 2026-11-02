@@ -69,7 +69,10 @@ function DemoRunner({ open, onClose }: { open: boolean; onClose: () => void }) {
   const next = useRef<number | null>(null);
   const interval = useRef<number | null>(null);
 
-  const fieldNow = () => anchor.current.field + ((performance.now() - anchor.current.wall) * 3600) / speedRef.current;
+  const frozen = useRef(false);
+  // While a step is sending, the field clock waits for it to land, so it never runs ahead of what has arrived.
+  const fieldNow = () =>
+    frozen.current ? anchor.current.field : anchor.current.field + ((performance.now() - anchor.current.wall) * 3600) / speedRef.current;
 
   const load = useCallback(async () => {
     const result = await withPasscode((code) => api.demoStatus(code));
@@ -129,6 +132,8 @@ function DemoRunner({ open, onClose }: { open: boolean; onClose: () => void }) {
       return;
     }
     if (inFlight.current || next.current > now) return;
+    anchor.current = { wall: performance.now(), field: now };
+    frozen.current = true;
     const sending = step({ until_field_time: iso(now), count: STEP_MAX });
     inFlight.current = sending;
     try {
@@ -142,6 +147,8 @@ function DemoRunner({ open, onClose }: { open: boolean; onClose: () => void }) {
       pause();
       toast({ tone: "error", title: "Demo step failed", body: e instanceof Error ? e.message : undefined });
     } finally {
+      anchor.current = { wall: performance.now(), field: now };
+      frozen.current = false;
       inFlight.current = null;
     }
   }, [pause, step, toast]);
