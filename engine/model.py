@@ -73,6 +73,20 @@ class CheckResult:
 
 
 @dataclass(frozen=True)
+class Verdict:
+    """A model's judgment, stored (ai_verdicts) and handed to the checks as input.
+
+    Checks never call a model: they read these. With no verdict, the rule-based
+    check stands, and the same submissions and verdicts always give the same result.
+    """
+
+    kind: str  # 'voice_vs_form' or 'paraphrase'
+    model: str
+    data: Mapping[str, Any]
+    other_id: str | None = None  # paraphrase: the other submission of the pair
+
+
+@dataclass(frozen=True)
 class Context:
     """Everything a check may look at besides the target itself.
 
@@ -86,3 +100,4 @@ class Context:
     same_contributor_day: tuple[Submission, ...]  # same local date in the project timezone
     same_device: tuple[Submission, ...]  # any contributor
     device_accounts: tuple[tuple[Contributor, int], ...]  # contributors on this device, with submission counts
+    verdicts: tuple[Verdict, ...] = ()  # stored AI verdicts about the target

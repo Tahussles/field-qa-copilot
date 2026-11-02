@@ -1,9 +1,13 @@
 """voice_vs_form: the voice note names a different water source than the form.
 
-Deliberately simple keyword matching: the keyword that appears earliest in the
-transcript decides the source (ties go to the longer keyword). A transcript
-like "sometimes the vendor, but mostly the public tap" therefore reads as
-vendor. A later round replaces this with a model that should do better.
+Two deciders, and the evidence says which one decided (decided_by):
+
+- ai: a stored model verdict (model.Verdict, kind voice_vs_form) with
+  confidence >= params.ai_min_confidence. It reads meaning, so "the pipe has
+  been dry since March, we buy from the handcart man" contradicts piped_home.
+- rules: otherwise, keyword matching. The keyword that appears earliest in the
+  transcript decides the source (ties go to the longer keyword), so "sometimes
+  the vendor, but mostly the public tap" reads as vendor.
 """
 
 import re
@@ -43,20 +47,42 @@ def voice_source(transcript: str) -> tuple[str, str, int] | None:
     return source, keyword, position
 
 
+def _rule(transcript: str, form_source: str) -> tuple[bool, dict]:
+    heard = voice_source(transcript)
+    if heard is None:
+        return False, {"form_source": form_source, "voice_source": None, "matched_keyword": None}
+    source, keyword, position = heard
+    return source != form_source, {
+        "form_source": form_source,
+        "voice_source": source,
+        "matched_keyword": keyword,
+        "keyword_position": position,
+    }
+
+
 def check(target: Submission, ctx: Context) -> CheckResult:
     weight = ctx.params.weights[KEY]
     form_source = target.answers.get("water_source")
     if not target.voice_transcript or not form_source:
         return CheckResult(KEY, False, weight, {"missing": "voice_transcript or water_source"})
-    heard = voice_source(target.voice_transcript)
-    if heard is None:
-        return CheckResult(KEY, False, weight, {
-            "form_source": form_source, "voice_source": None, "matched_keyword": None,
+    rule_fired, rule = _rule(target.voice_transcript, form_source)
+    ai = next((v for v in ctx.verdicts if v.kind == KEY), None)
+    if ai is not None and ai.data["confidence"] >= ctx.params.ai_min_confidence:
+        d = ai.data
+        return CheckResult(KEY, bool(d["contradiction"]), weight, {
+            "decided_by": "ai",
+            "model": ai.model,
+            "confidence": d["confidence"],
+            "form_says": d["form_says"],
+            "voice_says": d["voice_says"],
+            "quote": d["quote"],
+            "explanation": d["explanation"],
+            "latency_ms": d.get("latency_ms"),
+            "form_source": form_source,
+            "rule": {**rule, "fired": rule_fired},
         })
-    source, keyword, position = heard
-    return CheckResult(KEY, source != form_source, weight, {
-        "form_source": form_source,
-        "voice_source": source,
-        "matched_keyword": keyword,
-        "keyword_position": position,
-    })
+    evidence = {"decided_by": "rules", **rule}
+    if ai is not None:
+        evidence["ai"] = {"model": ai.model, "confidence": ai.data["confidence"],
+                          "contradiction": ai.data["contradiction"], "below": ctx.params.ai_min_confidence}
+    return CheckResult(KEY, rule_fired, weight, evidence)

@@ -46,6 +46,9 @@ class Params:
     burst_window_minutes: float = 60
     burst_min_count: dict[str, int] = field(default_factory=lambda: {"enumerator": 4, "participant": 5})
     shared_device_min_accounts: int = 2
+    # voice_vs_form: a stored AI verdict decides only at or above this confidence;
+    # below it (or with no verdict) the keyword rule decides.
+    ai_min_confidence: float = 0.7
     # Comes from projects.timezone, not from check_config.
     timezone: str = "Africa/Nairobi"
 

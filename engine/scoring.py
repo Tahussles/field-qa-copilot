@@ -9,13 +9,15 @@ on that: a new arrival can only change results inside that group.
 
 from collections import Counter, defaultdict
 from dataclasses import dataclass
-from typing import Iterable, Mapping
+from typing import Iterable, Mapping, Sequence
 from zoneinfo import ZoneInfo
 
 from . import __version__
 from .checks import CHECKS
 from .config import Params
-from .model import CheckResult, Context, Contributor, Submission
+from .model import CheckResult, Context, Contributor, Submission, Verdict
+
+Verdicts = Mapping[str, Sequence[Verdict]]  # by submission id
 
 
 @dataclass(frozen=True)
@@ -32,8 +34,10 @@ def _order(sub: Submission):
 
 
 class _Index:
-    def __init__(self, subs: Iterable[Submission], contributors: Mapping[str, Contributor], params: Params):
+    def __init__(self, subs: Iterable[Submission], contributors: Mapping[str, Contributor], params: Params,
+                 verdicts: Verdicts | None = None):
         self.params = params
+        self.verdicts = verdicts or {}
         self.tz = ZoneInfo(params.timezone)
         self.contributors = contributors
         self.by_contributor: dict[str, list[Submission]] = defaultdict(list)
@@ -66,6 +70,7 @@ class _Index:
             same_contributor_day=same_day,
             same_device=same_device,
             device_accounts=accounts,
+            verdicts=tuple(self.verdicts.get(target.id, ())),
         )
 
     def score(self, target: Submission) -> ScoredSubmission:
@@ -82,16 +87,16 @@ def _contributor_map(contributors: Iterable[Contributor] | Mapping[str, Contribu
 
 
 def score_all(submissions: Iterable[Submission], contributors: Iterable[Contributor] | Mapping[str, Contributor],
-              params: Params) -> list[ScoredSubmission]:
+              params: Params, verdicts: Verdicts | None = None) -> list[ScoredSubmission]:
     """Score a whole batch. Output is ordered by (captured_at, id), whatever the input order."""
     subs = list(submissions)
-    index = _Index(subs, _contributor_map(contributors), params)
+    index = _Index(subs, _contributor_map(contributors), params, verdicts)
     return [index.score(s) for s in sorted(subs, key=_order)]
 
 
 def score_incremental(new_submission: Submission, existing: Iterable[Submission],
                       contributors: Iterable[Contributor] | Mapping[str, Contributor],
-                      params: Params) -> list[ScoredSubmission]:
+                      params: Params, verdicts: Verdicts | None = None) -> list[ScoredSubmission]:
     """Score a new arrival plus every existing submission whose result it may change.
 
     Affected: the same contributor's submissions (any day: burst windows and
@@ -109,6 +114,6 @@ def score_incremental(new_submission: Submission, existing: Iterable[Submission]
     contributor_ids = {s.contributor_id for s in affected}
     device_ids = {s.device_id for s in affected if s.device_id}
     relevant = [s for s in everything if s.contributor_id in contributor_ids or s.device_id in device_ids]
-    index = _Index(relevant, _contributor_map(contributors), params)
+    index = _Index(relevant, _contributor_map(contributors), params, verdicts)
     others = sorted((s for s in affected if s.id != new_submission.id), key=_order)
     return [index.score(new_submission), *(index.score(s) for s in others)]
