@@ -18,7 +18,7 @@ from engine.textsim import SIMILARITY, shingle_jaccard
 
 from . import brief as briefs
 from . import service
-from .ai import AIUnavailable, BriefOut, Provider, Usage
+from .ai import PROMPT_VERSION, AIUnavailable, BriefOut, Provider, Usage
 from .repo import NotFound, Repository
 
 log = logging.getLogger(__name__)
@@ -55,9 +55,9 @@ def consistency_job(row: dict, notify: bool = True) -> dict | None:
     source = (row.get("answers") or {}).get("water_source")
     if not transcript or not source:
         return None
-    version = _hash(transcript, source, _open_text(row))
+    version = _hash(transcript, source, _open_text(row), PROMPT_VERSION)
     return {"kind": "consistency", "submission_id": row["id"], "notify": notify,
-            "dedupe_key": f"consistency:{row['id']}:{version}", "input": {"version": version}}
+            "dedupe_key": f"consistency:{row['id']}:{version}", "input": {"version": version, "prompt": PROMPT_VERSION}}
 
 
 def paraphrase_candidates(row: dict, others: list[dict], params, limit: int) -> list[dict]:
@@ -82,8 +82,8 @@ def paraphrase_job(row: dict, pairs: list[dict], notify: bool = True) -> dict | 
     if not pairs:
         return None
     return {"kind": "paraphrase", "submission_id": row["id"], "notify": notify,
-            "dedupe_key": f"paraphrase:{row['id']}:{_hash(sorted(p['other_id'] for p in pairs), _open_text(row))}",
-            "input": {"pairs": pairs}}
+            "dedupe_key": f"paraphrase:{row['id']}:{_hash(sorted(p['other_id'] for p in pairs), _open_text(row), PROMPT_VERSION)}",
+            "input": {"pairs": pairs, "prompt": PROMPT_VERSION}}
 
 
 def queue_for_arrival(repo: Repository, ctx, row: dict, group: list[dict]) -> list[dict]:
@@ -128,7 +128,7 @@ def _submission(repo: Repository, submission_id: str) -> dict:
 def run_consistency(repo, provider: Provider, job):
     row = _submission(repo, job["submission_id"])
     verdict, usage = provider.judge_consistency(row["answers"]["water_source"], _open_text(row), row["voice_transcript"])
-    data = {**verdict.model_dump(), "latency_ms": usage.latency_ms}
+    data = {**verdict.model_dump(), "latency_ms": usage.latency_ms, "prompt": PROMPT_VERSION}
     repo.put_verdict({"submission_id": row["id"], "kind": "voice_vs_form", "model": usage.model, "verdict": data})
     # A backfill rescores everything once at the end instead (input.rescore = false).
     rescore = _rescore(repo, row["id"]) if (job.get("input") or {}).get("rescore", True) else None
@@ -150,7 +150,8 @@ def run_paraphrase(repo, provider: Provider, job):
             total = error.usage if total is None else total.add(error.usage or Usage(""))
             continue
         total = usage if total is None else total.add(usage)
-        data = {**verdict.model_dump(), "similarity": pair["similarity"], "latency_ms": usage.latency_ms}
+        data = {**verdict.model_dump(), "similarity": pair["similarity"], "latency_ms": usage.latency_ms,
+                "prompt": PROMPT_VERSION}
         repo.put_verdict({"submission_id": row["id"], "pair_submission_id": other["id"], "kind": "paraphrase",
                           "model": usage.model, "verdict": data})
         judged.append({"other_id": other["id"], **data})

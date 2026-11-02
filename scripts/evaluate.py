@@ -274,6 +274,7 @@ def _key(*parts) -> str:
 
 def hard_calls(rows: dict, params: Params) -> list[dict]:
     """Every model call production would make for this wave: meaning checks and paraphrase pairs."""
+    from api._lib.ai import PROMPT_VERSION
     from api._lib.jobs import PARAPHRASE_PAIRS_PER_ARRIVAL, paraphrase_candidates
 
     subs = sorted(rows["submissions"], key=lambda r: (r["captured_at"], r["id"]))
@@ -283,14 +284,15 @@ def hard_calls(rows: dict, params: Params) -> list[dict]:
         if row.get("voice_transcript") and answers.get("water_source"):
             args = (answers["water_source"], answers.get("open_text") or "", row["voice_transcript"])
             calls.append({"kind": "consistency", "submission_id": row["id"], "args": args,
-                          "key": _key("consistency", *args)})
+                          "key": _key("consistency", PROMPT_VERSION, *args)})
         earlier = [o for o in subs[:i] if o["contributor_id"] == row["contributor_id"]
                    or (row.get("device_id") and o.get("device_id") == row["device_id"])]
         for pair in paraphrase_candidates(row, earlier, params, PARAPHRASE_PAIRS_PER_ARRIVAL):
             other = next(o for o in earlier if o["id"] == pair["other_id"])
             args = (other["answers"]["open_text"].strip(), row["answers"]["open_text"].strip())
             calls.append({"kind": "paraphrase", "submission_id": row["id"], "other_id": other["id"],
-                          "similarity": pair["similarity"], "args": args, "key": _key("paraphrase", *args)})
+                          "similarity": pair["similarity"], "args": args,
+                          "key": _key("paraphrase", PROMPT_VERSION, *args)})
     return calls
 
 
