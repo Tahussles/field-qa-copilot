@@ -58,19 +58,20 @@ class Supabase:
                                 f"{response.status_code} {response.text}", response.status_code, code)
         return response
 
+    def _get(self, path: str, params: dict, headers: dict) -> httpx.Response:
+        """Reads are idempotent: one retry after a timeout or a dropped connection."""
+        try:
+            return self._check(self._http.get(path, params=params, headers=headers))
+        except httpx.TransportError:  # includes timeouts
+            return self._check(self._http.get(path, params=params, headers=headers))
+
     def count(self, table: str, select: str = "*", **filters: str) -> int:
-        response = self._check(self._http.get(
-            f"/{table}", params={"select": select, **filters},
-            headers={"Prefer": "count=exact", "Range": "0-0"},
-        ))
+        response = self._get(f"/{table}", {"select": select, **filters}, {"Prefer": "count=exact", "Range": "0-0"})
         return int(response.headers["content-range"].split("/")[1])
 
     def first(self, table: str, select: str = "*", **filters: str) -> tuple[dict | None, int]:
         """The first matching row (pass order=...) and the total count, in one request."""
-        response = self._check(self._http.get(
-            f"/{table}", params={"select": select, **filters},
-            headers={"Prefer": "count=exact", "Range": "0-0"},
-        ))
+        response = self._get(f"/{table}", {"select": select, **filters}, {"Prefer": "count=exact", "Range": "0-0"})
         rows = response.json()
         return (rows[0] if rows else None), int(response.headers["content-range"].split("/")[1])
 
@@ -78,10 +79,8 @@ class Supabase:
         """All matching rows, fetched page by page. Pass order=... for a stable result."""
         rows: list[dict] = []
         while True:
-            response = self._check(self._http.get(
-                f"/{table}", params={"select": select, **filters},
-                headers={"Range": f"{len(rows)}-{len(rows) + page_size - 1}"},
-            ))
+            response = self._get(f"/{table}", {"select": select, **filters},
+                                 {"Range": f"{len(rows)}-{len(rows) + page_size - 1}"})
             page = response.json()
             rows.extend(page)
             if len(page) < page_size:

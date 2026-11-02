@@ -16,6 +16,9 @@ class Settings:
     service_key: str | None
     demo_passcode: str | None
     project_id: str | None  # optional; otherwise the only project in the database
+    # Seconds per Supabase request. Vercel (yul1) sits next to the database; a laptop
+    # can be far slower, so local dev waits longer (reads also retry once).
+    db_timeout: float
 
 
 @lru_cache(maxsize=1)
@@ -31,4 +34,5 @@ def get_settings() -> Settings:
         service_key=value("SUPABASE_SERVICE_ROLE_KEY"),
         demo_passcode=value("DEMO_PASSCODE"),
         project_id=value("PROJECT_ID"),
+        db_timeout=20.0 if os.environ.get("VERCEL") else 45.0,
     )
