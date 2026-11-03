@@ -90,7 +90,7 @@ function ClockSkew({ check }: CardProps) {
   return (
     <Card check={check}>
       <p>
-        The phone&apos;s clock was <B>{size} {e.direction}</B> of the server&apos;s
+        The phone&apos;s clock was <B>{size} {e.direction === "ahead" ? "ahead of" : "behind"}</B> the server&apos;s
         {e.basis === "sync" ? " when it synced" : ": it recorded a capture time after the server received it"}.
       </p>
       <p className="mt-1 text-[12px] text-muted">
