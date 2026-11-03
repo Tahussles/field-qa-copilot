@@ -7,8 +7,8 @@ from datetime import date, datetime, timedelta, timezone
 from statistics import median
 from zoneinfo import ZoneInfo
 
-from engine import (CheckResult, Contributor, Params, ScoredSubmission, Submission, Verdict, __version__, score_all,
-                    score_incremental)
+from engine import (Area, CheckResult, Contributor, Params, ScoredSubmission, Submission, Verdict, __version__,
+                    score_all, score_incremental)
 from engine.insights import area_rates, contributor_stats, hotspots
 
 from .repo import Repository
@@ -57,13 +57,15 @@ def context(repo: Repository) -> ProjectContext:
     def load() -> ProjectContext:
         project = repo.project()
         rows = repo.contributors()
+        area_rows = repo.areas(boundary=True)
+        areas = {a["id"]: area for a in area_rows if (area := Area.from_row(a))}
         return ProjectContext(
             project=project,
             params=Params.from_config(repo.check_params(), timezone=project["timezone"]),
-            contributors={r["id"]: Contributor.from_row(r) for r in rows},
+            contributors={r["id"]: Contributor.from_row(r, areas) for r in rows},
             contributor_rows={r["id"]: r for r in rows},
             by_code={r["code"]: r for r in rows},
-            area_names={a["id"]: a["name"] for a in repo.areas()},
+            area_names={a["id"]: a["name"] for a in area_rows},
         )
     return _cached(repo, "context", load)
 

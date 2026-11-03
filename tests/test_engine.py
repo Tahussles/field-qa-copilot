@@ -323,3 +323,46 @@ def test_engine_imports_only_the_standard_library():
                 continue
             for module in modules:
                 assert module.split(".")[0] in sys.stdlib_module_names, (path, module)
+
+
+# outside_area ---------------------------------------------------------------------
+
+def _boxed(lat_half=0.01, lng_half=0.01):
+    from engine import Area
+    ring = ((LNG - lng_half, LAT - lat_half), (LNG + lng_half, LAT - lat_half), (LNG + lng_half, LAT + lat_half),
+            (LNG - lng_half, LAT + lat_half), (LNG - lng_half, LAT - lat_half))
+    return Contributor("c-e09", "E09", "enumerator", Area("Kondele", ring))
+
+
+def test_outside_area_inside_near_and_far():
+    from dataclasses import replace
+
+    who = _boxed()
+    inside = sub("in", who, north_m=0)
+    near = sub("near", who, north_m=1113 + 85)  # the box edge is 0.01 degrees (about 1,113 m) north
+    toronto = replace(sub("far", who), lat=43.6532, lng=-79.3832)
+    by_id = {s.submission_id: next(r for r in s.results if r.key == "outside_area")
+             for s in score_all([inside, near, toronto], [who], Params())}
+    assert by_id["in"].fired is False and by_id["in"].evidence == {"area": "Kondele", "inside": True}
+    assert by_id["near"].fired and 70 <= by_id["near"].evidence["distance_m"] <= 100
+    assert by_id["near"].evidence["distance"].endswith(" m") and by_id["near"].weight == 2.0
+    far = by_id["far"].evidence
+    assert by_id["far"].fired and far["distance"].endswith(" km") and 11_500_000 < far["distance_m"] < 12_200_000
+
+
+def test_outside_area_needs_an_assigned_area():
+    r = result([sub("s1")], "s1", "outside_area")  # ENUM has no area
+    assert r.fired is False and r.evidence == {"missing": "assigned area"}
+
+
+def test_a_model_only_copy_is_corroboration_only():
+    from engine import Verdict
+
+    a = sub("a", text="The kiosk opens late so we queue for two hours and pay twenty shillings a jerrican.")
+    b = sub("b", minutes=60, text="The kiosk opens late, so we line up for two hours and spend twenty shillings on each jerrican.")
+    verdict = {"reworded": True, "reason": "Same answer reworded.", "similarity": 0.64}
+    scored = score_all([a, b], PEOPLE, Params(), {"b": [Verdict("paraphrase", "m", verdict, "a")],
+                                                  "a": [Verdict("paraphrase", "m", verdict, "b")]})
+    copied = next(r for r in scored[1].results if r.key == "copied_text")
+    assert copied.fired and copied.evidence["decided_by"] == "ai_paraphrase" and copied.weight == 1.5
+    assert scored[1].score == 1.5 and not scored[1].flagged  # below the review threshold on its own

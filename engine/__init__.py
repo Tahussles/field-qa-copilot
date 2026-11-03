@@ -6,14 +6,16 @@ the engine version so stored results can be traced to the code that made them.
 """
 
 # 0.3.0: voice_vs_form and copied_text read stored AI verdicts.
-__version__ = "0.3.0"
+# 0.4.0: outside_area; a copy found only by the model weighs ai_paraphrase_weight.
+__version__ = "0.4.0"
 
 from .checks import CHECK_KEYS  # noqa: E402
 from .config import Params  # noqa: E402
-from .model import CheckResult, Contributor, Submission, Verdict  # noqa: E402
+from .model import Area, CheckResult, Contributor, Submission, Verdict, contributors_with_areas  # noqa: E402
 from .scoring import ScoredSubmission, score_all, score_incremental  # noqa: E402
 
 __all__ = [
+    "Area",
     "CHECK_KEYS",
     "CheckResult",
     "Contributor",
@@ -21,6 +23,7 @@ __all__ = [
     "ScoredSubmission",
     "Submission",
     "Verdict",
+    "contributors_with_areas",
     "score_all",
     "score_incremental",
 ]

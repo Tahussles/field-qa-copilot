@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from engine import Contributor, Params, Submission, __version__, score_all  # noqa: E402
+from engine import Params, Submission, __version__, contributors_with_areas, score_all  # noqa: E402
 from api._lib.postgrest import Supabase, SupabaseError  # noqa: E402
 
 SUBMISSION_COLUMNS = "id,contributor_id,device_id,captured_at,synced_at,duration_sec,lat,lng,answers,voice_transcript"
@@ -47,7 +47,8 @@ def main() -> int:
         started = time.perf_counter()
         config = db.select("check_config", "params", **project_filter)
         params = Params.from_config(config[0]["params"] if config else None, timezone=project["timezone"])
-        contributors = [Contributor.from_row(r) for r in db.select("contributors", "id,code,kind", **project_filter)]
+        contributors = contributors_with_areas(db.select("contributors", "id,code,kind,area_id", **project_filter),
+                                               db.select("areas", "id,name,boundary", **project_filter))
         submissions = [Submission.from_row(r)
                        for r in db.select("submissions", SUBMISSION_COLUMNS, order="id", **project_filter)]
         loaded = time.perf_counter()

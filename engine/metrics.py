@@ -25,6 +25,7 @@ TARGETS = {
     "off_hours": ("night",),
     "shared_device": ("multi_account",),
     "burst": ("burst",),
+    "outside_area": (),  # no synthetic fraud leaves its area: unmeasurable on these waves
 }
 
 

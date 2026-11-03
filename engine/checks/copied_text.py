@@ -5,7 +5,9 @@ Two deciders, recorded as decided_by:
 - rules: a near-duplicate by params.copy_method at or above params.copy_similarity.
 - ai_paraphrase: no near-duplicate, but a stored model verdict (kind paraphrase)
   says the two answers are a reworded copy of the same answer. The model is only
-  asked about pairs the shingle filter already found similar (see api/_lib/ai.py).
+  asked about pairs the shingle filter already found similar (see api/_lib/jobs.py).
+  This weighs params.ai_paraphrase_weight (1.5), below the review threshold:
+  corroboration for other checks, never a flag on its own.
 """
 
 from ..model import CheckResult, Context, Submission
@@ -56,6 +58,8 @@ def check(target: Submission, ctx: Context) -> CheckResult:
         if v.kind == "paraphrase" and v.data.get("reworded") and v.other_id in candidates
     ]
     decided_by = "rules" if matches else "ai_paraphrase" if reworded else None
+    if decided_by == "ai_paraphrase":
+        weight = params.ai_paraphrase_weight  # corroboration only: a model's word alone never sends to review
     return CheckResult(KEY, bool(matches) or bool(reworded), weight, {
         "decided_by": decided_by,
         "paraphrases": [

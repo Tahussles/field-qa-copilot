@@ -54,14 +54,33 @@ class Submission:
 
 
 @dataclass(frozen=True)
+class Area:
+    """A contributor's assigned area: its name and its outer boundary as a closed (lng, lat) ring."""
+
+    name: str
+    ring: tuple[tuple[float, float], ...]
+
+    @classmethod
+    def from_row(cls, row: Mapping[str, Any]) -> "Area | None":
+        """From an areas row with a GeoJSON Polygon boundary; None without one."""
+        boundary = row.get("boundary")
+        if not boundary or boundary.get("type") != "Polygon":
+            return None
+        return cls(row["name"], tuple((float(x), float(y)) for x, y in boundary["coordinates"][0]))
+
+
+@dataclass(frozen=True)
 class Contributor:
     id: str
     code: str
     kind: str  # 'enumerator' or 'participant'
+    area: Area | None = None
 
     @classmethod
-    def from_row(cls, row: Mapping[str, Any]) -> "Contributor":
-        return cls(id=row["id"], code=row["code"], kind=row["kind"])
+    def from_row(cls, row: Mapping[str, Any], areas: Mapping[str, Area] | None = None) -> "Contributor":
+        """areas: Area by area id, so the contributor carries their assigned area."""
+        return cls(id=row["id"], code=row["code"], kind=row["kind"],
+                   area=(areas or {}).get(row.get("area_id")))
 
 
 @dataclass(frozen=True)
@@ -101,3 +120,9 @@ class Context:
     same_device: tuple[Submission, ...]  # any contributor
     device_accounts: tuple[tuple[Contributor, int], ...]  # contributors on this device, with submission counts
     verdicts: tuple[Verdict, ...] = ()  # stored AI verdicts about the target
+
+
+def contributors_with_areas(contributor_rows, area_rows) -> list[Contributor]:
+    """Contributors from database rows, each with their assigned area (areas rows with a boundary)."""
+    areas = {a["id"]: area for a in area_rows if (area := Area.from_row(a))}
+    return [Contributor.from_row(r, areas) for r in contributor_rows]

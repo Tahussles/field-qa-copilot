@@ -192,7 +192,7 @@ def test_overview(client):
 def test_rescore(client):
     _seed_queue(client)
     result = client.post("/api/py/rescore", headers=AUTH).json()
-    assert result["submissions"] == 5 and result["flagged"] == 4 and result["check_results"] == 40
+    assert result["submissions"] == 5 and result["flagged"] == 4 and result["check_results"] == 5 * len(CHECK_KEYS)
 
 
 # POST /evaluate ----------------------------------------------------------------------

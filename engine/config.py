@@ -21,6 +21,9 @@ DEFAULT_WEIGHTS = {
     "off_hours": 1.0,
     "shared_device": 3.0,
     "burst": 2.5,
+    # Spec value. The synthetic waves keep every point inside its area, so no
+    # seed can measure it (see the evaluation report); it is for live phones.
+    "outside_area": 2.0,
 }
 
 
@@ -49,6 +52,10 @@ class Params:
     # voice_vs_form: a stored AI verdict decides only at or above this confidence;
     # below it (or with no verdict) the keyword rule decides.
     ai_min_confidence: float = 0.7
+    # copied_text decided only by a model's "reworded copy" verdict weighs this
+    # (corroboration only: below review_threshold on its own). Evidence is in
+    # data/eval/hard.json (tuning seeds) next to the 3.0 a rule-found copy weighs.
+    ai_paraphrase_weight: float = 1.5
     # Comes from projects.timezone, not from check_config.
     timezone: str = "Africa/Nairobi"
 

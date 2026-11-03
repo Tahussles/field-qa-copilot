@@ -37,7 +37,7 @@ if str(ROOT) not in sys.path:
 
 from datagen import build_wave, db_rows  # noqa: E402
 from datagen.live import LIVE_DAY, build_live_day  # noqa: E402
-from engine import CHECK_KEYS, Contributor, Params, Submission, Verdict, __version__, score_all  # noqa: E402
+from engine import CHECK_KEYS, Params, Submission, Verdict, __version__, contributors_with_areas, score_all  # noqa: E402
 from engine.metrics import FRAUD_TYPES, NOISE_TAGS, TARGETS, combined, per_check  # noqa: E402
 
 DEMO_SEED = 20261031
@@ -50,7 +50,7 @@ COPY_METHODS = ("word_jaccard", "char_shingle")
 def wave_inputs(seed: int):
     rows = db_rows(build_wave(seed))
     submissions = [Submission.from_row(r) for r in rows["submissions"]]
-    contributors = [Contributor.from_row(r) for r in rows["contributors"]]
+    contributors = contributors_with_areas(rows["contributors"], rows["areas"])
     truth = {t["submission_id"]: t for t in rows["synthetic_truth"]}
     return submissions, contributors, truth, rows["projects"][0]["timezone"]
 
@@ -89,7 +89,7 @@ def run_live_day(seed: int, params: Params) -> dict:
     wave = build_wave(seed)
     live = build_live_day(seed, wave)
     rows = db_rows(wave)
-    contributors = [Contributor.from_row(r) for r in rows["contributors"]]
+    contributors = contributors_with_areas(rows["contributors"], rows["areas"])
     params = replace(params, timezone=rows["projects"][0]["timezone"])
     wave_subs = [Submission.from_row(r) for r in rows["submissions"]]
     live_subs = [
@@ -368,7 +368,7 @@ def run_hard(args, params: Params) -> int:
     per_seed = []
     for seed, (rows, calls) in waves.items():
         subs = [Submission.from_row(r) for r in rows["submissions"]]
-        contributors = [Contributor.from_row(r) for r in rows["contributors"]]
+        contributors = contributors_with_areas(rows["contributors"], rows["areas"])
         truth = {t["submission_id"]: t for t in rows["synthetic_truth"]}
         seed_params = replace(params, timezone=rows["projects"][0]["timezone"])
         result = {"seed": seed}

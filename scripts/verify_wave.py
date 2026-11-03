@@ -24,7 +24,7 @@ from api._lib.postgrest import Supabase  # noqa: E402
 from api._lib.service import verdict_index  # noqa: E402
 from datagen import build_wave, db_rows  # noqa: E402
 from datagen import config as cfg  # noqa: E402
-from engine import Contributor, Params, Submission, __version__, score_all  # noqa: E402
+from engine import Params, Submission, __version__, contributors_with_areas, score_all  # noqa: E402
 
 
 def main() -> int:
@@ -48,7 +48,7 @@ def main() -> int:
 
     config = db.select("check_config", "params", **in_project)
     params = Params.from_config(config[0]["params"] if config else None, timezone=project["timezone"])
-    contributors = [Contributor.from_row(r) for r in rows["contributors"]]
+    contributors = contributors_with_areas(rows["contributors"], rows["areas"])
     stored_verdicts = db.select("ai_verdicts", "submission_id,pair_submission_id,kind,model,verdict,"
                                                "submissions!ai_verdicts_submission_id_fkey!inner(project_id)", **joined)
     wave_ids = {r["id"] for r in rows["submissions"]}
