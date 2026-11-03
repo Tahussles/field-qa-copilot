@@ -21,9 +21,13 @@ DEFAULT_WEIGHTS = {
     "off_hours": 1.0,
     "shared_device": 3.0,
     "burst": 2.5,
-    # Spec value. The synthetic waves keep every point inside its area, so no
-    # seed can measure it (see the evaluation report); it is for live phones.
+    # Far outside (beyond outside_area_far_m); closer misses weigh outside_area_near_weight.
+    # The synthetic waves keep every point inside its area, so no seed measures it.
     "outside_area": 2.0,
+    # Phone clock off by more than clock_skew_max_minutes. Corroboration only: an honest phone with a
+    # wrong clock is not fraud, but a night actor setting the clock back is (hard mode, data/eval/hard.json).
+    # The synthetic waves carry no phone clock, so no seed measures it.
+    "clock_skew": 1.5,
 }
 
 
@@ -59,6 +63,20 @@ class Params:
     # model-only copy changed a band there), so the value is the policy, any
     # weight below review_threshold. data/eval/hard.json has the sweep.
     ai_paraphrase_weight: float = 1.5
+    # outside_area fires only beyond max(gps_accuracy_m, outside_area_min_tolerance_m) from the boundary.
+    # Tuning seeds 1-5 cannot show it directly: every genuine point is >= 50 m inside its area, and
+    # 1.58M simulated GPS errors (68% within the reported accuracy) never left it. Worst case instead:
+    # all 7,908 genuine accuracies (median 15.2 m, p95 25 m, max 150 m) placed exactly on the boundary.
+    # No tolerance fires 50% of those fixes; max(accuracy, 15 m) fires 4.3%, overshooting by median 24 m,
+    # p99 181 m, max 384 m. So a miss within outside_area_far_m (1 km, 2.6x the worst) can be GPS error
+    # at a boundary household and only corroborates (1.5); beyond it, the full weight (2.0).
+    outside_area_min_tolerance_m: float = 15.0
+    outside_area_far_m: float = 1000.0
+    outside_area_near_weight: float = 1.5
+    # straight_lining also fires on a strict two-value zig-zag (5, 4, 5, 4, ...).
+    straight_lining_alternation: bool = True
+    # clock_skew: |phone clock - server clock| at sync, or a capture time after the server received it.
+    clock_skew_max_minutes: float = 5.0
     # Comes from projects.timezone, not from check_config.
     timezone: str = "Africa/Nairobi"
 

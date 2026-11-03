@@ -345,9 +345,26 @@ def test_outside_area_inside_near_and_far():
              for s in score_all([inside, near, toronto], [who], Params())}
     assert by_id["in"].fired is False and by_id["in"].evidence == {"area": "Kondele", "inside": True}
     assert by_id["near"].fired and 70 <= by_id["near"].evidence["distance_m"] <= 100
-    assert by_id["near"].evidence["distance"].endswith(" m") and by_id["near"].weight == 2.0
+    # Within 1 km it may be GPS error at a boundary household: corroboration only. Far away, the full weight.
+    assert by_id["near"].evidence["distance"].endswith(" m") and by_id["near"].weight == 1.5
+    assert by_id["near"].evidence["band"] == "near" and by_id["near"].evidence["tolerance_m"] == 15.0
     far = by_id["far"].evidence
     assert by_id["far"].fired and far["distance"].endswith(" km") and 11_500_000 < far["distance_m"] < 12_200_000
+    assert by_id["far"].weight == 2.0 and far["band"] == "far"
+
+
+def test_outside_area_allows_the_reported_gps_error():
+    from dataclasses import replace
+
+    who = _boxed()
+    just_out = sub("out", who, north_m=1113 + 30)
+    results = {}
+    for accuracy in (None, 8.0, 40.0):
+        scored = score_all([replace(just_out, gps_accuracy_m=accuracy)], [who], Params())
+        results[accuracy] = next(r for r in scored[0].results if r.key == "outside_area")
+    assert results[None].fired and results[8.0].fired  # 30 m out: beyond the 15 m floor
+    assert not results[40.0].fired and results[40.0].evidence["within_gps_error"] is True
+    assert results[40.0].evidence["tolerance_m"] == 40.0
 
 
 def test_outside_area_needs_an_assigned_area():

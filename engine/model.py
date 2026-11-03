@@ -32,6 +32,13 @@ class Submission:
     lng: float | None
     answers: Mapping[str, Any]
     voice_transcript: str | None = None
+    gps_accuracy_m: float | None = None
+    # The phone's own clock (live phones only): when the form was finished and when it was sent,
+    # against the server's own clock when it arrived. During a demo captured_at and synced_at are
+    # on the field clock instead, so clock_skew reads these.
+    device_captured_at: datetime | None = None
+    device_synced_at: datetime | None = None
+    received_at: datetime | None = None
 
     @classmethod
     def from_row(cls, row: Mapping[str, Any]) -> "Submission":
@@ -47,6 +54,10 @@ class Submission:
             lng=row.get("lng"),
             answers=row.get("answers") or {},
             voice_transcript=row.get("voice_transcript"),
+            gps_accuracy_m=row.get("gps_accuracy_m"),
+            device_captured_at=parse_time(row.get("device_captured_at")),
+            device_synced_at=parse_time(row.get("device_synced_at")),
+            received_at=parse_time(row.get("received_at")),
         )
 
     def local_date(self, tz: tzinfo) -> date:
