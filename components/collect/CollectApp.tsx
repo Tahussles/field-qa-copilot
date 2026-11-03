@@ -109,8 +109,9 @@ export function CollectApp() {
         await reload();
         try {
           const { path, result } = await collectApi.send(access, item);
+          // The phone's own clock: during a demo the server's synced_at is on the field clock (result.synced_at).
           await outbox.update(item.client_submission_id, {
-            status: "synced", result, voice_note_path: path, synced_at: result.synced_at ?? new Date().toISOString(), error: null,
+            status: "synced", result, voice_note_path: path, synced_at: new Date().toISOString(), error: null,
           });
         } catch (e) {
           const retry = !(e instanceof CollectError) || e.retry;
