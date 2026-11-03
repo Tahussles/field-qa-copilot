@@ -111,6 +111,14 @@ export function ResultScreen({ item, tz, onNew }: { item: OutboxItem; tz: string
         </Stage>
       )}
 
+      {rules && item.audio && !transcript && (
+        <Stage n={3} title="Voice against the form">
+          <p className="text-muted">
+            {transcribe?.status === "failed" || transcribe?.status === "skipped" ? "No transcript, so nothing to check." : "Waits for the transcript."}
+          </p>
+        </Stage>
+      )}
+
       {rules && transcript && (
         <Stage n={3} title="Voice against the form" done={!busy(consistency)} busy={busy(consistency)}>
           {busy(consistency) || !consistency ? (
