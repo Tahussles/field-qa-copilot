@@ -1,6 +1,7 @@
 """Hard mode: the same wave with fraud written by someone trying not to get caught.
 
-Only for evaluation (scripts/evaluate.py --hard, seeds HARD_SEEDS). Never the
+Only for evaluation (scripts/evaluate.py --hard). Tune on HARD_TUNING_SEEDS,
+report on HARD_HELD_OUT_SEEDS (as with seeds 1-5 and 101-110 in normal mode). Never the
 demo wave: build_wave(seed) is untouched, and hard mode rewrites three actors'
 planted fraud after the fact, with its own random streams:
 
@@ -25,7 +26,9 @@ from .ids import rng_for
 from .text import SWAPS
 from .wave import Submission, Wave, build_wave
 
-HARD_SEEDS = (201, 202)
+HARD_TUNING_SEEDS = (211, 212)
+HARD_HELD_OUT_SEEDS = (201, 202)
+HARD_SEEDS = HARD_TUNING_SEEDS + HARD_HELD_OUT_SEEDS
 
 # More one-word synonyms on top of the near-copy swaps.
 REWORDS = {

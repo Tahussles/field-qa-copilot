@@ -53,8 +53,11 @@ class Params:
     # below it (or with no verdict) the keyword rule decides.
     ai_min_confidence: float = 0.7
     # copied_text decided only by a model's "reworded copy" verdict weighs this
-    # (corroboration only: below review_threshold on its own). Evidence is in
-    # data/eval/hard.json (tuning seeds) next to the 3.0 a rule-found copy weighs.
+    # (corroboration only: below review_threshold on its own), not the 3.0 a
+    # rule-found copy weighs. Hard-mode tuning seeds 211-212 cannot tell weights
+    # apart: precision 91.2%, recall 86.3% at 1.0, 1.5, 2.0 and 3.0 alike (no
+    # model-only copy changed a band there), so the value is the policy, any
+    # weight below review_threshold. data/eval/hard.json has the sweep.
     ai_paraphrase_weight: float = 1.5
     # Comes from projects.timezone, not from check_config.
     timezone: str = "Africa/Nairobi"

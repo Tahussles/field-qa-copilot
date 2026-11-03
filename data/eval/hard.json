@@ -1,24 +1,28 @@
 {
-  "generated_at": "2026-11-02T23:37:53+00:00",
-  "engine_version": "0.3.0",
+  "generated_at": "2026-11-03T01:16:04+00:00",
+  "engine_version": "0.4.0",
   "seeds": [
     201,
     202
   ],
+  "tuning_seeds": [
+    211,
+    212
+  ],
   "model": "claude-haiku-5-5",
   "rules_only_run": false,
   "calls": {
-    "total": 3483,
-    "consistency": 3319,
-    "paraphrase": 164,
-    "verdicts": 3482,
+    "total": 6954,
+    "consistency": 6624,
+    "paraphrase": 330,
+    "verdicts": 6953,
     "failed": 1,
-    "median_latency_ms": 1385.0
+    "median_latency_ms": 1316
   },
   "cost_usd": {
-    "estimated_before_run": 0.0005,
-    "spent_this_run": 0.0007,
-    "all_cached_calls": 0.5827
+    "estimated_before_run": 0.8671,
+    "spent_this_run": 0.5807,
+    "all_cached_calls": 1.1628
   },
   "planted_per_wave": {
     "speeder": 23.5,
@@ -87,6 +91,12 @@
         "precision": 1.0,
         "recall": 0.1854,
         "targeted_recall": 1.0
+      },
+      "outside_area": {
+        "fires_on": 0,
+        "precision": null,
+        "recall": 0.0,
+        "targeted_recall": null
       }
     },
     "misses_by_fraud_type": {
@@ -104,11 +114,11 @@
     "combined": {
       "submissions": 1678.5,
       "fabricated": 148.5,
-      "flagged": 146,
-      "precision": 0.8799,
-      "recall": 0.8651,
-      "false_positives": 17.5,
-      "false_negatives": 20
+      "flagged": 141,
+      "precision": 0.9147,
+      "recall": 0.8685,
+      "false_positives": 12,
+      "false_negatives": 19.5
     },
     "per_check": {
       "too_fast": {
@@ -136,10 +146,10 @@
         "targeted_recall": 0.7464
       },
       "voice_vs_form": {
-        "fires_on": 22,
-        "precision": 0.9773,
-        "recall": 0.1448,
-        "targeted_recall": 0.9773
+        "fires_on": 22.5,
+        "precision": 0.9783,
+        "recall": 0.1482,
+        "targeted_recall": 1.0
       },
       "off_hours": {
         "fires_on": 13.5,
@@ -158,18 +168,92 @@
         "precision": 1.0,
         "recall": 0.1854,
         "targeted_recall": 1.0
+      },
+      "outside_area": {
+        "fires_on": 0,
+        "precision": null,
+        "recall": 0.0,
+        "targeted_recall": null
       }
     },
     "misses_by_fraud_type": {
       "curbstone": 19.5,
       "speeder": 0,
       "copypaste": 0,
-      "contradiction": 0.5,
+      "contradiction": 0,
       "night": 0,
       "multi_account": 0,
       "burst": 0
     },
-    "decided_by_ai": 28
+    "decided_by_ai": 28.5
+  },
+  "paraphrase_weight": {
+    "tuning_sweep": [
+      {
+        "ai_paraphrase_weight": 1.0,
+        "precision": 0.9124,
+        "recall": 0.8631,
+        "flagged": 131.5,
+        "false_positives": 11.5
+      },
+      {
+        "ai_paraphrase_weight": 1.5,
+        "precision": 0.9124,
+        "recall": 0.8631,
+        "flagged": 131.5,
+        "false_positives": 11.5
+      },
+      {
+        "ai_paraphrase_weight": 2.0,
+        "precision": 0.9124,
+        "recall": 0.8631,
+        "flagged": 131.5,
+        "false_positives": 11.5
+      },
+      {
+        "ai_paraphrase_weight": 3.0,
+        "precision": 0.9124,
+        "recall": 0.8631,
+        "flagged": 131.5,
+        "false_positives": 11.5
+      }
+    ],
+    "held_out_before": {
+      "submissions": 1678.5,
+      "fabricated": 148.5,
+      "flagged": 146.5,
+      "precision": 0.8804,
+      "recall": 0.8685,
+      "false_positives": 17.5,
+      "false_negatives": 19.5
+    },
+    "held_out_after": {
+      "submissions": 1678.5,
+      "fabricated": 148.5,
+      "flagged": 141,
+      "precision": 0.9147,
+      "recall": 0.8685,
+      "false_positives": 12,
+      "false_negatives": 19.5
+    },
+    "tuning_before": {
+      "submissions": 1675,
+      "fabricated": 139,
+      "flagged": 131.5,
+      "precision": 0.9124,
+      "recall": 0.8631,
+      "false_positives": 11.5,
+      "false_negatives": 19
+    },
+    "tuning_after": {
+      "submissions": 1675,
+      "fabricated": 139,
+      "flagged": 131.5,
+      "precision": 0.9124,
+      "recall": 0.8631,
+      "false_positives": 11.5,
+      "false_negatives": 19
+    }
   },
   "gaps": [
     {
@@ -178,5 +262,8 @@
       "missed": 19.5,
       "missed_by_rules": 19.5
     }
-  ]
+  ],
+  "unmeasured": {
+    "outside_area": "every synthetic point is inside its area, so it never fires here"
+  }
 }

@@ -315,7 +315,7 @@ def hard_verdicts(calls: list[dict], cache: dict) -> dict[str, list[Verdict]]:
 def run_hard(args, params: Params) -> int:
     from api._lib.ai import JUDGE_MODEL, AIUnavailable, LiveProvider, token_cost
     from api._lib.postgrest import load_env
-    from datagen.hard import HARD_SEEDS, build_hard_wave
+    from datagen.hard import HARD_HELD_OUT_SEEDS, HARD_SEEDS, HARD_TUNING_SEEDS, build_hard_wave
 
     cache_path = args.out / "hard-verdicts.json"
     cache = json.loads(cache_path.read_text()) if cache_path.exists() else {}
@@ -365,15 +365,21 @@ def run_hard(args, params: Params) -> int:
             spent = sum(pool.map(judge, todo))
         cache_path.write_text(json.dumps(cache))
 
-    per_seed = []
+    # The engine's current params ("rules_ai"), the model-only copy at its old full weight ("rules_ai_before",
+    # engine 0.3.0), and on the tuning seeds a sweep of that weight.
+    variants = {"rules": (False, {}), "rules_ai": (True, {}),
+                "rules_ai_before": (True, {"ai_paraphrase_weight": params.weights["copied_text"]})}
+    sweep_weights = (1.0, 1.5, 2.0, 3.0)
+    per_seed = {}
     for seed, (rows, calls) in waves.items():
         subs = [Submission.from_row(r) for r in rows["submissions"]]
         contributors = contributors_with_areas(rows["contributors"], rows["areas"])
         truth = {t["submission_id"]: t for t in rows["synthetic_truth"]}
         seed_params = replace(params, timezone=rows["projects"][0]["timezone"])
+        verdicts = hard_verdicts(calls, cache)
         result = {"seed": seed}
-        for label, verdicts in (("rules", None), ("rules_ai", hard_verdicts(calls, cache))):
-            scored = score_all(subs, contributors, seed_params, verdicts)
+        for label, (with_ai, overrides) in variants.items():
+            scored = score_all(subs, contributors, replace(seed_params, **overrides), verdicts if with_ai else None)
             result[label] = {
                 "combined": combined({s.submission_id: s.score for s in scored}, truth, seed_params.review_threshold),
                 "per_check": per_check(scored, truth),
@@ -381,32 +387,41 @@ def run_hard(args, params: Params) -> int:
                     1 for s in scored for r in s.results
                     if r.fired and r.evidence.get("decided_by") in ("ai", "ai_paraphrase")),
             }
-        per_seed.append(result)
+        if seed in HARD_TUNING_SEEDS:
+            result["sweep"] = {w: combined({s.submission_id: s.score for s in score_all(
+                subs, contributors, replace(seed_params, ai_paraphrase_weight=w), verdicts)}, truth,
+                seed_params.review_threshold) for w in sweep_weights}
+        per_seed[seed] = result
 
-    def mean(path):
-        values = [path(r) for r in per_seed]
+    def mean(path, seeds):
+        values = [path(per_seed[s]) for s in seeds]
         values = [v for v in values if v is not None]
         return round(statistics.mean(values), 4) if values else None
 
-    def side(label):
+    def side(label, seeds):
         c = lambda r: r[label]["combined"]  # noqa: E731
         return {
-            "combined": {k: mean(lambda r, k=k: c(r)[k]) for k in
+            "combined": {k: mean(lambda r, k=k: c(r)[k], seeds) for k in
                          ("submissions", "fabricated", "flagged", "precision", "recall", "false_positives",
                           "false_negatives")},
-            "per_check": {key: {m: mean(lambda r, key=key, m=m: r[label]["per_check"][key][m])
+            "per_check": {key: {m: mean(lambda r, key=key, m=m: r[label]["per_check"][key][m], seeds)
                                 for m in ("fires_on", "precision", "recall", "targeted_recall")} for key in CHECK_KEYS},
-            "misses_by_fraud_type": {ft: mean(lambda r, ft=ft: c(r)["misses_by_fraud_type"][ft]) for ft in FRAUD_TYPES},
-            "decided_by_ai": mean(lambda r: r[label]["decided_by_ai"]),
+            "misses_by_fraud_type": {ft: mean(lambda r, ft=ft: c(r)["misses_by_fraud_type"][ft], seeds)
+                                     for ft in FRAUD_TYPES},
+            "decided_by_ai": mean(lambda r: r[label]["decided_by_ai"], seeds),
         }
 
-    rules, rules_ai = side("rules"), side("rules_ai")
+    held, tuning = HARD_HELD_OUT_SEEDS, HARD_TUNING_SEEDS
+    rules, rules_ai = side("rules", held), side("rules_ai", held)
+    keys = ("precision", "recall", "flagged", "false_positives")
+    sweep = [{"ai_paraphrase_weight": w, **{k: mean(lambda r, w=w, k=k: r["sweep"][w][k], tuning) for k in keys}}
+             for w in sweep_weights]
     calls_made = [cache[c["key"]] for c in all_calls.values() if c["key"] in cache]
     planted = {}
-    for seed, (rows, _) in waves.items():
-        for t in rows["synthetic_truth"]:
+    for seed in held:
+        for t in waves[seed][0]["synthetic_truth"]:
             if t["fraud_type"]:
-                planted[t["fraud_type"]] = planted.get(t["fraud_type"], 0) + 1 / len(waves)
+                planted[t["fraud_type"]] = planted.get(t["fraud_type"], 0) + 1 / len(held)
     gaps = []
     for ft in FRAUD_TYPES:
         missed = rules_ai["misses_by_fraud_type"][ft] or 0
@@ -416,7 +431,8 @@ def run_hard(args, params: Params) -> int:
     report = {
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "engine_version": __version__,
-        "seeds": list(HARD_SEEDS),
+        "seeds": list(held),  # what the panel's numbers are averaged over
+        "tuning_seeds": list(tuning),
         "model": JUDGE_MODEL,
         "rules_only_run": bool(args.rules_only),
         "calls": {"total": len(all_calls), **kinds,
@@ -428,14 +444,24 @@ def run_hard(args, params: Params) -> int:
         "planted_per_wave": {k: round(v, 1) for k, v in planted.items()},
         "rules": rules,
         "rules_ai": rules_ai,
+        "paraphrase_weight": {
+            "tuning_sweep": sweep,
+            "held_out_before": side("rules_ai_before", held)["combined"],
+            "held_out_after": rules_ai["combined"],
+            "tuning_before": side("rules_ai_before", tuning)["combined"],
+            "tuning_after": side("rules_ai", tuning)["combined"],
+        },
         "gaps": gaps,
+        "unmeasured": {"outside_area": "every synthetic point is inside its area, so it never fires here"},
     }
     args.out.mkdir(parents=True, exist_ok=True)
     (args.out / "hard.json").write_text(json.dumps(report, indent=2) + "\n")
     for label, data in (("rules only", rules), ("rules + AI", rules_ai)):
         c = data["combined"]
-        print(f"{label:<11} precision {pct(c['precision'])}  recall {pct(c['recall'])}  flagged {c['flagged']}  "
+        print(f"held-out {label:<11} precision {pct(c['precision'])}  recall {pct(c['recall'])}  flagged {c['flagged']}  "
               f"misses {({k: v for k, v in data['misses_by_fraud_type'].items() if v})}")
+    for name, values in report["paraphrase_weight"].items():
+        print(f"paraphrase weight {name}: {values}")
     print(f"spent ${spent:.4f} this run; wrote {(args.out / 'hard.json').relative_to(ROOT)}")
     return 0
 
