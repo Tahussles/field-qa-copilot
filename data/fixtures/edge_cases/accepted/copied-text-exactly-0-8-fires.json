@@ -1,0 +1,74 @@
+{
+ "generated": {
+  "model": "claude-opus-5-5",
+  "prompt": "edge-v1",
+  "at": "2026-11-03T18:21:42+00:00"
+ },
+ "case": {
+  "id": "copied-text-exactly-0-8-fires",
+  "check": "copied_text",
+  "kind": "boundary",
+  "title": "Jaccard exactly 0.8 (8 shared of 10 content words) fires",
+  "submissions": [
+   {
+    "ref": "orig",
+    "contributor": "E01",
+    "device_id": "dev-e01",
+    "captured_at": "2025-03-10T09:15:00+03:00",
+    "duration_sec": 1500,
+    "lat": -0.0812,
+    "lng": 34.7695,
+    "water_source": "public_tap",
+    "satisfaction": [
+     4,
+     3,
+     4,
+     2,
+     3,
+     4,
+     3,
+     2
+    ],
+    "open_text": "The kiosk queue is slow and a jerrican costs shillings because pressure is weak",
+    "voice_transcript": ""
+   },
+   {
+    "ref": "copy",
+    "contributor": "E01",
+    "device_id": "dev-e01",
+    "captured_at": "2025-03-11T10:40:00+03:00",
+    "duration_sec": 1620,
+    "lat": -0.0765,
+    "lng": 34.7741,
+    "water_source": "public_tap",
+    "satisfaction": [
+     3,
+     4,
+     2,
+     3,
+     4,
+     3,
+     2,
+     4
+    ],
+    "open_text": "A kiosk queue is slow and the jerrican costs shillings because pressure is weak at Kondele market",
+    "voice_transcript": ""
+   }
+  ],
+  "target": "copy",
+  "should_fire": [
+   "copied_text"
+  ],
+  "should_not_fire": [
+   "too_fast",
+   "same_spot",
+   "straight_lining",
+   "voice_vs_form",
+   "off_hours",
+   "shared_device",
+   "burst",
+   "outside_area"
+  ],
+  "why": "Content words of orig after removing the stop words the/is/and/a/because: {kiosk, queue, slow, jerrican, costs, shillings, pressure, weak} = 8. copy has the same 8 plus {kondele, market} (at/a/the/is/and/because removed) = 10. Intersection 8, union 10, Jaccard = 0.8 exactly, which meets the 'at or above 0.8' threshold. An implementation using a strict > 0.8 comparison stays silent. 8/10 in floating point equals the literal 0.8, so a correct >= comparison fires. Other checks are quiet: durations of 25 and 27 min are at least 12 min, the two submissions are on different days, it is daytime, points are inside Kondele, E01 is alone on the device, and there is no transcript."
+ }
+}

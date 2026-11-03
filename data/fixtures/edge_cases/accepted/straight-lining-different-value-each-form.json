@@ -1,0 +1,96 @@
+{
+ "generated": {
+  "model": "claude-opus-5-5",
+  "prompt": "edge-v1",
+  "at": "2026-11-03T18:22:41+00:00"
+ },
+ "case": {
+  "id": "straight-lining-different-value-each-form",
+  "check": "straight_lining",
+  "kind": "adversarial",
+  "title": "Participant straight-lines each form with a different value; the all-1s one still fires",
+  "submissions": [
+   {
+    "ref": "twos",
+    "contributor": "P02",
+    "device_id": "dev-p02",
+    "captured_at": "2024-05-18T09:30:00+03:00",
+    "duration_sec": 300,
+    "lat": -0.105,
+    "lng": 34.748,
+    "water_source": "river",
+    "satisfaction": [
+     2,
+     2,
+     2,
+     2,
+     2,
+     2,
+     2,
+     2
+    ],
+    "open_text": "Lake water looks cloudy after heavy rain",
+    "voice_transcript": ""
+   },
+   {
+    "ref": "fours",
+    "contributor": "P02",
+    "device_id": "dev-p02",
+    "captured_at": "2024-05-18T12:15:00+03:00",
+    "duration_sec": 340,
+    "lat": -0.098,
+    "lng": 34.756,
+    "water_source": "borehole",
+    "satisfaction": [
+     4,
+     4,
+     4,
+     4,
+     4,
+     4,
+     4,
+     4
+    ],
+    "open_text": "Borehole committee charges a monthly fee per family",
+    "voice_transcript": ""
+   },
+   {
+    "ref": "ones",
+    "contributor": "P02",
+    "device_id": "dev-p02",
+    "captured_at": "2024-05-18T16:50:00+03:00",
+    "duration_sec": 280,
+    "lat": -0.093,
+    "lng": 34.742,
+    "water_source": "vendor",
+    "satisfaction": [
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1,
+     1
+    ],
+    "open_text": "Vendors refuse to deliver when roads flood",
+    "voice_transcript": ""
+   }
+  ],
+  "target": "ones",
+  "should_fire": [
+   "straight_lining"
+  ],
+  "should_not_fire": [
+   "too_fast",
+   "same_spot",
+   "copied_text",
+   "voice_vs_form",
+   "off_hours",
+   "shared_device",
+   "burst",
+   "outside_area"
+  ],
+  "why": "A fabricator varies the repeated value from form to form, so no two forms share an answer pattern. The check is per submission: all 8 answers equal fires regardless of the value and regardless of other forms. Several wrong implementations would stay silent here. One looks for a repeated pattern across the contributor's submissions. One only flags the top value 5. One treats the all-1s grid specially, for example as low or empty. Another wrongly exempts participants. Quiet checks: as a participant, 280 s is at least 180 s. same_spot never applies to participants. The texts share no content words. There are no voice notes. All times are daytime. One contributor uses the device. There are 3 submissions, below the participant burst threshold of 5. All points are inside Nyalenda."
+ }
+}

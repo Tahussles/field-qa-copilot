@@ -1,0 +1,74 @@
+{
+ "generated": {
+  "model": "claude-opus-5-5",
+  "prompt": "edge-v1",
+  "at": "2026-11-03T18:21:42+00:00"
+ },
+ "case": {
+  "id": "copied-text-stopword-and-case-rewording",
+  "check": "copied_text",
+  "kind": "adversarial",
+  "title": "Copy disguised by reordering, capitalisation and swapped stop words still fires",
+  "submissions": [
+   {
+    "ref": "orig",
+    "contributor": "E02",
+    "device_id": "dev-e02",
+    "captured_at": "2025-03-10T10:20:00+03:00",
+    "duration_sec": 1380,
+    "lat": -0.1003,
+    "lng": 34.7487,
+    "water_source": "public_tap",
+    "satisfaction": [
+     3,
+     3,
+     4,
+     2,
+     4,
+     3,
+     2,
+     3
+    ],
+    "open_text": "We queue at the kiosk in the morning and the jerrican costs shillings",
+    "voice_transcript": ""
+   },
+   {
+    "ref": "disguised",
+    "contributor": "E02",
+    "device_id": "dev-e02",
+    "captured_at": "2025-03-11T13:45:00+03:00",
+    "duration_sec": 1740,
+    "lat": -0.0962,
+    "lng": 34.7455,
+    "water_source": "public_tap",
+    "satisfaction": [
+     2,
+     4,
+     3,
+     4,
+     3,
+     2,
+     3,
+     4
+    ],
+    "open_text": "In the Morning there is a Queue at our Kiosk and each Jerrican costs Shillings",
+    "voice_transcript": ""
+   }
+  ],
+  "target": "disguised",
+  "should_fire": [
+   "copied_text"
+  ],
+  "should_not_fire": [
+   "too_fast",
+   "same_spot",
+   "straight_lining",
+   "voice_vs_form",
+   "off_hours",
+   "shared_device",
+   "burst",
+   "outside_area"
+  ],
+  "why": "A fabricator rewords a copied answer by reordering it, capitalising words and swapping filler words. After lowercasing and removing stop words (we/at/the/in/and/there/is/a/our/each), both texts give exactly {queue, kiosk, morning, jerrican, costs, shillings}, so the Jaccard similarity is 6/6 = 1.0 and the check fires. Wrong implementations stay silent: without stop-word removal the lowercased token sets give 10 shared of 16 = 0.625, and without lowercasing only 'costs' matches. Other checks are quiet: durations of 23 and 29 min, different days, daytime, points inside Nyalenda, E02 alone on the device, no transcript."
+ }
+}

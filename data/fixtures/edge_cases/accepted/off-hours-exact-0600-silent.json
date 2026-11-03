@@ -1,0 +1,73 @@
+{
+ "generated": {
+  "model": "claude-opus-5-5",
+  "prompt": "edge-v1",
+  "at": "2026-11-03T18:24:49+00:00"
+ },
+ "case": {
+  "id": "off-hours-exact-0600-silent",
+  "check": "off_hours",
+  "kind": "boundary",
+  "title": "06:00:00 is daytime while 05:59:59 one second earlier is not",
+  "submissions": [
+   {
+    "ref": "dawn",
+    "contributor": "P01",
+    "device_id": "dev-p01",
+    "captured_at": "2024-05-15T05:59:59+03:00",
+    "duration_sec": 420,
+    "lat": -0.082,
+    "lng": 34.772,
+    "water_source": "river",
+    "satisfaction": [
+     2,
+     3,
+     1,
+     2,
+     3,
+     2,
+     4,
+     1
+    ],
+    "open_text": "We fetch from the stream before the cattle come down to drink.",
+    "voice_transcript": ""
+   },
+   {
+    "ref": "six",
+    "contributor": "P01",
+    "device_id": "dev-p01",
+    "captured_at": "2024-05-15T06:00:00+03:00",
+    "duration_sec": 390,
+    "lat": -0.078,
+    "lng": 34.768,
+    "water_source": "public_tap",
+    "satisfaction": [
+     3,
+     4,
+     2,
+     3,
+     4,
+     3,
+     2,
+     4
+    ],
+    "open_text": "The communal tap opens at six and the line grows quickly.",
+    "voice_transcript": ""
+   }
+  ],
+  "target": "six",
+  "should_fire": [],
+  "should_not_fire": [
+   "off_hours",
+   "too_fast",
+   "same_spot",
+   "copied_text",
+   "straight_lining",
+   "voice_vs_form",
+   "shared_device",
+   "burst",
+   "outside_area"
+  ],
+  "why": "The morning bound is exclusive ('before 06:00'). 06:00:00+03:00 must therefore not fire. Its sibling 'dawn' at 05:59:59 does fire, and that is the contrast this case pins. An implementation using <= 06:00, or hour <= 6, would wrongly flag 'six'. Other checks are quiet. 'six' is a participant interview of 390 s, which is at least 180 s. same_spot never applies to participants. There are only 2 submissions, fewer than the 5 burst needs for a participant. Both points are inside Kondele. Content words {fetch, stream, cattle, come, drink} and {communal, tap, opens, six, line, grows, quickly} do not overlap. There is no voice note."
+ }
+}

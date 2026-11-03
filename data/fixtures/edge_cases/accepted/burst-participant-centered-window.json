@@ -1,0 +1,140 @@
+{
+ "generated": {
+  "model": "claude-opus-5-5",
+  "prompt": "edge-v1",
+  "at": "2026-11-03T18:27:49+00:00"
+ },
+ "case": {
+  "id": "burst-participant-centered-window",
+  "check": "burst",
+  "kind": "boundary",
+  "title": "Participant: 5 in 55 minutes with target in the middle; only a window straddling the target reaches 5",
+  "submissions": [
+   {
+    "ref": "a",
+    "contributor": "P02",
+    "device_id": "dev-p02",
+    "captured_at": "2024-05-17T13:00:00+03:00",
+    "duration_sec": 420,
+    "lat": -0.095,
+    "lng": 34.742,
+    "water_source": "piped_home",
+    "satisfaction": [
+     4,
+     3,
+     4,
+     5,
+     2,
+     3,
+     4,
+     3
+    ],
+    "open_text": "Meter readings seem estimated rather than actually read.",
+    "voice_transcript": ""
+   },
+   {
+    "ref": "b",
+    "contributor": "P02",
+    "device_id": "dev-p02",
+    "captured_at": "2024-05-17T13:10:00+03:00",
+    "duration_sec": 380,
+    "lat": -0.099,
+    "lng": 34.745,
+    "water_source": "borehole",
+    "satisfaction": [
+     2,
+     1,
+     3,
+     2,
+     3,
+     2,
+     1,
+     2
+    ],
+    "open_text": "Toilet shares a wall with the storage drum, worrying.",
+    "voice_transcript": ""
+   },
+   {
+    "ref": "c",
+    "contributor": "P02",
+    "device_id": "dev-p02",
+    "captured_at": "2024-05-17T13:25:00+03:00",
+    "duration_sec": 500,
+    "lat": -0.103,
+    "lng": 34.748,
+    "water_source": "vendor",
+    "satisfaction": [
+     3,
+     4,
+     2,
+     4,
+     3,
+     5,
+     3,
+     4
+    ],
+    "open_text": "Prices rise whenever the county shuts the main line.",
+    "voice_transcript": ""
+   },
+   {
+    "ref": "d",
+    "contributor": "P02",
+    "device_id": "dev-p02",
+    "captured_at": "2024-05-17T13:40:00+03:00",
+    "duration_sec": 450,
+    "lat": -0.107,
+    "lng": 34.751,
+    "water_source": "river",
+    "satisfaction": [
+     5,
+     5,
+     4,
+     3,
+     4,
+     4,
+     5,
+     3
+    ],
+    "open_text": "Elderly residents cannot carry twenty litre containers.",
+    "voice_transcript": ""
+   },
+   {
+    "ref": "e",
+    "contributor": "P02",
+    "device_id": "dev-p02",
+    "captured_at": "2024-05-17T13:55:00+03:00",
+    "duration_sec": 400,
+    "lat": -0.093,
+    "lng": 34.757,
+    "water_source": "public_tap",
+    "satisfaction": [
+     2,
+     3,
+     3,
+     1,
+     2,
+     4,
+     2,
+     3
+    ],
+    "open_text": "Mosquitoes breed in puddles beside the communal standpipe.",
+    "voice_transcript": ""
+   }
+  ],
+  "target": "c",
+  "should_fire": [
+   "burst"
+  ],
+  "should_not_fire": [
+   "too_fast",
+   "same_spot",
+   "copied_text",
+   "straight_lining",
+   "voice_vs_form",
+   "off_hours",
+   "shared_device",
+   "outside_area"
+  ],
+  "why": "Probes the sliding window. The rule asks for some window containing the target. The trailing window ending at c (12:25-13:25) holds only a, b, c = 3. The forward window starting at c (13:25-14:25) holds only c, d, e = 3. The window 13:00-14:00 contains c and holds all 5, which meets the participant threshold, so burst fires. An implementation that only anchors the window at the target, either trailing or leading, misses this and stays silent. The other checks stay quiet. Durations are at least 180 s, all points are inside Nyalenda (lat -0.093 to -0.107, lng 34.742-34.757), there are no shared content words, no voice notes, daytime times, and one device."
+ }
+}

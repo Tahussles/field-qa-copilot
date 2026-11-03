@@ -1,0 +1,117 @@
+{
+ "generated": {
+  "model": "claude-opus-5-5",
+  "prompt": "edge-v1",
+  "at": "2026-11-03T18:26:22+00:00"
+ },
+ "case": {
+  "id": "shared-device-similar-id-not-same",
+  "check": "shared_device",
+  "kind": "boundary",
+  "title": "Device ids dev-k1 and dev-k10 are different devices despite sharing a prefix",
+  "submissions": [
+   {
+    "ref": "x",
+    "contributor": "E01",
+    "device_id": "dev-k1",
+    "captured_at": "2024-06-03T10:20:00+03:00",
+    "duration_sec": 1530,
+    "lat": -0.0803,
+    "lng": 34.7671,
+    "water_source": "piped_home",
+    "satisfaction": [
+     4,
+     3,
+     3,
+     4,
+     2,
+     3,
+     4,
+     3
+    ],
+    "open_text": "Pipes burst near the market and our street had no water for three days.",
+    "voice_transcript": ""
+   },
+   {
+    "ref": "y",
+    "contributor": "P01",
+    "device_id": "dev-k10",
+    "captured_at": "2024-06-03T16:30:00+03:00",
+    "duration_sec": 360,
+    "lat": -0.0768,
+    "lng": 34.7739,
+    "water_source": "public_tap",
+    "satisfaction": [
+     2,
+     3,
+     1,
+     2,
+     3,
+     2,
+     2,
+     3
+    ],
+    "open_text": "The kiosk attendant closes early so evening queues spill onto the road.",
+    "voice_transcript": ""
+   },
+   {
+    "ref": "z",
+    "contributor": "E01",
+    "device_id": "dev-k1",
+    "captured_at": "2024-06-05T09:50:00+03:00",
+    "duration_sec": 1410,
+    "lat": -0.0852,
+    "lng": 34.7618,
+    "water_source": "borehole",
+    "satisfaction": [
+     3,
+     4,
+     3,
+     3,
+     2,
+     4,
+     3,
+     4
+    ],
+    "open_text": "Women walk past the clinic to reach the borehole because it is cleaner.",
+    "voice_transcript": ""
+   },
+   {
+    "ref": "y2",
+    "contributor": "P01",
+    "device_id": "dev-k10",
+    "captured_at": "2024-06-07T12:15:00+03:00",
+    "duration_sec": 450,
+    "lat": -0.0734,
+    "lng": 34.7766,
+    "water_source": "vendor",
+    "satisfaction": [
+     3,
+     2,
+     2,
+     3,
+     4,
+     2,
+     3,
+     2
+    ],
+    "open_text": "Prices from vendors double during drought months and we ration drinking water.",
+    "voice_transcript": ""
+   }
+  ],
+  "target": "x",
+  "should_fire": [],
+  "should_not_fire": [
+   "shared_device",
+   "too_fast",
+   "same_spot",
+   "copied_text",
+   "straight_lining",
+   "voice_vs_form",
+   "off_hours",
+   "burst",
+   "outside_area"
+  ],
+  "why": "dev-k1 is used only by E01 (x, z) and dev-k10 only by P01 (y, y2), so each device has 1 contributor. A near-miss tempts a wrong implementation: matching device ids by prefix or substring (for example a SQL LIKE 'dev-k1%', or startswith) or after truncation would treat dev-k10 as dev-k1. That would count 2 contributors and fire on x. The other checks stay quiet: x is E01's only submission on 2024-06-03, its point is inside Kondele, the interview is daytime and 1530 s long, and its transcript is empty."
+ }
+}

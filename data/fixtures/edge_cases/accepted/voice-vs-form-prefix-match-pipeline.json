@@ -1,0 +1,74 @@
+{
+ "generated": {
+  "model": "claude-opus-5-5",
+  "prompt": "edge-v1",
+  "at": "2026-11-03T18:23:44+00:00"
+ },
+ "case": {
+  "id": "voice-vs-form-prefix-match-pipeline",
+  "check": "voice_vs_form",
+  "kind": "boundary",
+  "title": "'pipeline' begins with the keyword 'pipe' and must match as piped_home",
+  "submissions": [
+   {
+    "ref": "pl",
+    "contributor": "E02",
+    "device_id": "dev-e02",
+    "captured_at": "2024-05-16T11:05:00+03:00",
+    "duration_sec": 1450,
+    "lat": -0.1,
+    "lng": 34.75,
+    "water_source": "vendor",
+    "satisfaction": [
+     4,
+     4,
+     3,
+     5,
+     2,
+     4,
+     3,
+     4
+    ],
+    "open_text": "Household of six shares two jerrycans daily.",
+    "voice_transcript": "The county pipeline reaches our plot now."
+   },
+   {
+    "ref": "second",
+    "contributor": "E02",
+    "device_id": "dev-e02",
+    "captured_at": "2024-05-16T15:20:00+03:00",
+    "duration_sec": 1280,
+    "lat": -0.095,
+    "lng": 34.745,
+    "water_source": "borehole",
+    "satisfaction": [
+     2,
+     1,
+     3,
+     2,
+     4,
+     2,
+     3,
+     1
+    ],
+    "open_text": "Children miss school fetching water after rains fail.",
+    "voice_transcript": ""
+   }
+  ],
+  "target": "pl",
+  "should_fire": [
+   "voice_vs_form"
+  ],
+  "should_not_fire": [
+   "too_fast",
+   "same_spot",
+   "copied_text",
+   "straight_lining",
+   "off_hours",
+   "shared_device",
+   "burst",
+   "outside_area"
+  ],
+  "why": "A keyword matches at the start of a word, so 'pipe' matches the start of 'pipeline' and the source heard is piped_home. No earlier word begins any keyword ('The', 'county' do not). Piped_home differs from the form's vendor, so the check fires. An implementation that requires whole-word matches would find no keyword and stay silent."
+ }
+}

@@ -1,0 +1,96 @@
+{
+ "generated": {
+  "model": "claude-opus-5-5",
+  "prompt": "edge-v1",
+  "at": "2026-11-03T18:20:09+00:00"
+ },
+ "case": {
+  "id": "same-spot-two-neighbours-inside-radius",
+  "check": "same_spot",
+  "kind": "boundary",
+  "title": "Exactly two other same-day submissions about 44.5 m away fire same_spot",
+  "submissions": [
+   {
+    "ref": "t",
+    "contributor": "E01",
+    "device_id": "dev-e01",
+    "captured_at": "2024-03-12T11:00:00+03:00",
+    "duration_sec": 1500,
+    "lat": -0.08,
+    "lng": 34.77,
+    "water_source": "public_tap",
+    "satisfaction": [
+     4,
+     3,
+     5,
+     2,
+     4,
+     3,
+     4,
+     2
+    ],
+    "open_text": "Household complains about long queues at the kiosk near the market every morning.",
+    "voice_transcript": ""
+   },
+   {
+    "ref": "n1",
+    "contributor": "E01",
+    "device_id": "dev-e01",
+    "captured_at": "2024-03-12T09:00:00+03:00",
+    "duration_sec": 1380,
+    "lat": -0.0796,
+    "lng": 34.77,
+    "water_source": "borehole",
+    "satisfaction": [
+     2,
+     3,
+     1,
+     4,
+     2,
+     3,
+     2,
+     5
+    ],
+    "open_text": "Mother of four says the borehole broke last month and repairs took weeks.",
+    "voice_transcript": ""
+   },
+   {
+    "ref": "n2",
+    "contributor": "E01",
+    "device_id": "dev-e01",
+    "captured_at": "2024-03-12T14:30:00+03:00",
+    "duration_sec": 1620,
+    "lat": -0.08,
+    "lng": 34.7704,
+    "water_source": "vendor",
+    "satisfaction": [
+     3,
+     4,
+     4,
+     2,
+     5,
+     3,
+     1,
+     4
+    ],
+    "open_text": "Elderly man stores rainwater in drums and boils it before drinking.",
+    "voice_transcript": ""
+   }
+  ],
+  "target": "t",
+  "should_fire": [
+   "same_spot"
+  ],
+  "should_not_fire": [
+   "too_fast",
+   "copied_text",
+   "straight_lining",
+   "voice_vs_form",
+   "off_hours",
+   "shared_device",
+   "burst",
+   "outside_area"
+  ],
+  "why": "Probes the 'at least 2' count. n1 is 0.0004 deg of latitude north of t (about 44.5 m). n2 is 0.0004 deg of longitude east, which at latitude -0.08 is also about 44.5 m. Both are under 50 m and on the same local day, 2024-03-12. So t has exactly 2 qualifying neighbours and must fire. An implementation that needs more than 2 neighbours (using > instead of >=) would stay silent. So would one that needs 3 points including t to all sit inside one fixed cell. The three times are 09:00, 11:00 and 14:30, so there is no burst. All points are inside Kondele and all durations are at least 23 minutes."
+ }
+}

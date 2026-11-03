@@ -1,0 +1,95 @@
+{
+ "generated": {
+  "model": "claude-opus-5-5",
+  "prompt": "edge-v1",
+  "at": "2026-11-03T18:20:09+00:00"
+ },
+ "case": {
+  "id": "same-spot-self-not-counted",
+  "check": "same_spot",
+  "kind": "boundary",
+  "title": "One other submission at identical coordinates must not be topped up by the target itself",
+  "submissions": [
+   {
+    "ref": "t",
+    "contributor": "E01",
+    "device_id": "dev-e01",
+    "captured_at": "2024-03-12T10:15:00+03:00",
+    "duration_sec": 1500,
+    "lat": -0.08,
+    "lng": 34.77,
+    "water_source": "borehole",
+    "satisfaction": [
+     3,
+     4,
+     2,
+     4,
+     3,
+     5,
+     3,
+     4
+    ],
+    "open_text": "Shop owner shares the hand pump with six neighbouring plots.",
+    "voice_transcript": ""
+   },
+   {
+    "ref": "dup",
+    "contributor": "E01",
+    "device_id": "dev-e01",
+    "captured_at": "2024-03-12T12:00:00+03:00",
+    "duration_sec": 1410,
+    "lat": -0.08,
+    "lng": 34.77,
+    "water_source": "vendor",
+    "satisfaction": [
+     2,
+     1,
+     3,
+     2,
+     2,
+     4,
+     1,
+     3
+    ],
+    "open_text": "Grandmother pays a cart seller forty shillings per twenty litres.",
+    "voice_transcript": ""
+   },
+   {
+    "ref": "far",
+    "contributor": "E01",
+    "device_id": "dev-e01",
+    "captured_at": "2024-03-12T15:00:00+03:00",
+    "duration_sec": 1680,
+    "lat": -0.0827,
+    "lng": 34.77,
+    "water_source": "public_tap",
+    "satisfaction": [
+     4,
+     5,
+     3,
+     4,
+     4,
+     2,
+     5,
+     3
+    ],
+    "open_text": "Teacher praises the new standpipe installed by the county last year.",
+    "voice_transcript": ""
+   }
+  ],
+  "target": "t",
+  "should_fire": [],
+  "should_not_fire": [
+   "same_spot",
+   "too_fast",
+   "copied_text",
+   "straight_lining",
+   "voice_vs_form",
+   "off_hours",
+   "shared_device",
+   "burst",
+   "outside_area"
+  ],
+  "why": "Probes the off-by-one on 'other submissions'. dup is 0 m from t on the same local day, so it counts. far is 0.0027 deg south, about 300 m, so it does not. That is one qualifying neighbour, and same_spot must not fire. An implementation that includes t in its own neighbour count, since t is at distance 0 from itself, would reach 2 and fire wrongly. One that dedups identical coordinates is irrelevant here: the answer is still 1. Times are 10:15, 12:00 and 15:00, so there is no burst. far at lat -0.0827 is still inside Kondele."
+ }
+}

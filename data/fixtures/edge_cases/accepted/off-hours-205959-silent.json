@@ -1,0 +1,73 @@
+{
+ "generated": {
+  "model": "claude-opus-5-5",
+  "prompt": "edge-v1",
+  "at": "2026-11-03T18:24:49+00:00"
+ },
+ "case": {
+  "id": "off-hours-205959-silent",
+  "check": "off_hours",
+  "kind": "boundary",
+  "title": "One second before 21:00 with a long interview that runs past 21:00",
+  "submissions": [
+   {
+    "ref": "dusk",
+    "contributor": "E02",
+    "device_id": "dev-e02",
+    "captured_at": "2024-05-14T20:59:59+03:00",
+    "duration_sec": 1380,
+    "lat": -0.1,
+    "lng": 34.75,
+    "water_source": "borehole",
+    "satisfaction": [
+     2,
+     3,
+     3,
+     4,
+     2,
+     3,
+     4,
+     2
+    ],
+    "open_text": "The hand pump near the school broke last week and repairs are slow.",
+    "voice_transcript": ""
+   },
+   {
+    "ref": "morning",
+    "contributor": "E02",
+    "device_id": "dev-e02",
+    "captured_at": "2024-05-14T09:20:00+03:00",
+    "duration_sec": 1500,
+    "lat": -0.105,
+    "lng": 34.745,
+    "water_source": "vendor",
+    "satisfaction": [
+     4,
+     4,
+     3,
+     5,
+     3,
+     4,
+     2,
+     4
+    ],
+    "open_text": "We buy jerricans from a handcart seller because the pipes are dry.",
+    "voice_transcript": ""
+   }
+  ],
+  "target": "dusk",
+  "should_fire": [],
+  "should_not_fire": [
+   "off_hours",
+   "too_fast",
+   "same_spot",
+   "copied_text",
+   "straight_lining",
+   "voice_vs_form",
+   "shared_device",
+   "burst",
+   "outside_area"
+  ],
+  "why": "20:59:59+03:00 is one second before the inclusive 21:00 threshold, so off_hours must not fire. Two wrong implementations would fire here. One rounds or truncates to minutes and then compares with >= 21:00. The other uses the interview end time: captured_at plus 1380 s is 21:22:59. The rule says only captured_at counts. Other checks are quiet. Inside Nyalenda (lng 34.74-34.76, lat -0.11 to -0.09): (-0.100, 34.750) and (-0.105, 34.745). Duration is at least 720 s. Only one other submission that day, and only 2 submissions in total. No word overlap between the texts, and no voice note."
+ }
+}

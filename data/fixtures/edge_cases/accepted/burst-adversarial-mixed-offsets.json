@@ -1,0 +1,118 @@
+{
+ "generated": {
+  "model": "claude-opus-5-5",
+  "prompt": "edge-v1",
+  "at": "2026-11-03T18:27:49+00:00"
+ },
+ "case": {
+  "id": "burst-adversarial-mixed-offsets",
+  "check": "burst",
+  "kind": "adversarial",
+  "title": "Fabricator changes phone time zone so wall-clock times look hours apart while instants are 15 min apart",
+  "submissions": [
+   {
+    "ref": "a",
+    "contributor": "E01",
+    "device_id": "dev-e01",
+    "captured_at": "2024-05-18T09:00:00+03:00",
+    "duration_sec": 760,
+    "lat": -0.074,
+    "lng": 34.763,
+    "water_source": "public_tap",
+    "satisfaction": [
+     3,
+     2,
+     4,
+     3,
+     5,
+     2,
+     3,
+     4
+    ],
+    "open_text": "Supply rationing schedule changes without any notice.",
+    "voice_transcript": ""
+   },
+   {
+    "ref": "b",
+    "contributor": "E01",
+    "device_id": "dev-e01",
+    "captured_at": "2024-05-18T07:15:00+01:00",
+    "duration_sec": 790,
+    "lat": -0.079,
+    "lng": 34.767,
+    "water_source": "piped_home",
+    "satisfaction": [
+     4,
+     4,
+     3,
+     5,
+     4,
+     2,
+     4,
+     3
+    ],
+    "open_text": "Handwashing station at the clinic lacks soap often.",
+    "voice_transcript": ""
+   },
+   {
+    "ref": "c",
+    "contributor": "E01",
+    "device_id": "dev-e01",
+    "captured_at": "2024-05-18T06:30:00+00:00",
+    "duration_sec": 830,
+    "lat": -0.083,
+    "lng": 34.771,
+    "water_source": "borehole",
+    "satisfaction": [
+     2,
+     1,
+     2,
+     3,
+     2,
+     4,
+     1,
+     2
+    ],
+    "open_text": "Flooding last season contaminated the shallow well.",
+    "voice_transcript": ""
+   },
+   {
+    "ref": "d",
+    "contributor": "E01",
+    "device_id": "dev-e01",
+    "captured_at": "2024-05-18T10:45:00+04:00",
+    "duration_sec": 750,
+    "lat": -0.087,
+    "lng": 34.776,
+    "water_source": "vendor",
+    "satisfaction": [
+     5,
+     3,
+     4,
+     4,
+     3,
+     5,
+     2,
+     4
+    ],
+    "open_text": "Youth group sells cleaned water at a small profit.",
+    "voice_transcript": ""
+   }
+  ],
+  "target": "b",
+  "should_fire": [
+   "burst"
+  ],
+  "should_not_fire": [
+   "too_fast",
+   "same_spot",
+   "copied_text",
+   "straight_lining",
+   "voice_vs_form",
+   "off_hours",
+   "shared_device",
+   "outside_area"
+  ],
+  "why": "An adversarial case: the fabricator switches the phone's time zone between fake interviews. In UTC the four submissions are a 06:00Z, b 06:15Z, c 06:30Z and d 06:45Z. In Nairobi time that is 09:00, 09:15, 09:30 and 09:45, so 4 enumerator submissions fall within 45 minutes and burst fires on b. An implementation that compares the wall-clock part of captured_at and ignores the offset sees 06:30, 07:15, 09:00 and 10:45. Those span 4h15, no 60-minute window holds more than 2, and it misses the burst. The other checks stay quiet. In project time every submission is 09:00-09:45, so off_hours does not fire. Even a naive wall-clock reading keeps the earliest at 06:30, which is not before 06:00. Durations are at least 720 s. Points are at least about 500 m apart and all inside Kondele. There are no shared content words, no voice notes, and one device."
+ }
+}

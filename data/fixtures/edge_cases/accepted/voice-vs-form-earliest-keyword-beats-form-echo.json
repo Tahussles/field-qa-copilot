@@ -1,0 +1,74 @@
+{
+ "generated": {
+  "model": "claude-opus-5-5",
+  "prompt": "edge-v1",
+  "at": "2026-11-03T18:23:44+00:00"
+ },
+ "case": {
+  "id": "voice-vs-form-earliest-keyword-beats-form-echo",
+  "check": "voice_vs_form",
+  "kind": "adversarial",
+  "title": "Fabricator echoes the form's source later in the voice note, but an earlier keyword names a different source",
+  "submissions": [
+   {
+    "ref": "fab",
+    "contributor": "E01",
+    "device_id": "dev-e01",
+    "captured_at": "2024-05-14T10:15:00+03:00",
+    "duration_sec": 1500,
+    "lat": -0.08,
+    "lng": 34.77,
+    "water_source": "piped_home",
+    "satisfaction": [
+     4,
+     3,
+     4,
+     2,
+     5,
+     3,
+     4,
+     3
+    ],
+    "open_text": "Pressure drops every evening so we store water in drums.",
+    "voice_transcript": "We carry it from the stream every morning, there is no pipe here yet."
+   },
+   {
+    "ref": "ok",
+    "contributor": "E01",
+    "device_id": "dev-e01",
+    "captured_at": "2024-05-14T14:40:00+03:00",
+    "duration_sec": 1320,
+    "lat": -0.075,
+    "lng": 34.765,
+    "water_source": "public_tap",
+    "satisfaction": [
+     2,
+     3,
+     3,
+     4,
+     2,
+     1,
+     3,
+     2
+    ],
+    "open_text": "Neighbours complain that kiosk queues are long on weekends.",
+    "voice_transcript": ""
+   }
+  ],
+  "target": "fab",
+  "should_fire": [
+   "voice_vs_form"
+  ],
+  "should_not_fire": [
+   "too_fast",
+   "same_spot",
+   "copied_text",
+   "straight_lining",
+   "off_hours",
+   "shared_device",
+   "burst",
+   "outside_area"
+  ],
+  "why": "The earliest keyword in the transcript is 'stream' (river); 'pipe' (piped_home) comes later. River differs from the form's piped_home, so the check fires. An implementation that stays silent whenever any keyword in the transcript matches the form, or that uses the last keyword, would be fooled by a fabricator who tacks the form's source onto the end of the voice note. The companion has no voice note, and its open_text shares no content words with the target's."
+ }
+}

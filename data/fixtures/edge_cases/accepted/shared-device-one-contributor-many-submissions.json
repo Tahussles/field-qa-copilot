@@ -1,0 +1,139 @@
+{
+ "generated": {
+  "model": "claude-opus-5-5",
+  "prompt": "edge-v1",
+  "at": "2026-11-03T18:26:22+00:00"
+ },
+ "case": {
+  "id": "shared-device-one-contributor-many-submissions",
+  "check": "shared_device",
+  "kind": "boundary",
+  "title": "Four submissions on one device, all from the same enumerator",
+  "submissions": [
+   {
+    "ref": "s1",
+    "contributor": "E02",
+    "device_id": "dev-n2",
+    "captured_at": "2024-04-08T09:30:00+03:00",
+    "duration_sec": 1500,
+    "lat": -0.1003,
+    "lng": 34.7488,
+    "water_source": "borehole",
+    "satisfaction": [
+     3,
+     4,
+     2,
+     3,
+     4,
+     3,
+     2,
+     4
+    ],
+    "open_text": "The hand pump near the school breaks every few weeks and repairs are slow.",
+    "voice_transcript": ""
+   },
+   {
+    "ref": "s2",
+    "contributor": "E02",
+    "device_id": "dev-n2",
+    "captured_at": "2024-04-09T10:10:00+03:00",
+    "duration_sec": 1380,
+    "lat": -0.0962,
+    "lng": 34.7531,
+    "water_source": "river",
+    "satisfaction": [
+     1,
+     2,
+     2,
+     1,
+     3,
+     1,
+     2,
+     2
+    ],
+    "open_text": "Children fetch water from the stream before school and miss lessons.",
+    "voice_transcript": ""
+   },
+   {
+    "ref": "s3",
+    "contributor": "E02",
+    "device_id": "dev-n2",
+    "captured_at": "2024-04-10T13:45:00+03:00",
+    "duration_sec": 1610,
+    "lat": -0.1041,
+    "lng": 34.7452,
+    "water_source": "vendor",
+    "satisfaction": [
+     2,
+     3,
+     3,
+     2,
+     4,
+     3,
+     3,
+     2
+    ],
+    "open_text": "We pay twenty shillings per jerrycan when the delivery rider comes.",
+    "voice_transcript": ""
+   },
+   {
+    "ref": "s4",
+    "contributor": "E02",
+    "device_id": "dev-n2",
+    "captured_at": "2024-04-11T15:20:00+03:00",
+    "duration_sec": 1450,
+    "lat": -0.0927,
+    "lng": 34.7574,
+    "water_source": "public_tap",
+    "satisfaction": [
+     4,
+     4,
+     3,
+     5,
+     4,
+     3,
+     4,
+     4
+    ],
+    "open_text": "Our landlord fenced off the communal standpipe and now charges a fee.",
+    "voice_transcript": ""
+   },
+   {
+    "ref": "p",
+    "contributor": "P02",
+    "device_id": "dev-p02",
+    "captured_at": "2024-04-10T17:05:00+03:00",
+    "duration_sec": 420,
+    "lat": -0.1018,
+    "lng": 34.7509,
+    "water_source": "piped_home",
+    "satisfaction": [
+     5,
+     4,
+     4,
+     5,
+     3,
+     4,
+     5,
+     4
+    ],
+    "open_text": "Water pressure is weak in the evenings but the supply is reliable.",
+    "voice_transcript": ""
+   }
+  ],
+  "target": "s3",
+  "should_fire": [],
+  "should_not_fire": [
+   "shared_device",
+   "too_fast",
+   "same_spot",
+   "copied_text",
+   "straight_lining",
+   "voice_vs_form",
+   "off_hours",
+   "burst",
+   "outside_area"
+  ],
+  "why": "dev-n2 carries 4 submissions, but every one is from E02, so it has 1 distinct contributor, below the threshold of 2. P02 works on its own device, dev-p02, even though one of P02's submissions falls on the same day as s3. A wrong implementation that counts submissions or rows per device (4 >= 2) would fire. So would one that compares devices across contributors working on the same day. The other checks stay quiet: E02's submissions are on 4 separate days, so there is no same_spot or burst. All points are inside Nyalenda, durations are 1380-1610 s (above 720 s), and times are daytime."
+ }
+}
