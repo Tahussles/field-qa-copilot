@@ -10,6 +10,7 @@ export const CHECK_ORDER: CheckKey[] = [
   "shared_device",
   "burst",
   "outside_area",
+  "clock_skew",
 ];
 
 export const CHECK_LABEL: Record<CheckKey, string> = {
@@ -22,6 +23,7 @@ export const CHECK_LABEL: Record<CheckKey, string> = {
   shared_device: "shared device",
   burst: "burst",
   outside_area: "outside area",
+  clock_skew: "clock skew",
 };
 
 /** Check names for chips and card titles (sentence case, as in the prototype). */
@@ -35,6 +37,7 @@ export const CHECK_TITLE: Record<CheckKey, string> = {
   shared_device: "Shared device",
   burst: "Burst",
   outside_area: "Outside area",
+  clock_skew: "Clock skew",
 };
 
 /** "What it looks for", for the detectors table. */
@@ -42,12 +45,13 @@ export const CHECK_DESCRIPTION: Record<CheckKey, string> = {
   too_fast: "Shorter than a real visit takes",
   same_spot: "Several interviews at one location, one day",
   copied_text: "Open answer nearly identical to another",
-  straight_lining: "All 8 satisfaction items given the same score",
+  straight_lining: "All 8 satisfaction items the same, or a two-value zig-zag",
   voice_vs_form: "Voice note names a different water source",
   off_hours: "Captured between 21:00 and 06:00",
   shared_device: "One phone submitting for several accounts",
   burst: "Many submissions inside one hour",
-  outside_area: "GPS point outside the contributor's assigned area",
+  outside_area: "GPS point outside the assigned area, beyond GPS error",
+  clock_skew: "Phone clock more than 5 minutes off the server's",
 };
 
 /** Checks whose evidence is strongest get the red card edge. */
@@ -64,6 +68,7 @@ export const CHECK_ACTION: Record<CheckKey, string> = {
   shared_device: "verify each account in person; several accounts are using one phone",
   burst: "hold their points and confirm the submissions with them directly",
   outside_area: "call them about where these interviews happened; the GPS is outside their assigned area",
+  clock_skew: "check the phone's clock with them; its times are off, so night work can look like daytime",
 };
 
 export const SOURCE_LABEL: Record<string, string> = {
@@ -117,6 +122,7 @@ const TIE_ORDER: CheckKey[] = [
   "voice_vs_form",
   "straight_lining",
   "off_hours",
+  "clock_skew",
   "too_fast",
 ];
 

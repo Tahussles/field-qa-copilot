@@ -4,6 +4,7 @@
 
 import type { CollectSession, IngestResponse } from "@/lib/types";
 
+import { phoneNow } from "./clock";
 import type { OutboxItem } from "./outbox";
 
 export type Access = { token: string } | { passcode: string };
@@ -70,7 +71,8 @@ export const collectApi = {
     }
     const result = await call<IngestResponse>("/submissions", access, {
       method: "POST",
-      body: JSON.stringify({ ...item.body, voice_note_path: path }),
+      // The phone's clock at the moment it sends: the server compares it with its own (clock_skew).
+      body: JSON.stringify({ ...item.body, voice_note_path: path, device_synced_at: phoneNow().toISOString() }),
     });
     return { path, result };
   },

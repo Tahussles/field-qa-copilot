@@ -9,6 +9,7 @@ import { Glass } from "@/components/ui/Glass";
 import { passcodeStore } from "@/lib/api";
 import { SOURCE_LABEL } from "@/lib/checks";
 import { CollectError, collectApi, type Access } from "@/lib/collect/api";
+import { CLOCK_OFF_MINUTES, clockOffsetMinutes, phoneNow, setClockOffsetMinutes } from "@/lib/collect/clock";
 import { newHousehold, realGps, sameSpot, type Fix } from "@/lib/collect/location";
 import { backoffMs, outbox, type OutboxItem } from "@/lib/collect/outbox";
 import { DEFAULT_TZ, fmtTime } from "@/lib/format";
@@ -111,7 +112,7 @@ export function CollectApp() {
           const { path, result } = await collectApi.send(access, item);
           // The phone's own clock: during a demo the server's synced_at is on the field clock (result.synced_at).
           await outbox.update(item.client_submission_id, {
-            status: "synced", result, voice_note_path: path, synced_at: new Date().toISOString(), error: null,
+            status: "synced", result, voice_note_path: path, synced_at: phoneNow().toISOString(), error: null,
           });
         } catch (e) {
           const retry = !(e instanceof CollectError) || e.retry;
@@ -335,8 +336,8 @@ function CollectForm({ contributor, session, device, onSaved }: {
       else if (place === "same" && contributor.last_point) fix = sameSpot(contributor.last_point);
       else if (ring) fix = newHousehold(ring);
       else throw new Error("this contributor has no area to place a household in");
-      const now = new Date();
-      const elapsed = Math.max(60, Math.round((now.getTime() - openedAt.current) / 1000));
+      const now = phoneNow(); // the phone's clock, which a demo control can set 3 h back
+      const elapsed = Math.max(60, Math.round((Date.now() - openedAt.current) / 1000));
       const id = `phone-${crypto.randomUUID()}`;
       await onSaved({
         client_submission_id: id,
@@ -451,11 +452,50 @@ function CollectForm({ contributor, session, device, onSaved }: {
         </label>
       </section>
 
+      <DemoClock />
+
       {error && <p className="text-[13px] text-crit" role="alert">{error}</p>}
       <button type="submit" disabled={saving} className="btn btn-primary min-h-12 justify-center text-[15px]" data-testid="submit">
         {saving ? "Saving…" : "Submit interview"}
       </button>
     </form>
+  );
+}
+
+/** Hidden demo controls: the phone's clock, set back 3 h as a fabricator might (clock_skew fires on the next sync). */
+function DemoClock() {
+  const [off, setOff] = useState(false);
+  const [shown, setShown] = useState("");
+  useEffect(() => {
+    const tick = () => {
+      setOff(clockOffsetMinutes() !== 0);
+      setShown(phoneNow().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
+    };
+    tick();
+    const timer = window.setInterval(tick, 15_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  return (
+    <details className="panel p-4" open={off} data-testid="demo-controls">
+      <summary className="cursor-pointer text-[14px] font-semibold">Demo controls</summary>
+      <label className="mt-3 flex items-center gap-2 text-[13px]">
+        <input
+          type="checkbox"
+          checked={off}
+          data-testid="clock-off"
+          onChange={(e) => {
+            setClockOffsetMinutes(e.target.checked ? CLOCK_OFF_MINUTES : 0);
+            setOff(e.target.checked);
+            setShown(phoneNow().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
+          }}
+        />
+        Phone clock off by 3 h
+      </label>
+      <p className="mt-1.5 text-[12px] text-muted">
+        The phone&apos;s clock reads <span className="font-mono text-ink-2">{shown}</span>
+        {off ? ", 3 hours behind: interviews and syncs report that time, and the clock-skew check fires." : "."}
+      </p>
+    </details>
   );
 }
 

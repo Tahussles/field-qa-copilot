@@ -76,13 +76,37 @@ export function EvidenceCard(props: CardProps) {
       return <Burst {...props} />;
     case "outside_area":
       return <OutsideArea {...props} />;
+    case "clock_skew":
+      return <ClockSkew {...props} />;
   }
+}
+
+// clock_skew -----------------------------------------------------------------------------
+
+function ClockSkew({ check }: CardProps) {
+  const e = check.evidence as { skew_minutes: number; direction: string; basis: string; limit_minutes: number };
+  const minutes = Math.abs(e.skew_minutes);
+  const size = minutes >= 90 ? `${(minutes / 60).toFixed(1)} h` : `${Math.round(minutes)} min`;
+  return (
+    <Card check={check}>
+      <p>
+        The phone&apos;s clock was <B>{size} {e.direction}</B> of the server&apos;s
+        {e.basis === "sync" ? " when it synced" : ": it recorded a capture time after the server received it"}.
+      </p>
+      <p className="mt-1 text-[12px] text-muted">
+        Every time this phone reported is off by about as much. A clock set back can make night work look like daytime.
+      </p>
+      <p className="mt-2 text-[12px] !text-faint">
+        Decided by the clock rule: more than {e.limit_minutes} minutes apart. Corroboration only; a late sync never fires it.
+      </p>
+    </Card>
+  );
 }
 
 // outside_area ---------------------------------------------------------------------------
 
 function OutsideArea({ check, detail }: CardProps) {
-  const e = check.evidence as { area: string; distance: string; distance_m: number };
+  const e = check.evidence as { area: string; distance: string; distance_m: number; tolerance_m: number; band: string };
   const s = detail.submission;
   return (
     <Card check={check}>
@@ -93,7 +117,10 @@ function OutsideArea({ check, detail }: CardProps) {
         GPS <span className="font-mono">{s.lat?.toFixed(5)}, {s.lng?.toFixed(5)}</span>
         {s.gps_accuracy_m != null && <> · accuracy ±{Math.round(s.gps_accuracy_m)} m</>}
       </p>
-      <p className="mt-2 text-[12px] !text-faint">Decided by the area rule: the point is outside the area&apos;s boundary.</p>
+      <p className="mt-2 text-[12px] !text-faint">
+        Decided by the area rule: outside the boundary by more than the GPS error (±{Math.round(e.tolerance_m)} m).
+        {e.band === "near" ? " Within 1 km it only corroborates other checks." : ""}
+      </p>
     </Card>
   );
 }
@@ -347,7 +374,16 @@ function StraightLining({ check }: CardProps) {
   return (
     <Card check={check}>
       <p>
-        All 8 satisfaction items answered <B>{values[0]}</B>. Real respondents almost always vary.
+        {check.evidence.pattern === "alternating" ? (
+          <>
+            All 8 satisfaction items zig-zag between <B>{values[0]}</B> and <B>{values[1]}</B>. Real respondents almost
+            always vary.
+          </>
+        ) : (
+          <>
+            All 8 satisfaction items answered <B>{values[0]}</B>. Real respondents almost always vary.
+          </>
+        )}
       </p>
       <div className="likert">
         {values.map((v, i) => (

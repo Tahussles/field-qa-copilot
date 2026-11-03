@@ -4,6 +4,7 @@ export type Band = "flagged" | "watch" | "clear";
 export type ContributorStatus = "investigate" | "watch" | "ok";
 export type CheckKey =
   | "outside_area"
+  | "clock_skew"
   | "too_fast"
   | "same_spot"
   | "copied_text"
