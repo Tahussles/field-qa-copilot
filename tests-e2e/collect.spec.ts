@@ -48,7 +48,8 @@ async function fill(page: Page, source = "piped_home") {
 /** Tap to start, let the fixture play once, tap to stop, and wait for the playback control. */
 async function record(page: Page) {
   await page.getByTestId("record").click();
-  await expect(page.getByTestId("recording")).toBeVisible();
+  // The first getUserMedia in a fresh browser can take seconds ("Asking for the microphone…").
+  await expect(page.getByTestId("recording")).toBeVisible({ timeout: 15_000 });
   await page.waitForTimeout(6_400); // the fixture is 6.4 s and the fake mic loops it
   await page.getByTestId("record").click();
   await expect(page.getByTestId("playback")).toBeVisible({ timeout: 10_000 });
