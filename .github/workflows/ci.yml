@@ -113,8 +113,7 @@ jobs:
           cd "$RUNNER_TEMP/base"
           uv sync --locked
           uv run scripts/evaluate.py
-          # Hard mode on main only once main records its verdicts (it never calls a model in CI).
-          if [ -d data/fixtures/ai_verdicts ]; then uv run scripts/evaluate.py --hard; fi
+          # Hard mode needs no run on main: its committed data/eval/hard.json matches its code (the hard-mode job).
       - name: Post or update the eval comment
         env:
           GH_TOKEN: ${{ github.token }}
