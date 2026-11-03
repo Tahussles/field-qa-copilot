@@ -62,35 +62,35 @@ async function glide(locator, steps = 40) {
 
 // 1. Landing: the stage replays yesterday.
 await beat("landing", () => page.goto(base + "/"), () => page.locator(".stage").waitFor());
-await pause(9);
+await pause(16);
 await glide(page.getByRole("region", { name: "How it works" }));
-await pause(5);
+await pause(9);
 await page.mouse.wheel(0, -2000);
 await pause(2);
 
 // 2. The app and the morning brief.
 await beat("open the app", () => page.keyboard.press("Enter"), () => page.getByTestId("kpi-received").filter({ hasText: /^\d+$/ }).waitFor({ timeout: 60000 }));
 await page.locator("[data-map-ready=true]").waitFor({ timeout: 30000 });
-await pause(4);
+await pause(7);
 await beat("morning brief", () => script("brief"), () => page.locator("#brief").waitFor());
-await pause(10);
+await pause(20);
 
 // 3. E07's hotspot.
 await beat("E07 hotspot", () => script("hotspot"), () => page.getByText(/E07 .* · click the row again to clear/).waitFor({ timeout: 15000 }));
-await pause(12);
+await pause(22);
 
 // 4. The queue, decided with the keyboard.
 await beat("E07 in the queue", () => script("queue"), () => page.getByRole("button", { name: "Approve as genuine" }).waitFor({ timeout: 30000 }));
-await pause(6);
-for (const key of ["a", "j", "b", "j", "r"]) {
+await pause(10);
+for (const key of ["a", "j", "b", "j", "r", "j", "a"]) {
   await page.keyboard.press(key);
-  await pause(key === "j" ? 2 : 3.5);
+  await pause(key === "j" ? 3 : 5);
 }
-await pause(4);
+await pause(6);
 
 // 5. Detectors: drag the threshold.
 await beat("detectors", () => script("detectors"), () => page.getByRole("region", { name: "Tune the detectors" }).waitFor());
-await pause(5);
+await pause(8);
 const slider = page.locator("#slider-threshold");
 await slider.scrollIntoViewIfNeeded();
 const box = await slider.boundingBox();
@@ -109,7 +109,7 @@ if (box) {
   }
   await page.mouse.up();
 }
-await pause(6);
+await pause(10);
 
 // 6. The phone: a contradiction, at phone size, the transcript and the verdict arriving.
 const minted = await (await fetch(`${base}/api/py/collect/token`, {
@@ -137,7 +137,7 @@ await phone.getByTestId("recording").waitFor({ timeout: 15000 });
 await pause(6.4); // one pass of the voice note
 await phone.getByTestId("record").click();
 await phone.getByTestId("playback").waitFor();
-await pause(2);
+await pause(4);
 const submitted = Date.now();
 await beat("phone: rules result", () => phone.getByTestId("submit").click(),
   () => phone.getByRole("region", { name: "Rules result" }).getByTestId("band").waitFor({ timeout: 30000 }));
@@ -146,13 +146,14 @@ console.log(`        transcript ${((Date.now() - submitted) / 1000).toFixed(1)} 
 await phone.getByTestId("verdict").waitFor({ timeout: 60000 });
 console.log(`        verdict    ${((Date.now() - submitted) / 1000).toFixed(1)} s after submit`);
 await phone.getByRole("region", { name: "Final score" }).getByTestId("band").filter({ hasText: "Flagged for review" }).waitFor({ timeout: 30000 });
-await pause(12);
+await pause(18);
 
 // 7. How it works.
 await beat("architecture", () => page.goto(base + "/architecture"), () => page.getByTestId("architecture").filter({ hasNotText: "…" }).waitFor({ timeout: 20000 }));
 await pause(8);
-await glide(page.getByRole("region", { name: "Trade-offs" }), 60);
-await pause(14);
+await pause(6);
+await glide(page.getByRole("region", { name: "Trade-offs" }), 80);
+await pause(24);
 
 const total = Date.now() - t0;
 await ctx.close();
