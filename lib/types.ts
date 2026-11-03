@@ -361,7 +361,7 @@ export interface HardEval {
   rules_only_run: boolean;
   calls: { total: number; consistency: number; paraphrase: number; verdicts: number; failed: number;
     median_latency_ms: number | null };
-  cost_usd: { estimated_before_run: number; spent_this_run: number; all_cached_calls: number };
+  cost_usd: { all_cached_calls: number }; // the recorded verdicts' model cost (data/fixtures/ai_verdicts)
   planted_per_wave: Record<string, number>;
   rules: HardSide;
   rules_ai: HardSide;

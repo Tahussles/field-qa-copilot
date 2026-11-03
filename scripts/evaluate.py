@@ -3,8 +3,8 @@
     uv run scripts/evaluate.py
     uv run scripts/evaluate.py --tuning-only --param 'same_spot_radius_m=30'   # explore on seeds 1-5
     uv run scripts/evaluate.py --min-precision 0.8 --min-recall 0.9          # CI gate
-    uv run scripts/evaluate.py --hard                  # hard mode: rules only vs rules + AI (calls models)
-    uv run scripts/evaluate.py --hard --rules-only     # hard mode without any model call
+    uv run scripts/evaluate.py --hard                  # hard mode: rules only vs rules + AI (recorded verdicts)
+    uv run scripts/evaluate.py --hard --rules-only     # hard mode, rules only
 
 Generates waves in memory with datagen, scores them with the engine and
 compares to the planted truth. No database. This is the only code that reads
@@ -12,10 +12,11 @@ the ground truth. Defaults may be tuned on TUNING_SEEDS only; HELD_OUT_SEEDS
 are for reporting and the gate. Writes data/eval/report.json and report.md.
 
 --hard scores the hard-mode waves (datagen/hard.py, seeds 201-202) twice: rules
-only, and rules plus model verdicts produced here with the same prompts and
-validation as production. It estimates the model cost first and stops if that
-is over --max-usd (default $5) unless --yes. Verdicts are cached in
-data/eval/hard-verdicts.json (re-runs are free). Writes data/eval/hard.json:
+only, and rules plus the recorded model verdicts in data/fixtures/ai_verdicts/
+(made with the same prompts and validation as production by
+scripts/refresh_ai_verdicts.py). It never calls a model: if a verdict is missing
+or stale (another prompt version or model, or it fails today's validation) it
+stops with exit 2 and says how to refresh. Writes data/eval/hard.json:
 aggregates only, served read-only at /api/py/eval/hard.
 """
 
@@ -24,9 +25,7 @@ import hashlib
 import json
 import statistics
 import sys
-import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -261,21 +260,28 @@ def render_markdown(report: dict) -> str:
     return "\n".join(lines)
 
 
-# Hard mode: rules only vs rules + AI ---------------------------------------------------------
+# Hard mode: rules only vs rules + AI, from recorded verdicts ------------------------------------
 
-HARD_WORKERS = 6
-# Estimated tokens per call (input, output incl. thinking at low effort), for the cost guard.
-HARD_EST_TOKENS = {"consistency": (800, 350), "paraphrase": (450, 200)}
+# The model verdicts for the hard-mode waves, committed so CI (and anyone) can score rules + AI without
+# keys or spend. One file per seed. Each entry is keyed by kind, input hash, prompt version and model id;
+# scripts/refresh_ai_verdicts.py makes the real calls (cost guard) and rewrites them.
+RECORDED = ROOT / "data" / "fixtures" / "ai_verdicts"
+REFRESH = "uv run scripts/refresh_ai_verdicts.py --estimate   # then without --estimate"
 
 
-def _key(*parts) -> str:
-    return hashlib.sha1(json.dumps(parts).encode()).hexdigest()[:16]
+def input_hash(kind: str, args) -> str:
+    return hashlib.sha256(json.dumps([kind, *args]).encode()).hexdigest()[:16]
 
 
 def hard_calls(rows: dict, params: Params) -> list[dict]:
     """Every model call production would make for this wave: meaning checks and paraphrase pairs."""
-    from api._lib.ai import PROMPT_VERSION
+    from api._lib.ai import JUDGE_MODEL, PROMPT_VERSION
     from api._lib.jobs import PARAPHRASE_PAIRS_PER_ARRIVAL, paraphrase_candidates
+
+    def call(kind, args, **extra):
+        digest = input_hash(kind, args)
+        return {"kind": kind, "args": args, "input_hash": digest,
+                "key": f"{kind}:{digest}:{PROMPT_VERSION}:{JUDGE_MODEL}", **extra}
 
     subs = sorted(rows["submissions"], key=lambda r: (r["captured_at"], r["id"]))
     calls = []
@@ -283,26 +289,80 @@ def hard_calls(rows: dict, params: Params) -> list[dict]:
         answers = row["answers"]
         if row.get("voice_transcript") and answers.get("water_source"):
             args = (answers["water_source"], answers.get("open_text") or "", row["voice_transcript"])
-            calls.append({"kind": "consistency", "submission_id": row["id"], "args": args,
-                          "key": _key("consistency", PROMPT_VERSION, *args)})
+            calls.append(call("consistency", args, submission_id=row["id"]))
         earlier = [o for o in subs[:i] if o["contributor_id"] == row["contributor_id"]
                    or (row.get("device_id") and o.get("device_id") == row["device_id"])]
         for pair in paraphrase_candidates(row, earlier, params, PARAPHRASE_PAIRS_PER_ARRIVAL):
             other = next(o for o in earlier if o["id"] == pair["other_id"])
             args = (other["answers"]["open_text"].strip(), row["answers"]["open_text"].strip())
-            calls.append({"kind": "paraphrase", "submission_id": row["id"], "other_id": other["id"],
-                          "similarity": pair["similarity"], "args": args,
-                          "key": _key("paraphrase", PROMPT_VERSION, *args)})
+            calls.append(call("paraphrase", args, submission_id=row["id"], other_id=other["id"],
+                              similarity=pair["similarity"]))
     return calls
 
 
-def hard_verdicts(calls: list[dict], cache: dict) -> dict[str, list[Verdict]]:
+def recorded_path(seed: int) -> Path:
+    return RECORDED / f"hard-{seed}.json"
+
+
+def load_recorded(seed: int) -> dict[str, dict]:
+    path = recorded_path(seed)
+    return json.loads(path.read_text())["entries"] if path.exists() else {}
+
+
+def write_recorded(seed: int, entries: dict[str, dict]) -> None:
+    """One entry per line, sorted, so a refresh shows up as a readable diff."""
+    from api._lib.ai import JUDGE_MODEL, PROMPT_VERSION
+
+    RECORDED.mkdir(parents=True, exist_ok=True)
+    head = {"about": f"Recorded model verdicts for hard-mode seed {seed} (scripts/refresh_ai_verdicts.py).",
+            "seed": seed, "prompt": PROMPT_VERSION, "model": JUDGE_MODEL}
+    lines = [f"{json.dumps(k)}: {json.dumps(entries[k], sort_keys=True)}" for k in sorted(entries)]
+    body = json.dumps(head, indent=1)[:-2] + ',\n "entries": {\n' + ",\n".join(lines) + "\n }\n}\n"
+    recorded_path(seed).write_text(body)
+
+
+def usable(call: dict, entry: dict) -> bool:
+    """A recorded verdict must still pass today's validation (the same models and quote check as production)."""
+    from api._lib.ai import ConsistencyVerdict, ParaphraseVerdict, check_consistency
+
+    if "error" in entry:
+        return True  # a recorded failure: the rule stands, as in production
+    try:
+        if call["kind"] == "consistency":
+            return check_consistency(ConsistencyVerdict.model_validate(entry["verdict"]), call["args"][2]) is None
+        ParaphraseVerdict.model_validate(entry["verdict"])
+        return True
+    except ValueError:
+        return False
+
+
+def recorded_status(calls: list[dict], entries: dict[str, dict]) -> dict:
+    """missing: never recorded; stale: recorded for another prompt version or model, or fails validation now."""
+    by_input = {}
+    for key, entry in entries.items():
+        by_input.setdefault(f"{entry['kind']}:{entry['input_hash']}", []).append(entry)
+    found, missing, stale = {}, [], []
+    for c in calls:
+        entry = entries.get(c["key"])
+        if entry is not None and usable(c, entry):
+            found[c["key"]] = entry
+        elif entry is not None or by_input.get(f"{c['kind']}:{c['input_hash']}"):
+            stale.append(c)
+        else:
+            missing.append(c)
+    return {"found": found, "missing": missing, "stale": stale}
+
+
+def hard_verdicts(calls: list[dict], found: dict) -> dict[str, list[Verdict]]:
+    from api._lib.ai import ConsistencyVerdict, ParaphraseVerdict
+
     out: dict[str, list[Verdict]] = {}
     for call in calls:
-        hit = cache.get(call["key"])
+        hit = found.get(call["key"])
         if not hit or "verdict" not in hit:
             continue
-        data = {**hit["verdict"], "latency_ms": hit["latency_ms"]}
+        model = ConsistencyVerdict if call["kind"] == "consistency" else ParaphraseVerdict
+        data = {**model.model_validate(hit["verdict"]).model_dump(), "latency_ms": hit["latency_ms"]}
         if call["kind"] == "consistency":
             out.setdefault(call["submission_id"], []).append(Verdict("voice_vs_form", hit["model"], data))
         else:
@@ -312,58 +372,37 @@ def hard_verdicts(calls: list[dict], cache: dict) -> dict[str, list[Verdict]]:
     return out
 
 
-def run_hard(args, params: Params) -> int:
-    from api._lib.ai import JUDGE_MODEL, AIUnavailable, LiveProvider, token_cost
-    from api._lib.postgrest import load_env
-    from datagen.hard import HARD_HELD_OUT_SEEDS, HARD_SEEDS, HARD_TUNING_SEEDS, build_hard_wave
+def hard_waves(params: Params) -> dict[int, tuple[dict, list[dict]]]:
+    from datagen.hard import HARD_SEEDS, build_hard_wave
 
-    cache_path = args.out / "hard-verdicts.json"
-    cache = json.loads(cache_path.read_text()) if cache_path.exists() else {}
     waves = {}
     for seed in HARD_SEEDS:
         rows = db_rows(build_hard_wave(seed))
         waves[seed] = (rows, hard_calls(rows, replace(params, timezone=rows["projects"][0]["timezone"])))
+    return waves
+
+
+def run_hard(args, params: Params) -> int:
+    from api._lib.ai import JUDGE_MODEL, PROMPT_VERSION
+    from datagen.hard import HARD_HELD_OUT_SEEDS, HARD_TUNING_SEEDS
+
+    waves = hard_waves(params)
+    found: dict[str, dict] = {}
+    problems = []
+    for seed, (_, calls) in waves.items():
+        status = recorded_status(calls, load_recorded(seed))
+        found.update(status["found"])
+        if status["missing"] or status["stale"]:
+            problems.append(f"  {recorded_path(seed).relative_to(ROOT)}: {len(status['missing'])} missing, "
+                            f"{len(status['stale'])} stale (of {len(calls)} calls)")
     all_calls = {c["key"]: c for _, calls in waves.values() for c in calls}
-    todo = [c for c in all_calls.values() if c["key"] not in cache or "verdict" not in cache[c["key"]]]
-    estimate = sum(token_cost(JUDGE_MODEL, *HARD_EST_TOKENS[c["kind"]]) for c in todo)
-    kinds = {k: sum(c["kind"] == k for c in all_calls.values()) for k in HARD_EST_TOKENS}
-    print(f"hard mode: {len(all_calls)} model calls ({kinds}), {len(all_calls) - len(todo)} cached; "
-          f"estimated cost of the rest ${estimate:.2f}")
-
-    spent = 0.0
-    if not args.rules_only and todo:
-        if estimate > args.max_usd and not args.yes:
-            print(f"stopping: the estimate is over ${args.max_usd:.2f}; re-run with --yes to spend it", file=sys.stderr)
-            return 3
-        env = load_env(ROOT / ".env.local")
-        provider = LiveProvider(env.get("ANTHROPIC_API_KEY") or None, None)
-        lock = threading.Lock()
-        done = [0]
-
-        def judge(call: dict) -> float:
-            try:
-                if call["kind"] == "consistency":
-                    verdict, usage = provider.judge_consistency(*call["args"])
-                else:
-                    verdict, usage = provider.judge_paraphrase(*call["args"])
-                entry = {"verdict": verdict.model_dump(), "model": usage.model, "latency_ms": usage.latency_ms,
-                         "cost_usd": usage.cost_usd, "attempts": usage.attempts}
-                cost = usage.cost_usd
-            except AIUnavailable as error:
-                entry = {"error": str(error), "cost_usd": error.usage.cost_usd if error.usage else 0.0}
-                cost = entry["cost_usd"]
-            with lock:
-                cache[call["key"]] = entry
-                done[0] += 1
-                if done[0] % 100 == 0:
-                    cache_path.write_text(json.dumps(cache))
-                    print(f"  {done[0]}/{len(todo)} calls")
-            return cost
-
-        args.out.mkdir(parents=True, exist_ok=True)
-        with ThreadPoolExecutor(HARD_WORKERS) as pool:
-            spent = sum(pool.map(judge, todo))
-        cache_path.write_text(json.dumps(cache))
+    kinds = {k: sum(c["kind"] == k for c in all_calls.values()) for k in ("consistency", "paraphrase")}
+    print(f"hard mode: {len(all_calls)} model calls ({kinds}), prompt {PROMPT_VERSION}, model {JUDGE_MODEL}; "
+          f"{len(found)} recorded")
+    if problems and not args.rules_only:
+        print("recorded verdicts do not cover this code (the prompt, the model or the inputs changed):\n"
+              + "\n".join(problems) + f"\nrefresh them with real calls: {REFRESH}", file=sys.stderr)
+        return 2
 
     # The engine's current params ("rules_ai"), the model-only copy at its old full weight ("rules_ai_before",
     # engine 0.3.0), and on the tuning seeds a sweep of that weight.
@@ -376,7 +415,7 @@ def run_hard(args, params: Params) -> int:
         contributors = contributors_with_areas(rows["contributors"], rows["areas"])
         truth = {t["submission_id"]: t for t in rows["synthetic_truth"]}
         seed_params = replace(params, timezone=rows["projects"][0]["timezone"])
-        verdicts = hard_verdicts(calls, cache)
+        verdicts = {} if args.rules_only else hard_verdicts(calls, found)
         result = {"seed": seed}
         for label, (with_ai, overrides) in variants.items():
             scored = score_all(subs, contributors, replace(seed_params, **overrides), verdicts if with_ai else None)
@@ -416,7 +455,8 @@ def run_hard(args, params: Params) -> int:
     keys = ("precision", "recall", "flagged", "false_positives")
     sweep = [{"ai_paraphrase_weight": w, **{k: mean(lambda r, w=w, k=k: r["sweep"][w][k], tuning) for k in keys}}
              for w in sweep_weights]
-    calls_made = [cache[c["key"]] for c in all_calls.values() if c["key"] in cache]
+    calls_made = [found[c["key"]] for c in all_calls.values() if c["key"] in found]
+    latencies = [e["latency_ms"] for e in calls_made if e.get("latency_ms") is not None]
     planted = {}
     for seed in held:
         for t in waves[seed][0]["synthetic_truth"]:
@@ -435,12 +475,11 @@ def run_hard(args, params: Params) -> int:
         "tuning_seeds": list(tuning),
         "model": JUDGE_MODEL,
         "rules_only_run": bool(args.rules_only),
+        "prompt": PROMPT_VERSION,
         "calls": {"total": len(all_calls), **kinds,
                   "verdicts": sum("verdict" in e for e in calls_made), "failed": sum("error" in e for e in calls_made),
-                  "median_latency_ms": statistics.median([e["latency_ms"] for e in calls_made if "latency_ms" in e])
-                  if any("latency_ms" in e for e in calls_made) else None},
-        "cost_usd": {"estimated_before_run": round(estimate, 4), "spent_this_run": round(spent, 4),
-                     "all_cached_calls": round(sum(e.get("cost_usd", 0) for e in calls_made), 4)},
+                  "median_latency_ms": statistics.median(latencies) if latencies else None},
+        "cost_usd": {"all_cached_calls": round(sum(e.get("cost_usd", 0) for e in calls_made), 4)},
         "planted_per_wave": {k: round(v, 1) for k, v in planted.items()},
         "rules": rules,
         "rules_ai": rules_ai,
@@ -462,7 +501,7 @@ def run_hard(args, params: Params) -> int:
               f"misses {({k: v for k, v in data['misses_by_fraud_type'].items() if v})}")
     for name, values in report["paraphrase_weight"].items():
         print(f"paraphrase weight {name}: {values}")
-    print(f"spent ${spent:.4f} this run; wrote {(args.out / 'hard.json').relative_to(ROOT)}")
+    print(f"from recorded verdicts (no model call); wrote {args.out / 'hard.json'}")
     return 0
 
 
@@ -474,10 +513,9 @@ def main() -> int:
     parser.add_argument("--min-precision", type=float, help="exit 1 if held-out mean precision is below this")
     parser.add_argument("--min-recall", type=float, help="exit 1 if held-out mean recall is below this")
     parser.add_argument("--out", type=Path, default=ROOT / "data" / "eval")
-    parser.add_argument("--hard", action="store_true", help="hard mode: rules only vs rules + AI (seeds 201-202)")
-    parser.add_argument("--rules-only", action="store_true", help="with --hard: no model calls, cached verdicts only")
-    parser.add_argument("--max-usd", type=float, default=5.0, help="with --hard: stop if the estimate is above this")
-    parser.add_argument("--yes", action="store_true", help="with --hard: spend even above --max-usd")
+    parser.add_argument("--hard", action="store_true",
+                        help="hard mode: rules only vs rules + AI from recorded verdicts (seeds 201-202)")
+    parser.add_argument("--rules-only", action="store_true", help="with --hard: ignore the recorded verdicts")
     args = parser.parse_args()
 
     overrides = {}
@@ -517,7 +555,7 @@ def main() -> int:
     print(f"engine {__version__}: demo precision {pct(demo['combined']['precision'])}, "
           f"recall {pct(demo['combined']['recall'])}; held-out mean precision {pct(c['precision'])} "
           f"({pct_range(c['precision'])}), recall {pct(c['recall'])} ({pct_range(c['recall'])})")
-    print(f"wrote {(args.out / 'report.md').relative_to(ROOT)} and report.json")
+    print(f"wrote {args.out / 'report.md'} and report.json")
 
     failed = []
     if args.min_precision is not None and c["precision"]["mean"] < args.min_precision:
