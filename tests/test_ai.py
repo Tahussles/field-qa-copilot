@@ -503,3 +503,26 @@ def test_a_submission_deleted_after_its_job_was_claimed_skips_the_job(repo):
     job["submission_id"] = "00000000-0000-4000-8000-000000000000"  # what the claim saw; a reset deleted it since
     result = jobs.run_job(repo, FakeProvider(), job=job)
     assert result["status"] == "skipped" and repo.job(job["id"])["output"]["reason"] == jobs.GONE
+
+
+def test_jobs_queued_together_all_have_the_same_keys_as_postgrest_requires():
+    """A voice note's transcription and a paraphrase check queued by one arrival go in one bulk insert."""
+    from api._lib.repo import SupabaseRepo
+
+    sent = []
+
+    class FakeDb:
+        def upsert_returning(self, table, rows, on_conflict, ignore=False):
+            sent.append(rows)
+            if len({frozenset(r) for r in rows}) > 1:
+                raise AssertionError("PGRST102: All object keys must match")
+            return rows
+
+    repo = SupabaseRepo.__new__(SupabaseRepo)
+    repo._db, repo._project = FakeDb(), {"id": "p1"}
+    row = {"id": "s1", "voice_note_path": "live/phone-abc123/x.webm", "voice_transcript": None,
+           "answers": {"open_text": "Queues at the kiosk are long."}}
+    wanted = [jobs.transcribe_job(row), jobs.paraphrase_job(row, [{"other_id": "s0", "similarity": 0.6}])]
+    queued = repo.queue_jobs(wanted)
+    assert len(queued) == 2 and len({frozenset(r) for r in sent[0]}) == 1
+    assert all(r["notify"] is True and r["project_id"] == "p1" for r in sent[0])

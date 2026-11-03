@@ -15,6 +15,9 @@ from typing import Callable, Iterable, Protocol
 
 from .postgrest import Supabase, SupabaseError, in_list
 
+# Every queued job row carries the same keys (see SupabaseRepo.queue_jobs).
+JOB_DEFAULTS = {"submission_id": None, "notify": True, "input": None}
+
 # What the engine reads (engine.Submission.from_row); ingest_begin returns the same for the scoring group.
 ENGINE_COLUMNS = ("id,contributor_id,device_id,captured_at,synced_at,duration_sec,lat,lng,answers,voice_transcript,"
                   "gps_accuracy_m,device_captured_at,device_synced_at,received_at")
@@ -730,8 +733,10 @@ class SupabaseRepo:
     def queue_jobs(self, rows):
         if not rows:
             return []
-        return self._db.upsert_returning("ai_jobs", [{"project_id": self._pid, **r} for r in rows],
-                                         on_conflict="dedupe_key", ignore=True)
+        # PostgREST takes a bulk insert only when every row has the same keys: a transcription (no
+        # notify key) queued with a paraphrase check was refused whole, and the arrival got no model work.
+        rows = [{**JOB_DEFAULTS, "project_id": self._pid, **r} for r in rows]
+        return self._db.upsert_returning("ai_jobs", rows, on_conflict="dedupe_key", ignore=True)
 
     def job(self, job_id):
         rows = self._db.select("ai_jobs", "*", id=f"eq.{job_id}")
