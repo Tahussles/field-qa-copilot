@@ -150,7 +150,7 @@ function TooFast({ check, detail, map }: CardProps) {
         {fmtDuration(threshold)}.
       </p>
       <div className="relative mt-2 h-7 max-w-[420px]" aria-hidden>
-        <div className="absolute inset-x-0 top-3 h-1 rounded-sm bg-white/[0.07]" />
+        <div className="absolute inset-x-0 top-3 h-1 rounded-sm bg-contrast/[0.07]" />
         <div className="absolute top-3 left-0 h-1 rounded-sm bg-crit" style={{ width: `${(duration / max) * 100}%` }} />
         {markers.map((m) =>
           m.value == null ? null : (
@@ -216,13 +216,13 @@ function SameSpot({ check, detail, map, tz }: CardProps) {
         <figure className="flex-none">
           <svg viewBox={`${-size / 2} ${-size / 2} ${size} ${size}`} className="mt-1.5 h-[220px] w-[220px] rounded-md border border-line bg-bg" role="img"
             aria-label={`${e.neighbour_count} other interviews within ${e.radius_m} metres on the same day`}>
-            <circle r={outer} fill="none" stroke="rgba(255,255,255,0.06)" />
+            <circle r={outer} fill="none" className="stroke-contrast/[0.06]" />
             <circle r={ring} fill={COLORS.crit} fillOpacity="0.1" stroke={COLORS.crit} strokeOpacity="0.7" strokeDasharray="3 3" />
             {placed.map(({ p, x, y }) => {
               const near = neighbourIds.has(p.id);
               const { cx, cy, beyond } = project(x, y);
               return beyond ? (
-                <circle key={p.id} cx={cx} cy={cy} r={3} fill="#08090a" stroke={COLORS.pass} />
+                <circle key={p.id} cx={cx} cy={cy} r={3} fill="var(--color-bg)" stroke={COLORS.pass} />
               ) : (
                 <circle key={p.id} cx={cx} cy={cy} r={3} fill={near ? COLORS.crit : COLORS.pass} fillOpacity="0.9" />
               );
@@ -247,7 +247,7 @@ function SameSpot({ check, detail, map, tz }: CardProps) {
             {e.neighbours.slice(0, 8).map((n) => (
               <li key={n.submission_id} className="flex items-center gap-2">
                 <span className="dot bg-crit" aria-hidden />
-                <Link href={`/app/queue/${n.submission_id}`} className="font-mono text-ink hover:text-accent">
+                <Link href={`/app/queue/${n.submission_id}`} className="font-mono text-ink hover:text-accent-ink">
                   {shortId(n.submission_id)}
                 </Link>
                 <span className="text-muted">{fmtTime(n.captured_at, tz)}</span>
@@ -295,7 +295,7 @@ function RewordedCopy({ check, detail }: CardProps) {
     <Card check={check} ai>
       <p>
         A <B>reworded copy</B> of{" "}
-        <Link href={`/app/queue/${pair.submission_id}`} className="font-mono text-ink hover:text-accent">
+        <Link href={`/app/queue/${pair.submission_id}`} className="font-mono text-ink hover:text-accent-ink">
           {shortId(pair.submission_id)}
         </Link>{" "}
         ({pair.relation === "same_device" ? "same phone, another account" : "same contributor"}). Character overlap{" "}
@@ -346,7 +346,7 @@ function CopiedByRule({ check, detail }: CardProps) {
     <Card check={check}>
       <p>
         <B>{fmtPct(best.similarity)}</B> word overlap with{" "}
-        <Link href={`/app/queue/${best.submission_id}`} className="font-mono text-ink hover:text-accent">
+        <Link href={`/app/queue/${best.submission_id}`} className="font-mono text-ink hover:text-accent-ink">
           {shortId(best.submission_id)}
         </Link>{" "}
         ({best.relation === "same_device" ? "same phone, another account" : "same contributor"}).
@@ -509,7 +509,7 @@ function OffHours({ check, detail, tz }: CardProps) {
         check fires from 21:00 to 06:00.
       </p>
       <div className="relative mt-2 h-8 max-w-[520px]" aria-hidden>
-        <div className="absolute inset-x-0 top-2.5 h-3 rounded-full bg-white/[0.04]" />
+        <div className="absolute inset-x-0 top-2.5 h-3 rounded-full bg-contrast/[0.04]" />
         <div className="absolute top-2.5 h-3 rounded-l-full bg-crit/25" style={{ left: 0, width: pct(6) }} />
         <div className="absolute top-2.5 h-3 rounded-r-full bg-crit/25" style={{ left: pct(21), width: pct(3) }} />
         <div className="absolute top-2.5 h-3 bg-ok/25" style={{ left: pct(8), width: pct(11.5) }} />

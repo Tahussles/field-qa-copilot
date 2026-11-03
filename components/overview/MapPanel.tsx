@@ -7,12 +7,12 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Glass } from "@/components/ui/Glass";
-import { STYLE_URL, tuneBasemap } from "@/lib/basemap";
+import { LIGHT_STYLE_URL, STYLE_URL, tuneBasemap, tuneLightBasemap } from "@/lib/basemap";
 import { CHECK_LABEL, CHECK_TITLE, COLORS, mainSignal, scoreColor } from "@/lib/checks";
 import { fmtDuration, fmtStamp, shortId } from "@/lib/format";
+import { cssColor, useTheme, type Theme } from "@/lib/theme";
 import type { ContributorRow, Hotspot, MapData, MapPoint } from "@/lib/types";
 
-const PASSED = "#9aa0aa"; // the prototype's passed-dot grey (drawn at 35% opacity)
 const CARD = { w: 236, h: 132 };
 const CHIP = { w: 252, h: 34 };
 const NARROW = 560; // below this map width, chips use short text
@@ -47,10 +47,30 @@ const compactWidth = (h: Hotspot) => Math.round(70 + `${h.count} in one spot`.le
 /** "Oct 27" or "Oct 27 to 31" from local dates (YYYY-MM-DD). */
 // The basemap is a network dependency; the survey data is not. Past this, draw on a plain style.
 const BASEMAP_TIMEOUT_MS = 5000;
-const FALLBACK_STYLE: StyleSpecification = {
+const fallbackStyle = (ground: string): StyleSpecification => ({
   version: 8,
   sources: {},
-  layers: [{ id: "background", type: "background", paint: { "background-color": "#0b0c0f" } }],
+  layers: [{ id: "background", type: "background", paint: { "background-color": ground } }],
+});
+
+/** The theme's map colours, resolved from its tokens (MapLibre cannot read var()). The map is created
+ * again when the theme changes (Overview keys it by theme), so these are read once per map. */
+function mapPalette() {
+  return {
+    crit: cssColor("--color-crit"),
+    warn: cssColor("--color-warn"),
+    passed: cssColor("--map-passed"), // the prototype's passed-dot grey, drawn faint
+    passedOpacity: Number(cssColor("--map-passed-opacity")) || 0.35,
+    accent: cssColor("--color-accent"),
+    ground: cssColor("--color-map"),
+    areaLine: cssColor("--map-area-line"),
+    label: cssColor("--map-label"),
+  };
+}
+type MapPalette = ReturnType<typeof mapPalette>;
+const BASEMAP: Record<Theme, { style: string; tune: (map: MlMap) => void }> = {
+  poket: { style: LIGHT_STYLE_URL, tune: tuneLightBasemap },
+  linear: { style: STYLE_URL, tune: tuneBasemap },
 };
 
 function dateSpan(first: string, last: string): string {
@@ -85,7 +105,7 @@ function boundsOf(coords: [number, number][]): LngLatBoundsLike | null {
   ];
 }
 
-function pointFeatures(points: MapPoint[]) {
+function pointFeatures(points: MapPoint[], pal: MapPalette) {
   return {
     type: "FeatureCollection" as const,
     features: points.map((p) => ({
@@ -98,7 +118,7 @@ function pointFeatures(points: MapPoint[]) {
         flagged: p.band === "flagged",
         score: p.score,
         live: p.source === "live",
-        color: p.score >= 5 ? COLORS.crit : p.band === "flagged" ? COLORS.warn : PASSED,
+        color: p.score >= 5 ? pal.crit : p.band === "flagged" ? pal.warn : pal.passed,
       },
     })),
   };
@@ -128,16 +148,16 @@ function areaFeatures(data: MapData) {
 }
 
 
-function addOverlays(map: MlMap, current: MapData | null, labels: boolean) {
+function addOverlays(map: MlMap, current: MapData | null, labels: boolean, pal: MapPalette) {
   const areas = current ? areaFeatures(current) : null;
   map.addSource("areas", { type: "geojson", data: areas?.shapes ?? { type: "FeatureCollection", features: [] } });
   map.addSource("area-labels", { type: "geojson", data: areas?.labels ?? { type: "FeatureCollection", features: [] } });
-  map.addSource("points", { type: "geojson", data: pointFeatures(current?.points ?? []) });
+  map.addSource("points", { type: "geojson", data: pointFeatures(current?.points ?? [], pal) });
   map.addLayer({
     id: "area-line",
     type: "line",
     source: "areas",
-    paint: { "line-color": "rgba(255,255,255,0.16)", "line-width": 1, "line-dasharray": [4, 4] },
+    paint: { "line-color": pal.areaLine, "line-width": 1, "line-dasharray": [4, 4] },
   });
   if (labels) {
     map.addLayer({
@@ -151,7 +171,7 @@ function addOverlays(map: MlMap, current: MapData | null, labels: boolean) {
         "text-letter-spacing": 0.13,
         "text-anchor": "top",
       },
-      paint: { "text-color": "rgba(255,255,255,0.36)", "text-halo-color": "#0b0c0f", "text-halo-width": 1 },
+      paint: { "text-color": pal.label, "text-halo-color": pal.ground, "text-halo-width": 1 },
     });
   }
   map.addLayer({
@@ -167,10 +187,10 @@ function addOverlays(map: MlMap, current: MapData | null, labels: boolean) {
         14, ["case", ["get", "flagged"], 3.4, 2.4],
         17, ["case", ["get", "flagged"], 6.5, 5],
       ],
-      "circle-opacity": ["case", ["get", "flagged"], 0.95, 0.35],
+      "circle-opacity": ["case", ["get", "flagged"], 0.95, pal.passedOpacity],
     },
   });
-  // Submissions from a phone on /collect get an indigo ring, so a live demo stands out.
+  // Submissions from a phone on /collect get an accent ring, so a live demo stands out.
   map.addLayer({
     id: "live-ring",
     type: "circle",
@@ -179,7 +199,7 @@ function addOverlays(map: MlMap, current: MapData | null, labels: boolean) {
     paint: {
       "circle-radius": ["interpolate", ["linear"], ["zoom"], 11, 5, 14, 7.5, 17, 12],
       "circle-color": "rgba(0,0,0,0)",
-      "circle-stroke-color": COLORS.accent,
+      "circle-stroke-color": pal.accent,
       "circle-stroke-width": 2,
     },
   });
@@ -204,6 +224,7 @@ export function MapPanel({
   onOpened?: () => void;
 }) {
   const router = useRouter();
+  const theme = useTheme();
   const wrap = useRef<HTMLDivElement>(null);
   const container = useRef<HTMLDivElement>(null);
   const pill = useRef<HTMLDivElement>(null);
@@ -214,6 +235,7 @@ export function MapPanel({
   const dataRef = useRef<MapData | null>(null);
   const viewRef = useRef({ expanded: null as string | null, pulses: [] as string[] });
   const frame = useRef<number | null>(null);
+  const palRef = useRef<MapPalette | null>(null);
 
   const [ready, setReady] = useState(false);
   const [fallback, setFallback] = useState(false);
@@ -323,9 +345,12 @@ export function MapPanel({
       if (cancelled || !container.current) return;
       // Copied into public/ by scripts/vendor-maplibre.mjs.
       maplibregl.setWorkerUrl(`/vendor/maplibre-gl-worker.mjs?v=${maplibregl.getVersion()}`);
+      const pal = mapPalette();
+      palRef.current = pal;
+      const basemap = BASEMAP[theme];
       const instance = new maplibregl.Map({
         container: container.current,
-        style: STYLE_URL,
+        style: basemap.style,
         center: [34.7975, -0.08],
         zoom: 13,
         attributionControl: { compact: true },
@@ -338,13 +363,13 @@ export function MapPanel({
       instance.touchZoomRotate.disableRotation();
       instance.addControl(new maplibregl.ScaleControl({ maxWidth: 90, unit: "metric" }), "bottom-right");
       // Never a blank map: if the basemap has not rendered within 5 s (or its style or tiles fail
-      // first), swap to a plain dark style and draw the areas, points and hotspots on that.
+      // first), swap to a plain style in the theme's map ground and draw the areas, points and hotspots on that.
       let basemapUp = false;
       const plain = () => {
         if (basemapUp || cancelled || !map || plainStyle) return;
         plainStyle = true;
         setFallback(true);
-        map.setStyle(FALLBACK_STYLE);
+        map.setStyle(fallbackStyle(pal.ground));
       };
       let plainStyle = false;
       let loadedOnce = false;
@@ -360,12 +385,12 @@ export function MapPanel({
       });
       // The overlays live in the style, so a style swap after load needs them added again.
       instance.on("style.load", () => {
-        if (map && plainStyle && loadedOnce && !map.getSource("points")) addOverlays(map, dataRef.current, false);
+        if (map && plainStyle && loadedOnce && !map.getSource("points")) addOverlays(map, dataRef.current, false, pal);
       });
       instance.on("load", () => {
         if (!map) return;
-        tuneBasemap(map);
-        addOverlays(map, dataRef.current, !plainStyle);
+        basemap.tune(map);
+        addOverlays(map, dataRef.current, !plainStyle, pal);
         const home = homeBounds();
         if (home) map.fitBounds(home, { padding: 28, duration: 0 });
         map.on("movestart", (e) => {
@@ -402,6 +427,8 @@ export function MapPanel({
       map?.remove();
       mapRef.current = null;
     };
+    // The theme is read once: Overview remounts the map when it changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [homeBounds, layout, router]);
 
   // Keep sources in step with the latest data.
@@ -409,7 +436,7 @@ export function MapPanel({
     dataRef.current = data;
     const map = mapRef.current;
     if (!map || !ready || !data) return;
-    (map.getSource("points") as GeoJSONSource | undefined)?.setData(pointFeatures(data.points));
+    (map.getSource("points") as GeoJSONSource | undefined)?.setData(pointFeatures(data.points, palRef.current ?? mapPalette()));
     const areas = areaFeatures(data);
     (map.getSource("areas") as GeoJSONSource | undefined)?.setData(areas.shapes);
     (map.getSource("area-labels") as GeoJSONSource | undefined)?.setData(areas.labels);
@@ -430,7 +457,7 @@ export function MapPanel({
       "circle-opacity",
       focus
         ? ["case", ["==", ["get", "code"], focus], ["case", ["get", "flagged"], 0.95, 0.6], 0.07]
-        : ["case", ["get", "flagged"], 0.95, 0.35],
+        : ["case", ["get", "flagged"], 0.95, palRef.current?.passedOpacity ?? 0.35],
     );
     map.setFilter("points", flaggedOnly ? ["==", ["get", "band"], "flagged"] : null);
     if (focus) {
@@ -493,7 +520,7 @@ export function MapPanel({
       </div>
       <div
         ref={wrap}
-        className="relative aspect-[4/3] overflow-hidden rounded-b-[10px] bg-[#0b0c0f] lg:aspect-[3/2]"
+        className="relative aspect-[4/3] overflow-hidden rounded-b-panel bg-map lg:aspect-[3/2]"
         data-map-ready={ready}
         data-map-fallback={fallback}
         data-points={data?.points.length ?? 0}
@@ -521,7 +548,8 @@ export function MapPanel({
                 cx={item.r + 2}
                 cy={item.r + 2}
                 r={item.r}
-                fill="rgba(235,90,87,0.08)"
+                fill={COLORS.crit}
+                fillOpacity="0.08"
                 stroke={COLORS.crit}
                 strokeWidth="1.5"
                 strokeDasharray="3 3"
@@ -537,7 +565,7 @@ export function MapPanel({
                 key={`card-${item.key}`}
                 role="dialog"
                 aria-label={`Hotspot for ${item.hotspot.contributor_code}`}
-                className="pointer-events-auto absolute z-[4] rounded-xl px-3 py-2.5 text-[12px] text-[#d9dbe0]"
+                className="pointer-events-auto absolute z-[4] rounded-xl px-3 py-2.5 text-[12px] text-glass-ink"
                 style={{ left: item.box.x, top: item.box.y, width: CARD.w }}
               >
                 <div className="flex items-center gap-2 text-[11.5px] text-muted">
@@ -556,7 +584,7 @@ export function MapPanel({
                     ×
                   </button>
                 </div>
-                <b className="mt-[3px] mb-px block text-[13px] font-semibold text-white">
+                <b className="mt-[3px] mb-px block text-[13px] font-semibold text-glass-strong">
                   {item.hotspot.count} interviews in one spot
                 </b>
                 <div className="text-muted">
@@ -580,7 +608,7 @@ export function MapPanel({
                 type="button"
                 onClick={() => openHotspot(item)}
                 aria-label={`${item.hotspot.contributor_code} · ${item.hotspot.count} interviews in one spot`}
-                className="glass-btn pointer-events-auto absolute z-[4] flex items-center gap-2 rounded-full px-3 text-[12px] whitespace-nowrap text-white"
+                className="glass-btn pointer-events-auto absolute z-[4] flex items-center gap-2 rounded-full px-3 text-[12px] whitespace-nowrap text-glass-strong"
                 style={{ left: item.box.x, top: item.box.y, height: CHIP.h, width: item.box.w }}
               >
                 <span className="st st-crit">
@@ -596,9 +624,9 @@ export function MapPanel({
         {/* What am I looking at. */}
         <Glass
           ref={pill}
-          className="absolute top-3 left-3 z-[3] max-w-[calc(100%-24px)] rounded-[10px] px-[11px] py-[7px] text-[11.5px] leading-[1.45] text-[#cfd2d6] lg:max-w-[min(300px,55%)]"
+          className="absolute top-3 left-3 z-[3] max-w-[calc(100%-24px)] rounded-[10px] px-[11px] py-[7px] text-[11.5px] leading-[1.45] text-body lg:max-w-[min(300px,55%)]"
         >
-          <b className="font-medium text-white">Each dot is one submission</b> at the GPS spot it was recorded. Homes are spread
+          <b className="font-medium text-glass-strong">Each dot is one submission</b> at the GPS spot it was recorded. Homes are spread
           out, so a tight orange pile means forms filled in at one place.
         </Glass>
 
@@ -620,7 +648,7 @@ export function MapPanel({
               onClick={() => setFlaggedOnly(option.value)}
               className={`rounded-full px-[11px] py-1 text-[12px] ${
                 flaggedOnly === option.value
-                  ? "bg-white/[0.14] text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.2)]"
+                  ? "bg-overlay/[0.14] text-glass-strong shadow-[inset_0_1px_0_rgb(255_255_255/0.2)]"
                   : "text-muted hover:text-ink"
               }`}
             >
@@ -642,7 +670,7 @@ export function MapPanel({
 
         <Glass
           ref={legend}
-          className="absolute bottom-3 left-3 z-[3] hidden items-center gap-3 rounded-full px-3 py-1.5 text-[11.5px] text-[#cfd2d6] lg:flex"
+          className="absolute bottom-3 left-3 z-[3] hidden items-center gap-3 rounded-full px-3 py-1.5 text-[11.5px] text-body lg:flex"
         >
           {[
             ["Passed", COLORS.pass],
@@ -664,13 +692,13 @@ export function MapPanel({
         {tip && (
           <Glass
             role="tooltip"
-            className="pointer-events-none absolute z-[6] min-w-[170px] rounded-[10px] px-2.5 py-2 text-[12px] text-[#d9dbe0]"
+            className="pointer-events-none absolute z-[6] min-w-[170px] rounded-[10px] px-2.5 py-2 text-[12px] text-glass-ink"
             style={{
               left: tip.x + 14 > tip.width - 214 ? tip.x - 200 : tip.x + 14,
               top: tip.y + 14 > tip.height - 90 ? tip.y - 86 : tip.y + 14,
             }}
           >
-            <b className="font-mono font-medium text-white">{shortId(tip.point.id)}</b> · {tip.point.code}{" "}
+            <b className="font-mono font-medium text-glass-strong">{shortId(tip.point.id)}</b> · {tip.point.code}{" "}
             {contributors[tip.point.code]?.display_name}
             <br />
             <span className="text-muted">

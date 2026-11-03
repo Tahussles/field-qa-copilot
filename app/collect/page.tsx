@@ -2,13 +2,14 @@ import type { Metadata, Viewport } from "next";
 import { Suspense } from "react";
 
 import { CollectApp } from "@/components/collect/CollectApp";
+import { DEFAULT_THEME, THEME_COLOR } from "@/lib/theme-config";
 
 export const metadata: Metadata = {
   title: "Collect · Field QA Copilot",
   description: "The demo phone: record an interview and watch it checked as it syncs.",
 };
 
-export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#08090a" };
+export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: THEME_COLOR[DEFAULT_THEME] };
 
 /** The phone collect page: offline-first form, voice note, live result. Opened from the demo panel's QR code. */
 export default function CollectPage() {

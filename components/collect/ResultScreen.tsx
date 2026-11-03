@@ -227,7 +227,7 @@ function Stage({ n, title, done, busy, children }: { n: number; title: string; d
   return (
     <Glass as="section" className="rounded-xl p-4" aria-label={title} aria-busy={busy}>
       <h2 className="mb-1.5 flex items-center gap-2 text-[13px] font-semibold">
-        <span className={`flex h-5 w-5 items-center justify-center rounded-full font-mono text-[11px] ${done ? "bg-ok/20 text-ok" : "bg-white/10 text-muted"}`}>
+        <span className={`flex h-5 w-5 items-center justify-center rounded-full font-mono text-[11px] ${done ? "bg-ok/20 text-ok" : "bg-contrast/10 text-muted"}`}>
           {done ? "✓" : n}
         </span>
         {title}

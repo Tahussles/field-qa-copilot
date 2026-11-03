@@ -79,15 +79,17 @@ export const SOURCE_LABEL: Record<string, string> = {
   river: "River",
 };
 
+/** The theme's colour tokens (app/globals.css), for inline styles and SVG. MapLibre and canvas cannot
+ * read var(): they resolve the token with cssColor (lib/theme.ts). */
 export const COLORS = {
-  accent: "#7c84f8",
-  ok: "#4cb782",
-  warn: "#f0a23b",
-  crit: "#eb5a57",
-  pass: "#8a8f98",
-  muted: "#8a8f98",
-  faint: "#5b6069",
-  ink: "#f1f2f4",
+  accent: "var(--color-accent)",
+  ok: "var(--color-ok)",
+  warn: "var(--color-warn)",
+  crit: "var(--color-crit)",
+  pass: "var(--color-pass)",
+  muted: "var(--color-muted)",
+  faint: "var(--color-faint)",
+  ink: "var(--color-ink)",
 };
 
 /** Map and list colour: passed grey, flagged amber, score >= 5 red. */

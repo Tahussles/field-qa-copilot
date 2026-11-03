@@ -74,7 +74,7 @@ export function PasscodeProvider({ children }: { children: ReactNode }) {
       {children}
       {prompt && (
         <div
-          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 px-4"
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-(--modal-scrim) px-4"
           onMouseDown={(e) => e.target === e.currentTarget && close(null)}
         >
           <Glass

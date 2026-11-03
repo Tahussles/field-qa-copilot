@@ -5,36 +5,204 @@
 @source "../components";
 @source "../lib";
 
-/* Design tokens, matched to design/prototype.html (the approved design).
-   Content panels are solid; only the floating layer (bars, overlays, chips,
-   tooltips, toasts, modals) is glass. */
-@theme {
+/* Design tokens. Two themes, switched by data-theme on <html> (lib/theme.ts):
+   - "poket" (light, the default): colours and fonts read from poketapp.com's computed styles
+     (docs/theme.md has each value and where it came from); brand green as the accent, semantic
+     colours darkened to pass WCAG AA on the light surfaces.
+   - "linear" (dark): design/prototype.html's tokens, exactly as before.
+   Content panels are solid; only the floating layer (bars, overlays, chips, tooltips, toasts,
+   modals) is glass. `static`: every token is emitted, because the map and the landing canvas
+   read them from JavaScript (cssColor in lib/theme.ts). */
+@theme static {
+  --color-bg: #f8faf5;
+  --color-panel: #ffffff;
+  --color-raised: #f7f7f7;
+  --color-hover: rgb(0 0 0 / 0.035);
+  --color-ink: #171717;
+  --color-ink-2: #414651;
+  --color-body: #414651;
+  --color-muted: #535862;
+  --color-faint: #62666d;
+  --color-line: rgb(0 0 0 / 0.08);
+  --color-line-strong: rgb(0 0 0 / 0.15);
+  --color-accent: #039b6e;
+  --color-accent-ink: #027a56;
+  --color-accent-soft: rgb(3 155 110 / 0.1);
+  --color-ok: #1e7b34;
+  --color-warn: #a15c00;
+  --color-crit: #c42b1c;
+  --color-pass: #6d6d6d;
+  /* Selected states tint with this (bg-overlay/[0.06]); neutral tints with contrast. */
+  --color-overlay: #039b6e;
+  --color-contrast: #000000;
+  /* The map's ground, and text on glass. */
+  --color-map: #f1f3ef;
+  --color-glass-ink: #30343b;
+  --color-glass-strong: #171717;
+
+  --font-sans: var(--font-jost), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-jost), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-dm-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --radius-panel: 12px;
+}
+
+/* Theme values Tailwind has no utility for: the glass and frost recipes, buttons, glows. */
+:root {
+  color-scheme: light;
+  /* Jost's x-height is 0.46 em (Inter's 0.55): at the dashboard's 11-13.5px it reads small, so draw
+     it with a 0.5 x-height (about 9% larger, as wide as Inter was; DM Mono is already 0.5). */
+  --font-adjust: 0.5;
+  --ambient:
+    radial-gradient(42% 36% at 10% 0%, rgb(3 155 110 / 0.13), transparent 70%),
+    radial-gradient(36% 32% at 96% 100%, rgb(30 199 154 / 0.1), transparent 70%),
+    radial-gradient(30% 28% at 88% 6%, rgb(184 199 217 / 0.35), transparent 70%);
+  --landing-glow: radial-gradient(60% 55% at 50% 30%, rgb(3 155 110 / 0.12), transparent 70%);
+
+  /* Light liquid glass: translucent white, blur + saturate, a bright top highlight, a soft
+     masked specular edge and a soft low shadow (with a faint hairline, so it reads on white). */
+  --glass-fill: linear-gradient(135deg, rgb(255 255 255 / 0.74), rgb(255 255 255 / 0.52) 60%, rgb(255 255 255 / 0.64));
+  --glass-filter: blur(18px) saturate(180%);
+  --glass-border: rgb(255 255 255 / 0.75);
+  --glass-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.95),
+    inset 0 -1px 0 rgb(255 255 255 / 0.4),
+    0 0 0 0.5px rgb(16 40 30 / 0.12),
+    0 8px 24px rgb(16 40 30 / 0.1),
+    0 1px 2px rgb(16 40 30 / 0.06);
+  --glass-specular: linear-gradient(160deg, rgb(255 255 255 / 0.95), rgb(255 255 255 / 0) 34%, rgb(255 255 255 / 0) 66%, rgb(255 255 255 / 0.6));
+  --glass-btn: linear-gradient(135deg, rgb(255 255 255 / 0.8), rgb(255 255 255 / 0.58));
+  --glass-btn-hover: linear-gradient(135deg, rgb(255 255 255 / 0.95), rgb(255 255 255 / 0.75));
+  --glass-btn-border: rgb(255 255 255 / 0.8);
+  --glass-tint: linear-gradient(180deg, rgb(255 255 255 / 0.5) 0%, rgb(255 255 255 / 0.2) 100%), rgb(255 255 255 / 0.82);
+  --glass-solid: #ffffff;
+  --glass-tint-solid: #ffffff;
+
+  --frost-aside-bg: rgb(255 255 255 / 0.62);
+  --frost-aside-border: rgb(0 0 0 / 0.07);
+  --frost-aside-shadow: inset -1px 0 0 rgb(255 255 255 / 0.7);
+  --frost-topbar-bg: rgb(255 255 255 / 0.66);
+  --frost-topbar-border: rgb(0 0 0 / 0.07);
+  --frost-topbar-shadow: inset 0 -1px 0 rgb(255 255 255 / 0.7);
+
+  --btn-radius: 999px;
+  --btn-hover-bg: #eef0ec;
+  --btn-hover-border: rgb(0 0 0 / 0.22);
+  --btn-primary-bg: var(--color-accent-ink);
+  --btn-primary-fg: #ffffff;
+  --btn-primary-hover: #02674a;
+
+  --hero-fill: none;
+  --hero-ink: var(--color-accent);
+  --mark-bg: rgb(255 196 61 / 0.45);
+  --mark-ink: var(--color-ink);
+  --stage-fill: var(--color-panel);
+  --stage-shadow:
+    0 24px 60px -32px rgb(16 40 30 / 0.28),
+    0 0 0 1px rgb(0 0 0 / 0.03);
+  --attrib-bg: rgb(255 255 255 / 0.78);
+  --attrib-btn-filter: opacity(0.6);
+  --scale-line: rgb(0 0 0 / 0.45);
+  --scale-ink: rgb(0 0 0 / 0.66);
+  --modal-scrim: rgb(16 24 20 / 0.3);
+  /* Map overlays (read by MapPanel and the landing canvas). */
+  --map-area-line: rgb(23 23 23 / 0.3);
+  --map-label: #5d6168;
+  --map-passed: #6d6d6d;
+  --map-passed-opacity: 0.5;
+  --stage-area-line: rgb(23 23 23 / 0.28);
+  --stage-label: #5d6168;
+}
+
+html[data-theme="linear"] {
+  color-scheme: dark;
+  --font-adjust: none;
   --color-bg: #08090a;
   --color-panel: #0e0f11;
   --color-raised: #15161a;
   --color-hover: rgb(255 255 255 / 0.035);
   --color-ink: #f1f2f4;
   --color-ink-2: #d4d6da;
+  --color-body: #cfd2d6;
   --color-muted: #8a8f98;
   --color-faint: #5b6069;
   --color-line: rgb(255 255 255 / 0.07);
   --color-line-strong: rgb(255 255 255 / 0.13);
   --color-accent: #7c84f8;
+  --color-accent-ink: #7c84f8;
   --color-accent-soft: rgb(124 132 248 / 0.14);
   --color-ok: #4cb782;
   --color-warn: #f0a23b;
   --color-crit: #eb5a57;
   --color-pass: #8a8f98;
+  --color-overlay: #ffffff;
+  --color-contrast: #ffffff;
+  --color-map: #0b0c0f;
+  --color-glass-ink: #d9dbe0;
+  --color-glass-strong: #ffffff;
 
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-display: var(--font-inter-tight), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-jetbrains), ui-monospace, SFMono-Regular, Menlo, monospace;
 
   --radius-panel: 10px;
-}
 
-:root {
-  color-scheme: dark;
+  --ambient:
+    radial-gradient(40% 35% at 12% 0%, rgb(124 132 248 / 0.16), transparent 70%),
+    radial-gradient(35% 30% at 95% 100%, rgb(240 162 59 / 0.07), transparent 70%);
+  --landing-glow: radial-gradient(60% 55% at 50% 30%, rgb(124 132 248 / 0.2), transparent 70%);
+
+  /* Liquid glass, exactly the prototype recipe: gradient fill, blur 18px + saturate 170%, inner
+     top highlight, masked specular edge, drop shadow. */
+  --glass-fill: linear-gradient(135deg, rgb(255 255 255 / 0.11), rgb(255 255 255 / 0.035) 60%, rgb(255 255 255 / 0.06));
+  --glass-filter: blur(18px) saturate(170%);
+  --glass-border: rgb(255 255 255 / 0.13);
+  --glass-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.22),
+    inset 0 -1px 0 rgb(255 255 255 / 0.05),
+    inset 0 0 24px rgb(255 255 255 / 0.03),
+    0 10px 30px rgb(0 0 0 / 0.45);
+  --glass-specular: linear-gradient(160deg, rgb(255 255 255 / 0.5), rgb(255 255 255 / 0) 32%, rgb(255 255 255 / 0) 68%, rgb(255 255 255 / 0.2));
+  --glass-btn: linear-gradient(135deg, rgb(255 255 255 / 0.12), rgb(255 255 255 / 0.04));
+  --glass-btn-hover: linear-gradient(135deg, rgb(255 255 255 / 0.18), rgb(255 255 255 / 0.07));
+  --glass-btn-border: rgb(255 255 255 / 0.14);
+  --glass-tint: linear-gradient(180deg, rgb(255 255 255 / 0.06) 0%, rgb(255 255 255 / 0.015) 100%), rgb(9 10 12 / 0.9);
+  --glass-solid: rgb(20 21 25);
+  --glass-tint-solid: rgb(12 13 15);
+
+  --frost-aside-bg: rgb(14 15 17 / 0.6);
+  --frost-aside-border: rgb(255 255 255 / 0.08);
+  --frost-aside-shadow: inset -1px 0 0 rgb(255 255 255 / 0.03);
+  --frost-topbar-bg: rgb(10 11 13 / 0.55);
+  --frost-topbar-border: rgb(255 255 255 / 0.09);
+  --frost-topbar-shadow: inset 0 -1px 0 rgb(255 255 255 / 0.04);
+
+  --btn-radius: 6px;
+  --btn-hover-bg: #1c1d22;
+  --btn-hover-border: rgb(255 255 255 / 0.2);
+  --btn-primary-bg: var(--color-ink);
+  --btn-primary-fg: #0b0c0e;
+  --btn-primary-hover: #fff;
+
+  --hero-fill: linear-gradient(180deg, #fff 30%, rgb(255 255 255 / 0.55));
+  --hero-ink: transparent;
+  --mark-bg: rgb(240 162 59 / 0.28);
+  --mark-ink: #fff;
+  --stage-fill: linear-gradient(180deg, rgb(255 255 255 / 0.03), rgb(255 255 255 / 0.005));
+  --stage-shadow:
+    0 30px 80px -30px rgb(0 0 0 / 0.8),
+    0 0 0 1px rgb(0 0 0 / 0.6);
+  --attrib-bg: rgb(8 9 10 / 0.7);
+  --attrib-btn-filter: invert(1) opacity(0.6);
+  --scale-line: rgb(255 255 255 / 0.4);
+  --scale-ink: rgb(255 255 255 / 0.45);
+  --modal-scrim: rgb(0 0 0 / 0.5);
+  --map-area-line: rgb(255 255 255 / 0.16);
+  --map-label: rgb(255 255 255 / 0.36);
+  --map-passed: #9aa0aa;
+  --map-passed-opacity: 0.35;
+  --stage-area-line: rgb(255 255 255 / 0.14);
+  --stage-label: rgb(255 255 255 / 0.32);
 }
 
 html,
@@ -45,6 +213,7 @@ body {
 
 body {
   font-family: var(--font-sans);
+  font-size-adjust: var(--font-adjust);
   font-size: 13.5px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
@@ -64,8 +233,8 @@ h3 {
 }
 
 mark {
-  background: rgb(240 162 59 / 0.28);
-  color: #fff;
+  background: var(--mark-bg);
+  color: var(--mark-ink);
   border-radius: 2px;
   padding: 0 1px;
 }
@@ -73,32 +242,27 @@ mark {
 /* Component classes sit in a layer so Tailwind utilities (absolute, rounded-*,
    padding) still override them; unlayered CSS would beat every utility. */
 @layer components {
-  /* Faint indigo and amber ambient glow behind the whole app. */
+  /* Faint ambient glow behind the whole app (brand green in poket, indigo and amber in linear),
+     so the glass has something to show through. */
   .ambient {
     position: fixed;
     inset: 0;
     z-index: 0;
     pointer-events: none;
-    background:
-      radial-gradient(40% 35% at 12% 0%, rgb(124 132 248 / 0.16), transparent 70%),
-      radial-gradient(35% 30% at 95% 100%, rgb(240 162 59 / 0.07), transparent 70%);
+    background: var(--ambient);
   }
 
-  /* Liquid glass, exactly the prototype recipe: gradient fill, blur 18px +
-     saturate 170%, inner top highlight, masked specular edge, drop shadow.
+  /* Liquid glass: gradient fill, backdrop blur + saturate, inner top highlight, masked specular
+     edge, drop shadow; each theme sets the recipe's values (--glass-*).
      Use the .glass class or the <Glass> component. */
   .glass {
     position: relative;
     isolation: isolate;
-    background: linear-gradient(135deg, rgb(255 255 255 / 0.11), rgb(255 255 255 / 0.035) 60%, rgb(255 255 255 / 0.06));
-    -webkit-backdrop-filter: blur(18px) saturate(170%);
-    backdrop-filter: blur(18px) saturate(170%);
-    border: 1px solid rgb(255 255 255 / 0.13);
-    box-shadow:
-      inset 0 1px 0 rgb(255 255 255 / 0.22),
-      inset 0 -1px 0 rgb(255 255 255 / 0.05),
-      inset 0 0 24px rgb(255 255 255 / 0.03),
-      0 10px 30px rgb(0 0 0 / 0.45);
+    background: var(--glass-fill);
+    -webkit-backdrop-filter: var(--glass-filter);
+    backdrop-filter: var(--glass-filter);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
   }
   .glass::before {
     content: "";
@@ -107,7 +271,7 @@ mark {
     border-radius: inherit;
     padding: 1px;
     pointer-events: none;
-    background: linear-gradient(160deg, rgb(255 255 255 / 0.5), rgb(255 255 255 / 0) 32%, rgb(255 255 255 / 0) 68%, rgb(255 255 255 / 0.2));
+    background: var(--glass-specular);
     -webkit-mask:
       linear-gradient(#000 0 0) content-box,
       linear-gradient(#000 0 0);
@@ -118,45 +282,43 @@ mark {
   }
   /* Glass buttons (map controls, hotspot chips, card actions). */
   .glass-btn {
-    background: linear-gradient(135deg, rgb(255 255 255 / 0.12), rgb(255 255 255 / 0.04));
-    border-color: rgb(255 255 255 / 0.14);
+    background: var(--glass-btn);
+    border-color: var(--glass-btn-border);
     cursor: pointer;
   }
   .glass-btn:hover {
-    background: linear-gradient(135deg, rgb(255 255 255 / 0.18), rgb(255 255 255 / 0.07));
+    background: var(--glass-btn-hover);
   }
-  /* Darker tint under the glass for small text over busy content (mobile nav). */
+  /* A more opaque tint under the glass for small text over busy content (mobile nav). */
   .glass-tint {
-    background:
-      linear-gradient(180deg, rgb(255 255 255 / 0.06) 0%, rgb(255 255 255 / 0.015) 100%),
-      rgb(9 10 12 / 0.9);
+    background: var(--glass-tint);
   }
   /* Without backdrop-filter the glass would show content through it: go opaque. */
   @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
     .glass,
     .frost-aside,
     .frost-topbar {
-      background: rgb(20 21 25);
+      background: var(--glass-solid);
     }
     .glass-tint {
-      background: rgb(12 13 15);
+      background: var(--glass-tint-solid);
     }
   }
 
-  /* The sidebar and topbar use the prototype's own frosted recipes. */
+  /* The sidebar and topbar use the prototype's own frosted recipes (light in poket). */
   .frost-aside {
-    border-right: 1px solid rgb(255 255 255 / 0.08);
-    background: rgb(14 15 17 / 0.6);
+    border-right: 1px solid var(--frost-aside-border);
+    background: var(--frost-aside-bg);
     -webkit-backdrop-filter: blur(24px) saturate(160%);
     backdrop-filter: blur(24px) saturate(160%);
-    box-shadow: inset -1px 0 0 rgb(255 255 255 / 0.03);
+    box-shadow: var(--frost-aside-shadow);
   }
   .frost-topbar {
-    border-bottom: 1px solid rgb(255 255 255 / 0.09);
-    background: rgb(10 11 13 / 0.55);
+    border-bottom: 1px solid var(--frost-topbar-border);
+    background: var(--frost-topbar-bg);
     -webkit-backdrop-filter: blur(18px) saturate(170%);
     backdrop-filter: blur(18px) saturate(170%);
-    box-shadow: inset 0 -1px 0 rgb(255 255 255 / 0.04);
+    box-shadow: var(--frost-topbar-shadow);
   }
 
   /* Brand mark. */
@@ -201,7 +363,7 @@ mark {
     color: var(--color-ink);
     background: var(--color-raised);
     border: 1px solid var(--color-line-strong);
-    border-radius: 6px;
+    border-radius: var(--btn-radius);
     padding: 6px 11px;
     cursor: pointer;
     transition:
@@ -209,21 +371,22 @@ mark {
       border-color 0.15s;
   }
   .btn:hover {
-    background: #1c1d22;
-    border-color: rgb(255 255 255 / 0.2);
+    background: var(--btn-hover-bg);
+    border-color: var(--btn-hover-border);
   }
   .btn:disabled {
     opacity: 0.45;
     cursor: default;
   }
   .btn-primary {
-    background: var(--color-ink);
-    color: #0b0c0e;
-    border-color: var(--color-ink);
+    background: var(--btn-primary-bg);
+    color: var(--btn-primary-fg);
+    border-color: var(--btn-primary-bg);
     font-weight: 500;
   }
   .btn-primary:hover {
-    background: #fff;
+    background: var(--btn-primary-hover);
+    border-color: var(--btn-primary-hover);
   }
   .btn-sm {
     padding: 3px 9px;
@@ -249,7 +412,7 @@ mark {
     line-height: 16px;
     text-align: center;
     color: var(--color-muted);
-    background: rgb(255 255 255 / 0.03);
+    background: color-mix(in srgb, var(--color-contrast) 3%, transparent);
     border: 1px solid var(--color-line-strong);
     border-bottom-width: 2px;
     border-radius: 4px;
@@ -305,8 +468,8 @@ mark {
     font-weight: 500;
     line-height: 16px;
     letter-spacing: 0.04em;
-    color: var(--color-accent);
-    border: 1px solid rgb(124 132 248 / 0.45);
+    color: var(--color-accent-ink);
+    border: 1px solid color-mix(in srgb, var(--color-accent) 45%, transparent);
     border-radius: 4px;
     vertical-align: 1px;
   }
@@ -315,8 +478,8 @@ mark {
     padding: 0 6px;
     font-size: 10.5px;
     line-height: 16px;
-    color: var(--color-accent);
-    border: 1px solid rgb(124 132 248 / 0.45);
+    color: var(--color-accent-ink);
+    border: 1px solid color-mix(in srgb, var(--color-accent) 45%, transparent);
     border-radius: 999px;
     white-space: nowrap;
   }
@@ -325,7 +488,7 @@ mark {
     width: 10px;
     height: 10px;
     border-radius: 999px;
-    border: 1.5px solid rgb(124 132 248 / 0.3);
+    border: 1.5px solid color-mix(in srgb, var(--color-accent) 30%, transparent);
     border-top-color: var(--color-accent);
     animation: ai-spin 0.8s linear infinite;
     flex: none;
@@ -342,20 +505,20 @@ mark {
   }
   .score-warn {
     color: var(--color-warn);
-    border-color: rgb(240 162 59 / 0.35);
-    background: rgb(240 162 59 / 0.08);
+    border-color: color-mix(in srgb, var(--color-warn) 35%, transparent);
+    background: color-mix(in srgb, var(--color-warn) 8%, transparent);
   }
   .score-crit {
     color: var(--color-crit);
-    border-color: rgb(235 90 87 / 0.4);
-    background: rgb(235 90 87 / 0.09);
+    border-color: color-mix(in srgb, var(--color-crit) 40%, transparent);
+    background: color-mix(in srgb, var(--color-crit) 9%, transparent);
   }
 
   .chip {
     font-size: 11px;
     padding: 1px 7px;
     border-radius: 5px;
-    background: rgb(255 255 255 / 0.05);
+    background: color-mix(in srgb, var(--color-contrast) 5%, transparent);
     color: var(--color-muted);
     white-space: nowrap;
   }
@@ -368,7 +531,7 @@ mark {
   .bar {
     height: 4px;
     border-radius: 2px;
-    background: rgb(255 255 255 / 0.07);
+    background: color-mix(in srgb, var(--color-contrast) 7%, transparent);
     overflow: hidden;
     min-width: 56px;
     flex: 1;
@@ -420,7 +583,7 @@ mark {
     border: 1px solid var(--color-line);
     border-radius: 8px;
     padding: 12px 14px;
-    background: rgb(255 255 255 / 0.015);
+    background: color-mix(in srgb, var(--color-contrast) 1.5%, transparent);
   }
   .card::before {
     content: "";
@@ -451,7 +614,7 @@ mark {
   }
   .card p {
     margin: 0 0 6px;
-    color: #cfd2d6;
+    color: var(--color-body);
   }
 
   /* Two boxes side by side (copied answers, form vs voice note). */
@@ -461,7 +624,7 @@ mark {
     border-radius: 6px;
     padding: 8px 10px;
     font-size: 12.5px;
-    color: #cfd2d6;
+    color: var(--color-body);
   }
   .side-box .lbl {
     display: block;
@@ -533,15 +696,15 @@ mark {
 /* Placeholder while the map chunk loads: faint grid with a slow sheen. */
   .map-skeleton {
     background:
-      linear-gradient(100deg, transparent 30%, rgb(255 255 255 / 0.035) 50%, transparent 70%) 0 0 / 200% 100%,
-      repeating-linear-gradient(0deg, rgb(255 255 255 / 0.025) 0 1px, transparent 1px 48px),
-      repeating-linear-gradient(90deg, rgb(255 255 255 / 0.025) 0 1px, transparent 1px 48px);
+      linear-gradient(100deg, transparent 30%, color-mix(in srgb, var(--color-contrast) 3.5%, transparent) 50%, transparent 70%) 0 0 / 200% 100%,
+      repeating-linear-gradient(0deg, color-mix(in srgb, var(--color-contrast) 2.5%, transparent) 0 1px, transparent 1px 48px),
+      repeating-linear-gradient(90deg, color-mix(in srgb, var(--color-contrast) 2.5%, transparent) 0 1px, transparent 1px 48px);
     animation: sheen 1.6s linear infinite;
   }
 
   .scrollbar-thin {
     scrollbar-width: thin;
-    scrollbar-color: rgb(255 255 255 / 0.12) transparent;
+    scrollbar-color: color-mix(in srgb, var(--color-contrast) 12%, transparent) transparent;
   }
 }
 
@@ -589,7 +752,7 @@ mark {
 }
 @keyframes flash {
   0% {
-    color: var(--color-accent);
+    color: var(--color-accent-ink);
   }
   100% {
     color: inherit;
@@ -613,7 +776,7 @@ mark {
 }
 
 .maplibregl-ctrl-attrib {
-  background: rgb(8 9 10 / 0.7) !important;
+  background: var(--attrib-bg) !important;
   color: var(--color-faint) !important;
   font-size: 10px !important;
 }
@@ -621,14 +784,14 @@ mark {
   color: var(--color-muted) !important;
 }
 .maplibregl-ctrl-attrib-button {
-  filter: invert(1) opacity(0.6);
+  filter: var(--attrib-btn-filter);
 }
 /* Scale bar styled like the prototype's "1 km" bar. */
 .maplibregl-ctrl-scale {
   background: transparent !important;
-  border: 1px solid rgb(255 255 255 / 0.4) !important;
+  border: 1px solid var(--scale-line) !important;
   border-top: 0 !important;
-  color: rgb(255 255 255 / 0.45) !important;
+  color: var(--scale-ink) !important;
   font-family: var(--font-sans);
   font-size: 9px !important;
   line-height: 1.4 !important;
@@ -661,7 +824,7 @@ mark {
     inset: -200px 0 auto 0;
     height: 620px;
     pointer-events: none;
-    background: radial-gradient(60% 55% at 50% 30%, rgb(124 132 248 / 0.2), transparent 70%);
+    background: var(--landing-glow);
   }
   .intro {
     position: relative;
@@ -698,7 +861,7 @@ mark {
     border: 1px solid var(--color-line-strong);
     border-radius: 999px;
     padding: 3px 12px 3px 4px;
-    background: rgb(255 255 255 / 0.02);
+    background: color-mix(in srgb, var(--color-contrast) 2%, transparent);
   }
   .badge b {
     font-weight: 500;
@@ -715,10 +878,10 @@ mark {
     line-height: 1.04;
     font-weight: 600;
     margin: 18px 0;
-    background: linear-gradient(180deg, #fff 30%, rgb(255 255 255 / 0.55));
+    background: var(--hero-fill);
     -webkit-background-clip: text;
     background-clip: text;
-    color: transparent;
+    color: var(--hero-ink);
   }
   .hero p {
     font-size: 17px;
@@ -737,21 +900,19 @@ mark {
   }
   /* The prototype's button.glass: glass recipe with the lighter button fill. */
   .btn-glass {
-    background: linear-gradient(135deg, rgb(255 255 255 / 0.12), rgb(255 255 255 / 0.04));
-    border-color: rgb(255 255 255 / 0.14);
+    background: var(--glass-btn);
+    border-color: var(--glass-btn-border);
   }
   .btn-glass:hover {
-    background: linear-gradient(135deg, rgb(255 255 255 / 0.18), rgb(255 255 255 / 0.07));
-    border-color: rgb(255 255 255 / 0.14);
+    background: var(--glass-btn-hover);
+    border-color: var(--glass-btn-border);
   }
   .stage {
     margin-top: 56px;
     border: 1px solid var(--color-line-strong);
     border-radius: 14px;
-    background: linear-gradient(180deg, rgb(255 255 255 / 0.03), rgb(255 255 255 / 0.005));
-    box-shadow:
-      0 30px 80px -30px rgb(0 0 0 / 0.8),
-      0 0 0 1px rgb(0 0 0 / 0.6);
+    background: var(--stage-fill);
+    box-shadow: var(--stage-shadow);
     overflow: hidden;
   }
   .stagebar {
@@ -773,7 +934,7 @@ mark {
     height: 9px;
     margin-right: 5px;
     border-radius: 50%;
-    background: rgb(255 255 255 / 0.12);
+    background: color-mix(in srgb, var(--color-contrast) 12%, transparent);
   }
   .stage-mode {
     margin-left: auto;
@@ -795,7 +956,7 @@ mark {
   }
   .stage-mode.is-live::before {
     background: var(--color-ok);
-    box-shadow: 0 0 0 0 rgb(76 183 130 / 0.6);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-ok) 60%, transparent);
     animation: stage-ping 1.8s infinite;
   }
   .stagegrid {
@@ -807,7 +968,7 @@ mark {
     position: relative;
     min-height: 300px;
     overflow: hidden;
-    background: #0b0c0f;
+    background: var(--color-map);
   }
   .stagecanvas img,
   .stagecanvas canvas {
@@ -827,7 +988,7 @@ mark {
     border-radius: 999px;
     padding: 5px 12px;
     font-size: 11.5px;
-    color: #d9dbe0;
+    color: var(--color-glass-ink);
   }
   .stage-attrib {
     position: absolute;
@@ -836,7 +997,7 @@ mark {
     padding: 2px 6px;
     font-size: 10px;
     color: var(--color-faint);
-    background: rgb(8 9 10 / 0.7);
+    background: var(--attrib-bg);
     border-top-left-radius: 6px;
   }
   .stage-attrib a {
@@ -920,7 +1081,7 @@ mark {
   .how .n {
     font-family: var(--font-mono);
     font-size: 11px;
-    color: var(--color-accent);
+    color: var(--color-accent-ink);
   }
   .how h2 {
     font-size: 15px;
@@ -967,11 +1128,11 @@ mark {
 }
 @keyframes stage-ping {
   0% {
-    box-shadow: 0 0 0 0 rgb(76 183 130 / 0.6);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-ok) 60%, transparent);
   }
   80%,
   100% {
-    box-shadow: 0 0 0 7px rgb(76 183 130 / 0);
+    box-shadow: 0 0 0 7px color-mix(in srgb, var(--color-ok) 0%, transparent);
   }
 }
 @keyframes slide {
@@ -994,11 +1155,11 @@ mark {
 /* The collect page's record button while recording. */
 @keyframes rec-pulse {
   0% {
-    box-shadow: 0 0 0 0 rgb(235 90 87 / 0.45);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-crit) 45%, transparent);
   }
   80%,
   100% {
-    box-shadow: 0 0 0 14px rgb(235 90 87 / 0);
+    box-shadow: 0 0 0 14px color-mix(in srgb, var(--color-crit) 0%, transparent);
   }
 }
 .rec-live {

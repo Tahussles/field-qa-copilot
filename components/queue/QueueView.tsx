@@ -242,7 +242,7 @@ export function QueueView() {
                   href={href(item.submission_id)}
                   scroll={false}
                   className={`flex flex-col gap-[5px] rounded-[7px] px-2.5 py-[9px] ${
-                    selected ? "bg-white/[0.06] shadow-[inset_2px_0_0_var(--color-accent)]" : "hover:bg-hover"
+                    selected ? "bg-overlay/[0.06] shadow-[inset_2px_0_0_var(--color-accent)]" : "hover:bg-hover"
                   } ${review && !selected ? "opacity-50" : ""}`}
                 >
                   <div className="flex items-center justify-between gap-2">

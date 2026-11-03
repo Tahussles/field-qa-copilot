@@ -74,6 +74,8 @@ export default function Home() {
         </section>
         <footer className="foot">
           Synthetic data with fraud planted on purpose, so every check can be scored. Prototype by Taha Hussain.
+          <br />
+          Prototype built for Poket · not an official Poket product.
         </footer>
       </div>
       <OpenOnEnter />

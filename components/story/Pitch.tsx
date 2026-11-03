@@ -53,7 +53,7 @@ function slides(s: Story | null): ReactNode[] {
         text and meaning checks run after, never holding the phone up, and land as verdicts a rule reads.
       </p>
       <p>
-        <Link href="/architecture" className="text-accent hover:underline">
+        <Link href="/architecture" className="text-accent-ink hover:underline">
           See the architecture →
         </Link>
       </p>
@@ -144,7 +144,7 @@ export function Pitch() {
           </span>
         </header>
         <section className="pitch-slide flex flex-1 flex-col justify-center" aria-live="polite" data-testid={`slide-${index + 1}`}>
-          <span className="font-mono text-[12px] tracking-wide text-accent uppercase">{TITLES[index]}</span>
+          <span className="font-mono text-[12px] tracking-wide text-accent-ink uppercase">{TITLES[index]}</span>
           {deck[index]}
         </section>
         <footer className="flex items-center gap-3 text-[12px] text-faint">
@@ -157,7 +157,7 @@ export function Pitch() {
                 aria-selected={i === index}
                 aria-label={`Slide ${i + 1}: ${t}`}
                 onClick={() => go(i)}
-                className={`h-1.5 w-6 rounded-full ${i === index ? "bg-accent" : "bg-white/15 hover:bg-white/30"}`}
+                className={`h-1.5 w-6 rounded-full ${i === index ? "bg-accent" : "bg-contrast/15 hover:bg-contrast/30"}`}
               />
             ))}
           </div>

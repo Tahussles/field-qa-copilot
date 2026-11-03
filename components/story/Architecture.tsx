@@ -84,7 +84,7 @@ export function Architecture() {
         <div className="mt-8 flex flex-col gap-7" data-testid="architecture">
           {flow(story).map((row) => (
             <section key={row.title} aria-label={row.title}>
-              <h2 className="mb-2.5 font-mono text-[11.5px] tracking-wide text-accent uppercase">{row.title}</h2>
+              <h2 className="mb-2.5 font-mono text-[11.5px] tracking-wide text-accent-ink uppercase">{row.title}</h2>
               <div className="grid items-stretch gap-2 md:grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr]">
                 {row.boxes.map((box, i) => (
                   <div key={box.title} className="contents">
