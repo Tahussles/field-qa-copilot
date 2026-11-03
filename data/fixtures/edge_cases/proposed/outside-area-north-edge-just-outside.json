@@ -1,0 +1,74 @@
+{
+ "generated": {
+  "model": "claude-opus-5-5",
+  "prompt": "edge-v1",
+  "at": "2026-11-03T18:28:45+00:00"
+ },
+ "case": {
+  "id": "outside-area-north-edge-just-outside",
+  "check": "outside_area",
+  "kind": "boundary",
+  "title": "Enumerator point about 5.6 m north of Kondele's northern edge (lat -0.06995 vs edge -0.07)",
+  "submissions": [
+   {
+    "ref": "base",
+    "contributor": "E01",
+    "device_id": "e01-phone",
+    "captured_at": "2024-05-14T09:40:00+03:00",
+    "duration_sec": 1500,
+    "lat": -0.0805,
+    "lng": 34.771,
+    "water_source": "public_tap",
+    "satisfaction": [
+     3,
+     4,
+     2,
+     5,
+     3,
+     4,
+     3,
+     2
+    ],
+    "open_text": "Queue at the kiosk is long every morning before school.",
+    "voice_transcript": ""
+   },
+   {
+    "ref": "north",
+    "contributor": "E01",
+    "device_id": "e01-phone",
+    "captured_at": "2024-05-14T11:05:00+03:00",
+    "duration_sec": 1380,
+    "lat": -0.06995,
+    "lng": 34.77,
+    "water_source": "borehole",
+    "satisfaction": [
+     4,
+     2,
+     3,
+     3,
+     5,
+     2,
+     4,
+     3
+    ],
+    "open_text": "Borehole water tastes salty during the dry months.",
+    "voice_transcript": ""
+   }
+  ],
+  "target": "north",
+  "should_fire": [
+   "outside_area"
+  ],
+  "should_not_fire": [
+   "too_fast",
+   "same_spot",
+   "copied_text",
+   "straight_lining",
+   "voice_vs_form",
+   "off_hours",
+   "shared_device",
+   "burst"
+  ],
+  "why": "Kondele spans lat -0.09 to -0.07. -0.06995 is greater than -0.07, so the point is 0.00005 deg (about 5.6 m) north of the edge and outside. An implementation that rounds coordinates to 3 decimals (giving -0.070), adds a GPS tolerance buffer, or compares negative latitudes by absolute value (0.06995 < 0.07 looks 'inside') would wrongly stay silent. Only 2 submissions 85 min apart, so same_spot and burst cannot fire; texts share no content words; durations above 12 min; daytime; one contributor per device; no transcripts."
+ }
+}

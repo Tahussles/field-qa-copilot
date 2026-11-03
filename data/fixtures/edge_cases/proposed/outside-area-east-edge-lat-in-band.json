@@ -1,0 +1,74 @@
+{
+ "generated": {
+  "model": "claude-opus-5-5",
+  "prompt": "edge-v1",
+  "at": "2026-11-03T18:28:45+00:00"
+ },
+ "case": {
+  "id": "outside-area-east-edge-lat-in-band",
+  "check": "outside_area",
+  "kind": "boundary",
+  "title": "Latitude inside Kondele's band but longitude about 5.6 m east of its eastern edge",
+  "submissions": [
+   {
+    "ref": "base",
+    "contributor": "E01",
+    "device_id": "e01-phone",
+    "captured_at": "2024-05-16T08:30:00+03:00",
+    "duration_sec": 1560,
+    "lat": -0.082,
+    "lng": 34.772,
+    "water_source": "public_tap",
+    "satisfaction": [
+     3,
+     3,
+     4,
+     2,
+     4,
+     5,
+     3,
+     4
+    ],
+    "open_text": "Communal tap closes at noon so children miss lessons.",
+    "voice_transcript": ""
+   },
+   {
+    "ref": "east",
+    "contributor": "E01",
+    "device_id": "e01-phone",
+    "captured_at": "2024-05-16T12:45:00+03:00",
+    "duration_sec": 1320,
+    "lat": -0.08,
+    "lng": 34.78005,
+    "water_source": "river",
+    "satisfaction": [
+     1,
+     2,
+     2,
+     3,
+     1,
+     2,
+     1,
+     3
+    ],
+    "open_text": "Family collects from the stream behind the church.",
+    "voice_transcript": ""
+   }
+  ],
+  "target": "east",
+  "should_fire": [
+   "outside_area"
+  ],
+  "should_not_fire": [
+   "too_fast",
+   "same_spot",
+   "copied_text",
+   "straight_lining",
+   "voice_vs_form",
+   "off_hours",
+   "shared_device",
+   "burst"
+  ],
+  "why": "Latitude -0.08 is well within -0.09..-0.07, but longitude 34.78005 exceeds the east edge 34.78 by 0.00005 deg (about 5.6 m at the equator), so the point is outside. An implementation that only checks latitude, only checks the west bound (lng >= 34.76), or uses an inclusive buffer would wrongly stay silent. Other checks quiet: 2 submissions over 4 h apart, distinct texts, durations above 12 min, daytime, one device, no transcripts."
+ }
+}

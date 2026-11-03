@@ -1,0 +1,95 @@
+{
+ "generated": {
+  "model": "claude-opus-5-5",
+  "prompt": "edge-v1",
+  "at": "2026-11-03T18:22:41+00:00"
+ },
+ "case": {
+  "id": "straight-lining-alternating-four-five",
+  "check": "straight_lining",
+  "kind": "adversarial",
+  "title": "Fabricator alternates 5 and 4 to dodge the identical-answers rule",
+  "submissions": [
+   {
+    "ref": "alt",
+    "contributor": "E01",
+    "device_id": "dev-e01",
+    "captured_at": "2024-05-17T09:00:00+03:00",
+    "duration_sec": 1560,
+    "lat": -0.082,
+    "lng": 34.762,
+    "water_source": "vendor",
+    "satisfaction": [
+     5,
+     4,
+     5,
+     4,
+     5,
+     4,
+     5,
+     4
+    ],
+    "open_text": "We buy twenty litres daily from a seller who comes by motorbike",
+    "voice_transcript": ""
+   },
+   {
+    "ref": "mid",
+    "contributor": "E01",
+    "device_id": "dev-e01",
+    "captured_at": "2024-05-17T11:30:00+03:00",
+    "duration_sec": 1490,
+    "lat": -0.074,
+    "lng": 34.776,
+    "water_source": "river",
+    "satisfaction": [
+     2,
+     3,
+     1,
+     2,
+     4,
+     2,
+     3,
+     1
+    ],
+    "open_text": "Household fetches from the stream and boils it before drinking",
+    "voice_transcript": ""
+   },
+   {
+    "ref": "aft",
+    "contributor": "E01",
+    "device_id": "dev-e01",
+    "captured_at": "2024-05-17T15:10:00+03:00",
+    "duration_sec": 1700,
+    "lat": -0.088,
+    "lng": 34.774,
+    "water_source": "piped_home",
+    "satisfaction": [
+     4,
+     4,
+     3,
+     5,
+     4,
+     4,
+     3,
+     4
+    ],
+    "open_text": "Meter readings seem inaccurate and bills keep rising",
+    "voice_transcript": ""
+   }
+  ],
+  "target": "alt",
+  "should_fire": [],
+  "should_not_fire": [
+   "straight_lining",
+   "too_fast",
+   "same_spot",
+   "copied_text",
+   "voice_vs_form",
+   "off_hours",
+   "shared_device",
+   "burst",
+   "outside_area"
+  ],
+  "why": "A fabricator who knows that identical answers get flagged alternates between two adjacent values. The rule as written requires all 8 to be identical, so it must stay silent. An implementation that drifted to a fuzzier test, such as range <= 1, low variance, or at most 2 distinct values, would wrongly fire. This case pins the rule to its specification. Quiet checks: durations are at least 720 s. same_spot does not fire because the points are far apart: alt-mid differs by 0.008 deg lat (~890 m), alt-aft by 0.012 deg lng (~1.3 km), and mid-aft by 0.014 deg lat (~1.5 km), so no neighbour lies within 50 m. The texts share no content words. There are no voice notes. All times are daytime. One contributor uses the device. There are 3 submissions, fewer than the 4 that burst needs. All points are inside Kondele."
+ }
+}

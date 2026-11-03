@@ -1,0 +1,74 @@
+{
+ "generated": {
+  "model": "claude-opus-5-5",
+  "prompt": "edge-v1",
+  "at": "2026-11-03T18:28:45+00:00"
+ },
+ "case": {
+  "id": "outside-area-participant-across-shared-corner",
+  "check": "outside_area",
+  "kind": "adversarial",
+  "title": "Kondele participant submits about 8 m diagonally past the corner Kondele shares with Nyalenda",
+  "submissions": [
+   {
+    "ref": "home",
+    "contributor": "P01",
+    "device_id": "p01-phone",
+    "captured_at": "2024-05-17T07:50:00+03:00",
+    "duration_sec": 420,
+    "lat": -0.085,
+    "lng": 34.765,
+    "water_source": "piped_home",
+    "satisfaction": [
+     4,
+     5,
+     3,
+     4,
+     2,
+     4,
+     5,
+     3
+    ],
+    "open_text": "Our own tap has good pressure early in the day.",
+    "voice_transcript": ""
+   },
+   {
+    "ref": "corner",
+    "contributor": "P01",
+    "device_id": "p01-phone",
+    "captured_at": "2024-05-17T17:30:00+03:00",
+    "duration_sec": 390,
+    "lat": -0.09005,
+    "lng": 34.75995,
+    "water_source": "public_tap",
+    "satisfaction": [
+     3,
+     2,
+     4,
+     3,
+     3,
+     1,
+     2,
+     4
+    ],
+    "open_text": "Shared water point near the clinic often runs dry.",
+    "voice_transcript": ""
+   }
+  ],
+  "target": "corner",
+  "should_fire": [
+   "outside_area"
+  ],
+  "should_not_fire": [
+   "too_fast",
+   "same_spot",
+   "copied_text",
+   "straight_lining",
+   "voice_vs_form",
+   "off_hours",
+   "shared_device",
+   "burst"
+  ],
+  "why": "Kondele and Nyalenda touch only at the corner (34.76, -0.09). The target is 0.00005 deg west and 0.00005 deg south of it (about 7.9 m diagonally), so it is outside Kondele on both axes and inside Nyalenda. A fabricator may hope a point hugging the corner passes a tolerance buffer, a union-of-areas test, or a check that skips participants; the rule applies to every contributor and must fire. same_spot never fires for participants; only 2 submissions so no burst; durations 6.5-7 min exceed the 3-minute participant minimum; 07:50 and 17:30 are daytime; distinct texts; one device; no transcripts."
+ }
+}
