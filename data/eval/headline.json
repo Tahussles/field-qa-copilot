@@ -26,8 +26,7 @@
     "recall_range": [
       0.9786,
       1.0
-    ],
-    "submissions_per_wave": 1676.0
+    ]
   },
   "per_check": {
     "too_fast": {
