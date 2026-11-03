@@ -220,7 +220,18 @@ watch list.
 T = TypeVar("T", bound=BaseModel)
 
 
+# Scribe reports ISO 639-3; we store short codes (Dholuo has no two-letter code).
+SHORT_LANGUAGE = {"eng": "en", "en": "en", "swa": "sw", "sw": "sw", "luo": "luo"}
+
+
+def short_language(code: str | None) -> str | None:
+    if not code:
+        return None
+    return SHORT_LANGUAGE.get(code.lower(), code.lower())
+
+
 class Provider(Protocol):
+    can: dict[str, bool]  # judge, brief, transcribe, speak: whether this deployment has the key
     def judge_consistency(self, water_source: str, open_text: str, transcript: str) -> tuple[ConsistencyVerdict, Usage]: ...
     def judge_paraphrase(self, answer_a: str, answer_b: str) -> tuple[ParaphraseVerdict, Usage]: ...
     def write_brief(self, facts: dict, check: Callable[[BriefOut], str | None]) -> tuple[BriefOut, Usage]: ...
@@ -242,6 +253,9 @@ class LiveProvider:
         self._anthropic = (anthropic.Anthropic(api_key=anthropic_key, timeout=TIMEOUT_SECONDS, max_retries=0)
                            if anthropic_key else None)
         self._eleven_key = elevenlabs_key
+        # A deployment without a key (a preview) skips that work at once: no call, no retry.
+        self.can = {"judge": bool(anthropic_key), "brief": bool(anthropic_key),
+                    "transcribe": bool(elevenlabs_key), "speak": bool(elevenlabs_key)}
         self._sleep = sleep
 
     # Anthropic: one structured call, validated, retried.

@@ -320,7 +320,7 @@ def test_transcription_fills_the_transcript_and_queues_the_meaning_check(repo):
     provider = FakeProvider()
     jobs.run_job(repo, provider, job_id=created["ai_jobs"][0]["id"])
     stored = repo.submission(created["id"])
-    assert stored["voice_transcript"] == PIPE_DRY and stored["transcript_lang"] == "eng"
+    assert stored["voice_transcript"] == PIPE_DRY and stored["transcript_lang"] == "en"  # Scribe's "eng", shortened
     queued = [j for j in repo._jobs.values() if j["kind"] == "consistency"]
     assert len(queued) == 1 and queued[0]["submission_id"] == created["id"]
 
@@ -407,3 +407,48 @@ def test_ai_layer_keeps_names_out_of_model_inputs():
     facts = brief.facts(overview_like)
     assert "Evans" not in json.dumps(facts) and facts["contributors_to_investigate"][0]["code"] == "E07"
     assert facts["contributors_to_investigate"][0]["hotspot_interviews_in_one_spot"] == 18
+
+
+def test_a_deployment_without_keys_skips_ai_at_once_and_the_rule_stands(repo):
+    """A preview has no model keys: every job is skipped (not failed), without a call or a retry."""
+    slept = []
+    provider = LiveProvider(None, None, sleep=slept.append)
+    body = payload()
+    body.update(voice_transcript=PIPE_DRY)
+    body["answers"]["water_source"] = "piped_home"
+    created = service.ingest(repo, SubmissionIn(**body))[1]
+    result = jobs.run_job(repo, provider, job_id=created["ai_jobs"][0]["id"])
+    assert result["status"] == "skipped" and result["error"] is None and result["wall_ms"] < 50 and slept == []
+    assert repo.job(result["job_id"])["output"]["reason"].startswith("no model key")
+    assert repo.verdicts() == [] and repo.scores([created["id"]])[0]["score"] == created["score"]
+
+    client = client_for(repo, provider)
+    state = client.get("/api/py/brief").json()
+    assert state["ai"] == {"brief": False, "speak": False}
+    brief_job = next(j for j in repo._jobs.values() if j["kind"] == "brief")
+    assert jobs.run_job(repo, provider, job_id=brief_job["id"])["status"] == "skipped"
+    saved = repo.save_brief({"for_date": state["for_date"], "data_version": "x", "status": "ai", "stats": {},
+                             "items": {"summary": "s", "items": [], "closing": ""}, "content_md": "s", "model": "m"})
+    listen = client.post(f"/api/py/brief/{saved['id']}/audio")
+    assert listen.status_code == 409 and "no model key" in listen.json()["detail"]
+
+
+def test_spend_survives_a_reset_and_is_counted_per_demo_run():
+    from datagen import build_wave, db_rows
+    from tests.test_demo import client_for as demo_client, fresh_repo, step
+
+    repo = fresh_repo(build_wave(20261031))
+    with demo_client(repo) as client:
+        run = client.get("/api/py/demo/status", headers=AUTH).json()["run_id"]
+        step(client, repo, count=3)
+        sent = [j for j in repo._jobs.values() if j.get("demo_run_id") == run]
+        assert sent and all(j["kind"] == "consistency" for j in sent)
+        for job in sent:
+            jobs.run_job(repo, FakeProvider(), job_id=job["id"])
+        spend = client.get("/api/py/demo/status", headers=AUTH).json()["ai_spend"]
+        assert spend["run_jobs"] == len(sent) and spend["run_usd"] > 0
+        reset = client.post("/api/py/demo/reset", headers=AUTH).json()
+        after = client.get("/api/py/demo/status", headers=AUTH).json()["ai_spend"]
+    assert reset["deleted"]["ai_jobs"] == len(sent)  # detached, not deleted
+    assert after["all_time_usd"] == spend["all_time_usd"] and after["run_jobs"] == 0
+    assert all(j["submission_id"] is None for j in sent if repo.job(j["id"]))

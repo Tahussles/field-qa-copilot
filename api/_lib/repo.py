@@ -86,6 +86,8 @@ class Repository(Protocol):
     def finish_job(self, job_id: str, values: dict) -> None: ...
     def requeue_job(self, job_id: str) -> dict | None: ...  # a forced rerun
     def pending_jobs(self) -> list[dict]: ...  # queued or running: id, submission_id, kind, status
+    def ai_spend(self, run_id: str | None) -> dict: ...  # all_time_usd, all_time_jobs, run_usd, run_jobs
+    def signed_upload(self, bucket: str, path: str) -> str: ...  # absolute URL a phone can PUT the file to
     def briefs(self, for_date: str) -> list[dict]: ...  # newest first
     def save_brief(self, row: dict) -> dict: ...  # one per (project, for_date, data_version)
     def brief(self, brief_id: str) -> dict | None: ...
@@ -328,7 +330,7 @@ class InMemoryRepo:
                 "check_results": sum(sid in ids for sid, _, _ in self._check_results),
                 "scores": sum(sid in ids for sid in self._scores),
                 "reviews": sum(r["submission_id"] in ids for r in self._reviews.values()),
-                "ai_jobs": 0,  # not modelled in memory
+                "ai_jobs": 0,  # detached below, not deleted
                 "synthetic_truth": sum(sid in ids for sid in self._truth),
             }
             for sid in ids:
@@ -339,7 +341,10 @@ class InMemoryRepo:
             self._reviews = {k: v for k, v in self._reviews.items() if v["submission_id"] not in ids}
             self._verdicts = {k: v for k, v in self._verdicts.items()
                               if v["submission_id"] not in ids and v.get("pair_submission_id") not in ids}
-            self._jobs = {k: v for k, v in self._jobs.items() if v.get("submission_id") not in ids}
+            for job in self._jobs.values():  # kept, detached: what they cost survives the reset
+                if job.get("submission_id") in ids:
+                    counts["ai_jobs"] += 1
+                    job["submission_id"] = None
             return counts
 
     def delete_reviews(self):
@@ -383,7 +388,10 @@ class InMemoryRepo:
                     continue
                 job = {"id": str(uuid.uuid4()), "status": "queued", "attempts": 0, "notify": True, "created_at": _now(),
                        "started_at": None, "finished_at": None, "output": None, "error": None, "submission_id": None,
-                       "project_id": None, "input": None, **row}
+                       "project_id": None, "input": None, "demo_run_id": None, **row}
+                sub = self._submissions.get(job["submission_id"] or "")
+                if job["demo_run_id"] is None and sub and sub.get("source") in ("simulator", "live"):
+                    job["demo_run_id"] = self._project.get("demo_run_id")  # as the database trigger does
                 self._jobs[job["id"]] = job
                 taken.add(row["dedupe_key"])
                 new.append(dict(job))
@@ -425,6 +433,15 @@ class InMemoryRepo:
     def pending_jobs(self):
         return [{k: j[k] for k in ("id", "submission_id", "kind", "status")}
                 for j in self._jobs.values() if j["status"] in ("queued", "running")]
+
+    def ai_spend(self, run_id):
+        jobs = list(self._jobs.values())
+        cost = lambda js: round(sum(float(j.get("cost_usd") or 0) for j in js), 6)  # noqa: E731
+        mine = [j for j in jobs if run_id and j.get("demo_run_id") == run_id]
+        return {"all_time_usd": cost(jobs), "all_time_jobs": len(jobs), "run_usd": cost(mine), "run_jobs": len(mine)}
+
+    def signed_upload(self, bucket, path):
+        return f"memory://upload/{bucket}/{path}"
 
     def briefs(self, for_date):
         rows = [dict(b) for b in self._briefs.values() if b["for_date"] == for_date]
@@ -734,6 +751,12 @@ class SupabaseRepo:
     def pending_jobs(self):
         return self._db.select("ai_jobs", "id,submission_id,kind,status", status="in.(queued,running)",
                                project_id=f"eq.{self._pid}")
+
+    def ai_spend(self, run_id):
+        return self._db.rpc("ai_spend", {"project": self._pid, "run": run_id})
+
+    def signed_upload(self, bucket, path):
+        return self._db.signed_upload_url(bucket, path)
 
     def briefs(self, for_date):
         return self._db.select("briefs", "*", order="created_at.desc", for_date=f"eq.{for_date}", **self._in_project())

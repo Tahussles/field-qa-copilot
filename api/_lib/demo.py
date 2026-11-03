@@ -96,8 +96,9 @@ def status(repo: Repository, seed: int = DEMO_SEED) -> dict:
     live = live_day(seed)
     present = repo.client_ids(LIVE_SOURCES)
     moments = [{**m, "sent": m["client_submission_id"] in present} for m in key_moments(live)]
-    return {"seed": seed, "run_id": repo.clock().get("demo_run_id"), "progress": progress(repo, live, present),
-            "moments": moments}
+    run_id = repo.clock().get("demo_run_id")
+    return {"seed": seed, "run_id": run_id, "progress": progress(repo, live, present), "moments": moments,
+            "ai_spend": repo.ai_spend(str(run_id) if run_id else None)}
 
 
 class StaleRun(Exception):

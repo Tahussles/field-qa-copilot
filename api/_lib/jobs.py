@@ -18,7 +18,7 @@ from engine.textsim import SIMILARITY, shingle_jaccard
 
 from . import brief as briefs
 from . import service
-from .ai import PROMPT_VERSION, AIUnavailable, BriefOut, Provider, Usage
+from .ai import PROMPT_VERSION, AIUnavailable, BriefOut, Provider, Usage, short_language
 from .repo import NotFound, Repository
 
 log = logging.getLogger(__name__)
@@ -30,6 +30,10 @@ RESCORE_TRIES = 5
 AUDIO_BUCKET = "voice-notes"
 BRIEF_AUDIO_BUCKET = "brief-audio"
 BRIEF_AUDIO_SECONDS = 3600
+
+
+class SpeechOff(Exception):
+    """Text to speech is not configured here and the brief has no cached audio."""
 
 
 def _hash(*parts) -> str:
@@ -165,7 +169,8 @@ def run_transcribe(repo, provider: Provider, job):
     row = _submission(repo, job["submission_id"])
     audio = repo.download(AUDIO_BUCKET, job["input"]["path"])
     text, language, usage = provider.transcribe(audio, job["input"]["path"].rsplit("/", 1)[-1])
-    repo.set_transcript(row["id"], text, language or None)
+    language = short_language(language)
+    repo.set_transcript(row["id"], text, language)
     row = {**row, "voice_transcript": text, "transcript_lang": language}
     rescore = _rescore(repo, row["id"])  # the keyword rule now has a transcript to read
     queued = repo.queue_jobs([j for j in [consistency_job(row)] if j])
@@ -202,6 +207,8 @@ def run_tts(repo, provider: Provider, job):
 
 HANDLERS = {"consistency": run_consistency, "paraphrase": run_paraphrase, "transcribe": run_transcribe,
             "brief": run_brief, "tts": run_tts}
+NEEDS = {"consistency": "judge", "paraphrase": "judge", "transcribe": "transcribe", "brief": "brief", "tts": "speak"}
+OFF = "no model key on this deployment; the rule-based result stands"
 
 
 def run_job(repo: Repository, provider: Provider, job_id: str | None = None, job: dict | None = None) -> dict:
@@ -210,6 +217,10 @@ def run_job(repo: Repository, provider: Provider, job_id: str | None = None, job
     if job is None:
         return {"job_id": job_id, "status": "skipped", "reason": "not queued (already running or finished)"}
     started = time.perf_counter()
+    if not getattr(provider, "can", {}).get(NEEDS[job["kind"]], True):
+        repo.finish_job(job["id"], {"status": "skipped", "output": {"reason": OFF}})
+        return {"job_id": job["id"], "kind": job["kind"], "status": "skipped", "error": None,
+                "wall_ms": round((time.perf_counter() - started) * 1000), "model": None, "cost_usd": None}
     try:
         output, usage = HANDLERS[job["kind"]](repo, provider, job)
         values = {"status": "done", "output": output, **_usage_fields(usage)}
@@ -254,7 +265,7 @@ def queue_brief(repo: Repository, force: bool = False) -> dict | None:
     return None
 
 
-def brief_state(repo: Repository) -> dict:
+def brief_state(repo: Repository, provider: Provider | None = None) -> dict:
     """The newest brief for today, whether it matches today's numbers, and whether one is being written.
 
     The first visit of the day queues one; after that only Regenerate does, so a
@@ -275,6 +286,7 @@ def brief_state(repo: Repository) -> dict:
         | {"has_audio": bool(latest.get("audio_path"))},
         "stale": bool(latest and latest["data_version"] != version),
         "writing": writing,
+        "ai": {k: v for k, v in (getattr(provider, "can", None) or {}).items() if k in ("brief", "speak")},
     }
 
 
@@ -283,6 +295,8 @@ def brief_audio(repo: Repository, provider: Provider, brief_id: str) -> dict:
     saved = repo.brief(brief_id)
     if saved is None or saved["status"] != "ai":
         raise NotFound(brief_id)
+    if not saved.get("audio_path") and not getattr(provider, "can", {}).get("speak", True):
+        raise SpeechOff(OFF)
     if not saved.get("audio_path"):
         key = f"tts:{brief_id}"
         new = repo.queue_jobs([{"kind": "tts", "notify": False, "dedupe_key": key, "input": {"brief_id": brief_id}}])

@@ -131,6 +131,12 @@ class Supabase:
         self._check(self._storage.post(f"/object/{bucket}/{path}", content=data,
                                        headers={"Content-Type": content_type, "x-upsert": "true"}))
 
+    def signed_upload_url(self, bucket: str, path: str) -> str:
+        """A one-off URL a browser can PUT this object to (overwriting: retries reuse the path)."""
+        signed = self._check(self._storage.post(f"/object/upload/sign/{bucket}/{path}",
+                                                headers={"x-upsert": "true"})).json()
+        return str(self._storage.base_url).rstrip("/") + signed["url"]
+
     def signed_url(self, bucket: str, path: str, seconds: int) -> str:
         """An absolute URL the browser can fetch for `seconds`."""
         signed = self._check(self._storage.post(f"/object/sign/{bucket}/{path}", json={"expiresIn": seconds})).json()
