@@ -299,7 +299,7 @@ function DemoRunner({ open, onClose }: { open: boolean; onClose: () => void }) {
             role="tab"
             aria-selected={tab === t}
             onClick={() => setTab(t)}
-            className={`rounded px-2.5 py-0.5 text-[11.5px] ${tab === t ? "bg-white/[0.1] text-ink" : "text-muted hover:text-ink"}`}
+            className={`rounded px-2.5 py-0.5 text-[11.5px] ${tab === t ? "bg-overlay/[0.1] text-ink" : "text-muted hover:text-ink"}`}
           >
             {t === "controls" ? "Controls" : "Script"}
           </button>
@@ -356,7 +356,7 @@ function DemoRunner({ open, onClose }: { open: boolean; onClose: () => void }) {
                   type="button"
                   aria-pressed={speed === s}
                   onClick={() => changeSpeed(s)}
-                  className={`rounded px-2 py-0.5 font-mono text-[11.5px] ${speed === s ? "bg-white/[0.1] text-ink" : "hover:text-ink"}`}
+                  className={`rounded px-2 py-0.5 font-mono text-[11.5px] ${speed === s ? "bg-overlay/[0.1] text-ink" : "hover:text-ink"}`}
                 >
                   {s} s
                 </button>
@@ -378,7 +378,7 @@ function DemoRunner({ open, onClose }: { open: boolean; onClose: () => void }) {
                   {done ? (
                     <span className="text-[11px]">arrived</span>
                   ) : isNext ? (
-                    <span className="text-[11px] text-accent">next</span>
+                    <span className="text-[11px] text-accent-ink">next</span>
                   ) : null}
                 </li>
               );
@@ -398,7 +398,7 @@ function DemoRunner({ open, onClose }: { open: boolean; onClose: () => void }) {
                   // QRCode's own SVG for a URL we made: no user content in it.
                   dangerouslySetInnerHTML={{ __html: phone.svg }} />
                 <div className="min-w-0 text-[11.5px] text-muted">
-                  <a href={phone.url} target="_blank" rel="noreferrer" className="block break-all font-mono text-ink-2 hover:text-accent" data-testid="phone-url">
+                  <a href={phone.url} target="_blank" rel="noreferrer" className="block break-all font-mono text-ink-2 hover:text-accent-ink" data-testid="phone-url">
                     {phone.url.replace(/^https?:\/\//, "")}
                   </a>
                   <p className="mt-1">Valid until {fmtTime(new Date(phone.expires * 1000).toISOString(), tz)} (30 min); a reset revokes it.</p>

@@ -27,6 +27,7 @@ const ctx = await browser.newContext({ viewport: SIZE, recordVideo: { dir: `${OU
 await ctx.grantPermissions(["microphone"], { origin: base });
 await ctx.addInitScript((code) => {
   window.localStorage.setItem("fqc-demo-passcode", code);
+  window.localStorage.setItem("fqc-theme", "poket");
   window.localStorage.removeItem("fqc-demo-script");
 }, passcode);
 const page = await ctx.newPage();
@@ -115,10 +116,10 @@ await pause(10);
 const minted = await (await fetch(`${base}/api/py/collect/token`, {
   method: "POST", headers: { "content-type": "application/json", "x-demo-passcode": passcode }, body: "{}",
 })).json();
-await beat("phone opens", () => page.setContent(`<!doctype html><html><body style="margin:0;background:#08090a;display:grid;place-items:center;height:100vh;font:14px system-ui;color:#8a8f98">
+await beat("phone opens", () => page.setContent(`<!doctype html><html><body style="margin:0;background:#f8faf5;display:grid;place-items:center;height:100vh;font:15px system-ui;color:#535862">
   <div style="display:flex;gap:48px;align-items:center">
-    <iframe src="${base}${minted.path}" allow="microphone; geolocation" style="width:390px;height:844px;border:1px solid #2a2c31;border-radius:36px;background:#08090a"></iframe>
-    <div style="max-width:360px;line-height:1.6"><b style="color:#f1f2f4;font-size:18px">A phone, offline-first</b><br>The form says the water is piped to the home.<br>The voice note says the pipe has been dry since March.</div>
+    <iframe src="${base}${minted.path}" allow="microphone; geolocation" style="width:390px;height:844px;border:1px solid rgb(0 0 0 / 0.12);border-radius:36px;background:#f8faf5;box-shadow:0 24px 60px -30px rgb(16 40 30 / 0.3)"></iframe>
+    <div style="max-width:360px;line-height:1.6"><b style="color:#171717;font-size:18px">A phone, offline-first</b><br>The form says the water is piped to the home.<br>The voice note says the pipe has been dry since March.</div>
   </div></body></html>`), () => page.frameLocator("iframe").getByRole("button", { name: /^E03 / }).waitFor({ timeout: 30000 }));
 const phone = page.frameLocator("iframe");
 await pause(2);

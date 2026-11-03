@@ -33,7 +33,8 @@ from api._lib.postgrest import load_env  # noqa: E402
 from engine import __version__  # noqa: E402
 
 PROD = "https://field-qa-copilot.vercel.app"
-STYLE_URL = "https://tiles.openfreemap.org/styles/dark"
+# The poket theme's map (the default) and the linear theme's; both read the same vector tiles.
+STYLE_URLS = ("https://tiles.openfreemap.org/styles/positron", "https://tiles.openfreemap.org/styles/dark")
 VOICE_NOTE = ROOT / "tests-e2e" / "fixtures" / "pipe-dry.wav"
 KISUMU_TILE = (13, 4887, 4097)  # z, x, y around Kondele
 GREEN, RED, DIM, END = ("\033[32m", "\033[31m", "\033[2m", "\033[0m") if sys.stdout.isatty() else ("", "", "", "")
@@ -121,14 +122,16 @@ class Preflight:
 
     def tiles(self):
         start = time.perf_counter()
-        style = self.http.get(STYLE_URL).raise_for_status().json()
+        style = self.http.get(STYLE_URLS[0]).raise_for_status().json()
+        for other in STYLE_URLS[1:]:
+            self.http.get(other).raise_for_status()
         source = next(iter(s for s in style["sources"].values() if s.get("url")))
         tilejson = self.http.get(source["url"]).raise_for_status().json()
         z, x, y = KISUMU_TILE
         tile = self.http.get(tilejson["tiles"][0].format(z=z, x=x, y=y))
         if tile.status_code != 200 or not tile.content:
             raise Red(f"tile HTTP {tile.status_code}")
-        return f"style, tilejson and a Kisumu tile ({len(tile.content) // 1024} kB) in {ms(start)} ms", None
+        return f"both styles, tilejson and a Kisumu tile ({len(tile.content) // 1024} kB) in {ms(start)} ms", None
 
     def collect_token(self):
         start = time.perf_counter()

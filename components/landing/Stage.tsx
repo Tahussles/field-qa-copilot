@@ -6,8 +6,10 @@ import { useEffect, useRef, useState } from "react";
 import { Glass } from "@/components/ui/Glass";
 import basemap from "@/public/landing/basemap.json";
 import basemapImage from "@/public/landing/basemap.webp";
+import basemapLightImage from "@/public/landing/basemap-light.webp";
 import { CHECK_TITLE } from "@/lib/checks";
 import { fmtMonthDay, shortId } from "@/lib/format";
+import { cssColor, useTheme } from "@/lib/theme";
 import type { CheckKey, LandingData, SubmissionDetail } from "@/lib/types";
 
 const ADD_MS = 90; // one replayed arrival per tick
@@ -54,7 +56,14 @@ const CREDITS = [...basemap.attribution.matchAll(/<a href="([^"]+)"[^>]*>([^<]+)
 
 const reducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+/** "r,g,b" of a #rrggbb token, for the canvas's rgba() strings. */
+function triplet(token: string): string {
+  const hex = cssColor(token).replace("#", "");
+  return [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16) || 0).join(",");
+}
+
 export function Stage() {
+  const theme = useTheme();
   const wrap = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const [data, setData] = useState<LandingData | null>(null);
@@ -83,6 +92,13 @@ export function Stage() {
     const ctx = el.getContext("2d");
     if (!ctx) return;
     const font = getComputedStyle(document.body).fontFamily;
+    // The theme's colours (a new theme runs this effect again).
+    const areaLine = cssColor("--stage-area-line");
+    const label = cssColor("--stage-label");
+    const crit = triplet("--color-crit");
+    const warn = triplet("--color-warn");
+    const passed = triplet("--map-passed");
+    const passedOpacity = Number(cssColor("--map-passed-opacity")) || 0.35;
 
     draw.current = (now: number) => {
       const dpr = window.devicePixelRatio || 1;
@@ -100,7 +116,7 @@ export function Stage() {
       const oy = (h - basemap.height * sc) / 2;
       const px = ([x, y]: [number, number]): [number, number] => [ox + x * sc, oy + y * sc];
 
-      ctx.strokeStyle = "rgba(255,255,255,.14)";
+      ctx.strokeStyle = areaLine;
       ctx.lineWidth = 1;
       ctx.setLineDash([4, 4]);
       for (const area of AREAS) {
@@ -109,7 +125,7 @@ export function Stage() {
         ctx.stroke();
       }
       ctx.setLineDash([]);
-      ctx.fillStyle = "rgba(255,255,255,.32)";
+      ctx.fillStyle = label;
       ctx.font = `600 9.5px ${font}`;
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
@@ -119,8 +135,8 @@ export function Stage() {
       for (const d of dots.current) {
         const age = (now - d.born) / 1000;
         const [x, y] = px(toImage(d.lng, d.lat));
-        const col = d.score >= 5 ? "235,90,87" : d.flagged ? "240,162,59" : "154,160,170";
-        const alpha = Math.min(1, age * 3) * (d.flagged ? 0.95 : 0.35);
+        const col = d.score >= 5 ? crit : d.flagged ? warn : passed;
+        const alpha = Math.min(1, age * 3) * (d.flagged ? 0.95 : passedOpacity);
         if (d.flagged && age < 1.6) {
           ctx.beginPath();
           ctx.arc(x, y, 3 + age * 14, 0, Math.PI * 2);
@@ -143,7 +159,7 @@ export function Stage() {
     const observer = new ResizeObserver(() => draw.current(performance.now()));
     observer.observe(box);
     return () => observer.disconnect();
-  }, []);
+  }, [theme]);
 
   // Replay yesterday's real submissions, unless real arrivals are coming in (then: Live).
   useEffect(() => {
@@ -312,7 +328,14 @@ export function Stage() {
       </div>
       <div className="stagegrid">
         <div ref={wrap} className="stagecanvas">
-          <Image src={basemapImage} alt="" fill preload sizes="(max-width: 960px) 100vw, 620px" className="object-cover" />
+          <Image
+            src={theme === "linear" ? basemapImage : basemapLightImage}
+            alt=""
+            fill
+            preload
+            sizes="(max-width: 960px) 100vw, 620px"
+            className="object-cover"
+          />
           <canvas ref={canvas} aria-hidden />
           <Glass as="span" className="stage-pill glass-tint">
             Each dot is an interview arriving · orange means flagged

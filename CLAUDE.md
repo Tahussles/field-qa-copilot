@@ -18,15 +18,18 @@ Field QA Copilot checks every submission as it syncs, flags likely fabrication w
 design/prototype.html     the approved design (static, fake data); the dashboard matches its look
 app/                      Next.js routes: / landing, /app overview, /app/queue[/id], /app/detectors, /app/test,
                           /collect (the phone), /architecture and /pitch (the story pages)
-  globals.css             design tokens (@theme), .glass and other component classes (@layer components)
+  globals.css             design tokens for both themes (@theme and :root: poket; html[data-theme=linear]: linear),
+                          .glass and other component classes (@layer components)
 components/               UI: app/ (shell, data provider, toasts, passcode, demo controls), overview/, queue/,
                           detectors/, test/, landing/ (stage), collect/ (phone form, recorder, result), ui/Glass
-lib/                      API client and types, formatting, check labels and colours, basemap palette, Supabase client;
+lib/                      API client and types, formatting, check labels and colours, basemap palettes, Supabase client,
+                          theme-config.ts (theme names, pre-paint script) and theme.ts (useTheme, setTheme, cssColor);
                           collect/ (IndexedDB outbox, phone API calls, simulated and real locations)
 tests-e2e/                Playwright: smoke, landing and demo on desktop; collect.spec.ts on Pixel and iPhone profiles
                           with a fake microphone (fixtures/pipe-dry.wav); playwright.config.ts at the root
 public/vendor/            MapLibre worker copied from node_modules before dev and build (gitignored)
-public/landing/           pre-rendered stage basemap (webp) and its bounds and areas (json), committed
+public/landing/           pre-rendered stage basemaps (basemap.webp dark, basemap-light.webp light) and their shared
+                          bounds and areas (basemap.json), committed
 api/index.py              FastAPI routes, all under /api/py (docs at /api/py/docs)
 api/_lib/                 Repository (Supabase + in-memory), service logic, schemas, /evaluate, demo controls,
                           ai.py (every model call), jobs.py (ai_jobs runner), brief.py (facts and checks),
@@ -45,9 +48,10 @@ datagen/                  seeded synthetic wave with planted fraud (may import e
                           clocks, recorded verdicts and an expected band are optional per case)
 scripts/                  generate.py, score.py, evaluate.py, simulate.py, verify_wave.py, backfill_ai.py,
                           set_job_hook.py, ai_models.py, refresh_ai_verdicts.py, eval_diff.py, gen_edge_cases.py,
-                          realtime-probe.mjs, vendor-maplibre.mjs, render-basemap.mjs
+                          realtime-probe.mjs, vendor-maplibre.mjs, render-basemap.mjs, contrast.mjs
 tests/                    pytest suite
-docs/                     ai-practices.md (how AI is used), decisions.md (key design decisions)
+docs/                     ai-practices.md (how AI is used), decisions.md (key design decisions), theme.md (the Poket
+                          palette as extracted, and the token mapping)
 data/fixtures/            committed: ai_verdicts/ (recorded hard-mode model verdicts, CI scores from them),
                           edge_cases/proposed/ (model-proposed, awaiting review) and accepted/ (pytest runs them)
 data/synthetic/           generator output: CSVs, summary.json, preview.png (gitignored)
@@ -93,6 +97,9 @@ pnpm preflight                                       # before a live demo: green
 uv run scripts/measure.py                            # re-measure prod for the story pages (writes measurements.json)
 RUN_LIVE_AI=1 uv run pytest -k live                  # the one test that calls a real model (prompt injection)
 node scripts/render-basemap.mjs                      # re-render public/landing/basemap.* (areas or palette changed)
+node scripts/render-basemap.mjs --theme light        # the light one (same bounds as basemap.json)
+PW_THEME=linear pnpm test:smoke                      # any Playwright suite in the dark theme (poket by default)
+pnpm contrast [base URL] [--theme linear]            # WCAG AA on every text run against what is behind it
 node --env-file=.env.local scripts/realtime-probe.mjs 600        # watch Realtime events
 ```
 
@@ -157,16 +164,17 @@ After cloning, wire the commit hook once: `git config core.hooksPath .githooks`.
 - `projects.as_of`, when set, is "now" for that project: today, yesterday and the brief anchor to it. The demo project is fixed at 2026-10-31 08:00 Africa/Nairobi.
 - Contributor status: investigate = 3+ flagged and rate >= 15%; watch = 2+ flagged and rate >= 8%; otherwise ok (`engine/insights.py`).
 - Main signal: the check that fired most for a contributor; ties go shared_device > same_spot > outside_area > burst > copied_text > voice_vs_form > straight_lining > off_hours > clock_skew > too_fast. One function (`mainSignal` in `lib/checks.ts`) feeds the contributors table, the brief and the hotspot cards.
-- Dashboard UI matches `design/prototype.html`: its tokens, glass recipe and component classes live in `app/globals.css`. Content panels are solid (`.panel`); only the floating layer (bars, map overlays, chips, tooltips, toasts, modals) uses `.glass` / `<Glass>`; add `.glass-tint` where small text sits over busy content. Without backdrop-filter, glass falls back to opaque. Custom classes live in `@layer components` so Tailwind utilities can override them.
+- Themes (round 11, `docs/theme.md`): "poket" (light, the default: Poket's brand green `#039B6E`, Jost and DM Mono, read from poketapp.com) and "linear" (dark: `design/prototype.html`, unchanged). The theme is `data-theme` on `<html>`, set before first paint (`THEME_SCRIPT`) and kept in localStorage (`fqc-theme`); the toggle is in the sidebar footer. Every colour, font and glass value is a token in `app/globals.css`; components never hardcode one (use `bg-overlay/[n]` for selected states, `bg-contrast/[n]` for neutral tints, `text-accent-ink` for accent text, `COLORS` (var() strings) in inline styles and SVG, `cssColor` for MapLibre and canvas). Semantic colours (`ok`, `warn`, `crit`) are separate from the brand and pass WCAG AA on the light surfaces; status always keeps its label or dot text. Check with `scripts/contrast.mjs`.
+- Dashboard UI follows `design/prototype.html`'s layout and component classes, in `app/globals.css`. Content panels are solid (`.panel`); only the floating layer (bars, map overlays, chips, tooltips, toasts, modals) uses `.glass` / `<Glass>` (light recipe in poket, the prototype's in linear); add `.glass-tint` where small text sits over busy content. Without backdrop-filter, glass falls back to opaque. Custom classes live in `@layer components` so Tailwind utilities can override them.
 - The dashboard reads with the publishable key and refreshes on Supabase Realtime events (debounced ~1 s), never by polling. Writes from the browser go through the API with `X-Demo-Passcode`.
-- Map: MapLibre with the OpenFreeMap dark style (no key; attribution from the tile source), loaded after first paint behind a skeleton, with a preconnect to the tile host. Its worker is served from `public/vendor/` because a bundler moves the module it would otherwise resolve against.
+- Map: MapLibre with OpenFreeMap (no key; attribution from the tile source): Positron recoloured by `tuneLightBasemap` in poket, the dark style recoloured by `tuneBasemap` in linear (`lib/basemap.ts`). Overview keys the map by theme, so switching rebuilds it. Loaded after first paint behind a skeleton, with a preconnect to the tile host. Its worker is served from `public/vendor/` because a bundler moves the module it would otherwise resolve against.
 - Demo controls (`/api/py/demo/*`, all behind the passcode): `reset` deletes simulator and live submissions with their dependents and every review, rescores the wave on the quiet path and sets `as_of` back to Oct 31 08:00; `step` sends the next pending live-day submissions (by client_submission_id, so repeats and two tabs are safe) through `service.ingest` and moves `as_of` forward; `status` lists progress and the key moments derived from the live day's fraud actors. The runner lives in the browser (`components/app/DemoControls.tsx`, D key); the rest of the app only reacts through Realtime. `verify_wave.py` proves a reset left the fresh wave.
 - `as_of` is read fresh for the overview (`repo.as_of()`); the cached project context may hold an old value.
 - Story pages (`/architecture`, `/pitch`): every number comes from `GET /api/py/story` (headline.json, hard.json, measurements.json, and the spend now), never typed. CI fails if headline.json or hard.json does not match the code. `/pitch` moves with the arrow keys and `#4` opens slide 4.
 - Demo panel (D): a Script tab with the demo beats, target times, a running timer and jump buttons (`/app?beat=brief`, `/app?beat=hotspot&code=E07`, or the `fqc:beat` window event when the overview is open; `lib/beats.ts`).
-- Live-demo fallbacks: while the Realtime channel is down the dashboard and the phone result poll every 3 s with a "Reconnecting…" pill, and stop once it resubscribes; the map swaps to a plain dark style (areas, points, hotspots) if the basemap has not rendered within 5 s or fails; a model job that failed, was skipped or is stuck for a minute shows "Checked by rules (AI unavailable)".
+- Live-demo fallbacks: while the Realtime channel is down the dashboard and the phone result poll every 3 s with a "Reconnecting…" pill, and stop once it resubscribes; the map swaps to a plain style in the theme's map ground (areas, points, hotspots) if the basemap has not rendered within 5 s or fails; a model job that failed, was skipped or is stuck for a minute shows "Checked by rules (AI unavailable)".
 - `pnpm preflight` (`scripts/preflight.py`): production health and engine, the tile host, a collect token, an ingest sample with a Realtime round trip, one voice interview end to end (one Scribe and one Claude call), warm caches, then a demo reset and verify_wave. Exit 1 on any red.
-- Landing (`/`): no MapLibre. The stage draws on a canvas over `public/landing/basemap.webp`, replays yesterday's real submissions from `/api/py/landing` (CDN-cached), and says "Live" only while real score inserts arrive over Realtime. Reduced motion gets a static frame.
+- Landing (`/`): no MapLibre. The stage draws on a canvas over `public/landing/basemap-light.webp` (poket) or `basemap.webp` (linear), replays yesterday's real submissions from `/api/py/landing` (CDN-cached), and says "Live" only while real score inserts arrive over Realtime. Reduced motion gets a static frame.
 - Phone (`/collect`): opens with a collect token from the demo panel's QR code (`<expiry>.<demo run>.<HMAC>`, keyed from the service key, 30 min, revoked by a demo reset) or the passcode; nothing else. A token can only write `source: live` submissions whose voice note sits under `live/<its device_id>/`. The phone keeps a `device_id` in localStorage, saves each interview to an IndexedDB outbox first (audio included), then uploads the voice note to a signed Storage URL and POSTs `/submissions` with its own `client_submission_id`, so a retry returns the same record. Switching contributor on one phone is real and fires shared_device.
 - Phone location is simulated by default (a new household inside the contributor's area, or the last interview's spot); "Use my real GPS" sends the real fix, so outside_area fires anywhere but Kisumu.
 - Field clock (migration 0010): while `projects.as_of` is set, a `source: live` submission's `captured_at` and `synced_at` are mapped onto the field clock, `as_of + (real time - projects.clock_set_at)` (a trigger stamps `clock_set_at` whenever `as_of` changes), never past the field's "now"; the phone's own time is stored in `device_captured_at`. With `as_of` null the phone's time is used as is. The simulator and the demo step already send field times and are not mapped.

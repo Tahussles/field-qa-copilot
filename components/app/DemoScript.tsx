@@ -116,7 +116,7 @@ export function DemoScript({ onPhone }: { onPhone: () => void }) {
           const next = BEATS[i + 1]?.at ?? SCRIPT_TARGET_S;
           const late = Boolean(state.startedAt) && !done && elapsed > next;
           return (
-            <li key={b.key} className={`rounded-md px-1.5 py-1 ${current === b.key ? "bg-white/[0.06]" : ""}`}>
+            <li key={b.key} className={`rounded-md px-1.5 py-1 ${current === b.key ? "bg-overlay/[0.06]" : ""}`}>
               <div className="flex items-center gap-2">
                 <input type="checkbox" checked={done} onChange={() => toggle(b.key)} aria-label={`Done: ${b.label}`} />
                 <span className={`w-9 flex-none font-mono text-[11px] ${late ? "text-warn" : "text-faint"}`}>{clock(b.at)}</span>

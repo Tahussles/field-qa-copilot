@@ -1,13 +1,15 @@
 // Pre-renders the landing page's stage map, so the landing page never loads MapLibre:
-// the OpenFreeMap dark style recoloured by lib/basemap.ts (the same palette as the
-// dashboard map), fitted to the survey areas, saved as public/landing/basemap.webp.
-// public/landing/basemap.json holds the image's bounds and the area outlines; the
+// an OpenFreeMap style recoloured by lib/basemap.ts (the same palette as the dashboard
+// map), fitted to the survey areas. The dark style (linear theme) is saved as
+// public/landing/basemap.webp, the light one (poket theme) as basemap-light.webp.
+// public/landing/basemap.json holds the images' bounds and the area outlines; the
 // landing page projects points onto the image with them and draws on a canvas.
 //
-//   node scripts/render-basemap.mjs                     # areas from production
+//   node scripts/render-basemap.mjs                     # dark, areas from production
+//   node scripts/render-basemap.mjs --theme light       # light; must land on basemap.json's bounds
 //   node scripts/render-basemap.mjs --api http://localhost:3000
 //
-// Re-run only when the areas or the palette change; both outputs are committed.
+// Re-run only when the areas or the palette change; the outputs are committed.
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, extname, join } from "node:path";
@@ -15,9 +17,16 @@ import { parseArgs } from "node:util";
 
 import { chromium } from "@playwright/test";
 
-import { STYLE_URL, tuneBasemap } from "../lib/basemap.ts";
+import { LIGHT_STYLE_URL, STYLE_URL, tuneBasemap, tuneLightBasemap } from "../lib/basemap.ts";
 
-const { values } = parseArgs({ options: { api: { type: "string", default: "https://field-qa-copilot.vercel.app" } } });
+const { values } = parseArgs({
+  options: { api: { type: "string", default: "https://field-qa-copilot.vercel.app" }, theme: { type: "string", default: "dark" } },
+});
+const THEME = {
+  dark: { style: STYLE_URL, tune: tuneBasemap, ground: "#0b0c0f", file: "basemap.webp" },
+  light: { style: LIGHT_STYLE_URL, tune: tuneLightBasemap, ground: "#f1f3ef", file: "basemap-light.webp" },
+}[values.theme];
+if (!THEME) throw new Error(`--theme is dark or light, not ${values.theme}`);
 const WIDTH = 960;
 const HEIGHT = 600;
 const SCALE = 2; // device pixels per CSS pixel in the image
@@ -44,7 +53,7 @@ await page.route(`${ORIGIN}/**`, (route) => {
     return route.fulfill({
       contentType: TYPES[".html"],
       body: `<!doctype html><link rel="stylesheet" href="/maplibre-gl.css">
-<style>html,body{margin:0;background:#0b0c0f}#map{width:${WIDTH}px;height:${HEIGHT}px}</style>
+<style>html,body{margin:0;background:${THEME.ground}}#map{width:${WIDTH}px;height:${HEIGHT}px}</style>
 <div id="map"></div>
 <script type="module">import * as ml from "/maplibre-gl.mjs"; window.maplibregl = ml;</script>`,
     });
@@ -77,7 +86,7 @@ const view = await page.evaluate(
       .join(" ");
     return { west: b.getWest(), south: b.getSouth(), east: b.getEast(), north: b.getNorth(), zoom: map.getZoom(), attribution };
   },
-  { style: STYLE_URL, extent, padding: PADDING, tune: tuneBasemap.toString(), origin: ORIGIN },
+  { style: THEME.style, extent, padding: PADDING, tune: THEME.tune.toString(), origin: ORIGIN },
 );
 
 // Screenshot the map, then let the browser encode it as WebP.
@@ -93,15 +102,25 @@ const webp = await page.evaluate(async ({ data, quality }) => {
 await browser.close();
 
 mkdirSync(out, { recursive: true });
-writeFileSync(join(out, "basemap.webp"), Buffer.from(webp, "base64"));
 const round = (n) => Math.round(n * 1e6) / 1e6;
+const bounds = { west: round(view.west), south: round(view.south), east: round(view.east), north: round(view.north) };
+if (values.theme === "light") {
+  // One basemap.json serves both images, so the light render must cover exactly the same ground.
+  const saved = JSON.parse(readFileSync(join(out, "basemap.json"), "utf8")).bounds;
+  const off = Object.keys(bounds).filter((k) => Math.abs(bounds[k] - saved[k]) > 1e-5);
+  if (off.length) throw new Error(`light bounds differ from basemap.json (${off.join(", ")}): re-render the dark one first`);
+  writeFileSync(join(out, THEME.file), Buffer.from(webp, "base64"));
+  console.log(`${THEME.file} ${Math.round(Buffer.from(webp, "base64").length / 1024)} KB at zoom ${view.zoom.toFixed(2)}; same bounds as basemap.json`);
+  process.exit(0);
+}
+writeFileSync(join(out, THEME.file), Buffer.from(webp, "base64"));
 writeFileSync(
   join(out, "basemap.json"),
   JSON.stringify(
     {
       width: WIDTH,
       height: HEIGHT,
-      bounds: { west: round(view.west), south: round(view.south), east: round(view.east), north: round(view.north) },
+      bounds,
       zoom: Math.round(view.zoom * 100) / 100,
       attribution: view.attribution,
       areas: rings.map((a) => ({ name: a.name, ring: a.ring })),

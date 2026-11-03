@@ -78,3 +78,28 @@ test("detectors: moving a slider changes the numbers", async ({ page }) => {
   await expect(flagged).not.toHaveText(before, { timeout: 15_000 });
   await expect(page.getByText("these numbers are scored against planted fraud")).toBeVisible();
 });
+
+test("theme: the sidebar toggle switches the theme and the browser remembers it", async ({ page }) => {
+  const start: "poket" | "linear" = process.env.PW_THEME === "linear" ? "linear" : "poket";
+  const other = start === "poket" ? "linear" : "poket";
+  const label = { poket: "Poket", linear: "Linear" };
+  const background = { poket: "rgb(248, 250, 245)", linear: "rgb(8, 9, 10)" };
+  await page.goto("/app");
+  const html = page.locator("html");
+  await expect(html).toHaveAttribute("data-theme", start);
+  await expect(page.locator('[data-map-ready="true"]')).toBeVisible({ timeout: 60_000 });
+  const toggle = page.getByTestId("theme-toggle");
+  await expect(toggle.getByRole("radio", { name: label[start] })).toHaveAttribute("aria-checked", "true");
+
+  await toggle.getByRole("radio", { name: label[other] }).click();
+  await expect(html).toHaveAttribute("data-theme", other);
+  await expect(page.locator("body")).toHaveCSS("background-color", background[other]);
+  // The map is rebuilt on the other theme's basemap.
+  await expect(page.locator('[data-map-ready="true"]')).toBeVisible({ timeout: 60_000 });
+
+  await page.reload();
+  await expect(html).toHaveAttribute("data-theme", other);
+  await expect(toggle.getByRole("radio", { name: label[other] })).toHaveAttribute("aria-checked", "true");
+  await page.goto("/");
+  await expect(html).toHaveAttribute("data-theme", other);
+});

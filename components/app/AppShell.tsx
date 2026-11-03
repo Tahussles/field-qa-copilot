@@ -12,6 +12,7 @@ import { ReadOnlyBanner } from "@/components/app/ReadOnlyBanner";
 import { ToastProvider } from "@/components/app/Toasts";
 import { Glass } from "@/components/ui/Glass";
 import { DEFAULT_TZ, fmtDateTime, fmtMonthDay } from "@/lib/format";
+import { setTheme, THEMES, useTheme } from "@/lib/theme";
 
 export const SECTIONS = [
   { href: "/app", label: "Overview", key: "1", icon: IconGrid },
@@ -138,7 +139,7 @@ function SidebarFrame({ active }: { active: string | null }) {
               href={s.href}
               aria-current={current ? "page" : undefined}
               className={`flex items-center gap-[9px] rounded-md px-2 py-1.5 font-medium ${
-                current ? "bg-white/[0.06] text-ink" : "text-muted hover:bg-hover hover:text-ink"
+                current ? "bg-overlay/[0.06] text-ink" : "text-muted hover:bg-hover hover:text-ink"
               }`}
             >
               <s.icon className="h-[15px] w-[15px] flex-none" />
@@ -168,8 +169,38 @@ function SidebarFrame({ active }: { active: string | null }) {
         <Link href="/" className="text-muted hover:text-ink">
           ← Back to intro
         </Link>
+        <ThemeToggle />
+        <p className="text-[11px] text-faint">Prototype built for Poket · not an official Poket product</p>
       </div>
     </aside>
+  );
+}
+
+const THEME_LABEL = { poket: "Poket", linear: "Linear" } as const;
+
+/** Poket (light, the default) or Linear (dark); remembered in this browser. */
+function ThemeToggle() {
+  const theme = useTheme();
+  return (
+    <div className="flex items-center gap-2" data-testid="theme-toggle">
+      <span id="theme-label" className="text-muted">
+        Theme
+      </span>
+      <div role="radiogroup" aria-labelledby="theme-label" className="ml-auto flex gap-0.5 rounded-full border border-line p-0.5">
+        {THEMES.map((t) => (
+          <button
+            key={t}
+            type="button"
+            role="radio"
+            aria-checked={theme === t}
+            onClick={() => setTheme(t)}
+            className={`rounded-full px-2 py-px text-[11px] ${theme === t ? "bg-overlay/[0.1] text-ink" : "text-muted hover:text-ink"}`}
+          >
+            {THEME_LABEL[t]}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -244,7 +275,7 @@ function MobileNav() {
           href={s.href}
           aria-current={active === s.href ? "page" : undefined}
           className={`flex flex-1 flex-col items-center gap-0.5 rounded-xl py-1.5 text-[10.5px] ${
-            active === s.href ? "bg-white/[0.08] text-ink" : "text-ink-2"
+            active === s.href ? "bg-overlay/[0.08] text-ink" : "text-ink-2"
           }`}
         >
           <s.icon className="h-4 w-4" />

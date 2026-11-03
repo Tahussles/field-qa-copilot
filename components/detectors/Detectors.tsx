@@ -103,7 +103,7 @@ export function Detectors() {
             <div key={s.key}>
               <label htmlFor={`slider-${s.key}`} className="mb-1.5 flex justify-between text-[13px] font-medium">
                 {s.label}
-                <span className="font-mono text-accent" data-testid={`value-${s.key}`}>
+                <span className="font-mono text-accent-ink" data-testid={`value-${s.key}`}>
                   {s.format(knobs[s.key])}
                 </span>
               </label>
@@ -115,7 +115,7 @@ export function Detectors() {
                 step={s.step}
                 value={knobs[s.key]}
                 onChange={(e) => setKnobs((k) => ({ ...k, [s.key]: Number(e.target.value) }))}
-                className="w-full accent-[#7c84f8]"
+                className="w-full accent-accent"
               />
               <small className="text-[11.5px] text-faint">{s.help}</small>
             </div>
@@ -330,7 +330,7 @@ function SweepChart({ sweep, threshold }: { sweep: NonNullable<EvaluateResult["s
       aria-label={at ? `At threshold ${threshold}: precision ${fmtPct(at.precision)}, recall ${fmtPct(at.recall)}` : "Precision and recall chart"}>
       {[0, 0.25, 0.5, 0.75, 1].map((v) => (
         <g key={v}>
-          <line x1={pad.l} x2={W - pad.r} y1={y(v)} y2={y(v)} stroke="rgba(255,255,255,0.06)" />
+          <line x1={pad.l} x2={W - pad.r} y1={y(v)} y2={y(v)} className="stroke-contrast/[0.06]" />
           <text x={pad.l - 6} y={y(v) + 3.5} fill={COLORS.faint} fontSize="10" textAnchor="end">
             {v * 100}%
           </text>

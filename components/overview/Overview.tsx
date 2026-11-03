@@ -7,6 +7,7 @@ import { useAppData } from "@/components/app/AppData";
 import { Brief } from "@/components/overview/Brief";
 import { ContributorsTable } from "@/components/overview/ContributorsTable";
 import { beatFromUrl, onBeat, type Beat } from "@/lib/beats";
+import { useTheme } from "@/lib/theme";
 
 // The map (MapLibre, ~1 MB) loads after first paint; a same-size skeleton holds its place.
 const MapPanel = dynamic(() => import("@/components/overview/MapPanel").then((m) => m.MapPanel), {
@@ -20,7 +21,7 @@ function MapSkeleton() {
       <div className="ph">
         <h2>Where interviews are piling up</h2>
       </div>
-      <div className="relative aspect-[4/3] bg-[#0b0c0f] lg:aspect-[3/2]">
+      <div className="relative aspect-[4/3] bg-map lg:aspect-[3/2]">
         <div className="map-skeleton absolute inset-0" aria-hidden />
         <p className="absolute inset-0 grid place-items-center text-sm text-muted">Loading the map…</p>
       </div>
@@ -30,6 +31,7 @@ function MapSkeleton() {
 
 export function Overview() {
   const { overview, map, pulses, error } = useAppData();
+  const theme = useTheme();
   const [focus, setFocus] = useState<string | null>(null);
   const [openFor, setOpenFor] = useState<string | null>(null);
 
@@ -63,7 +65,8 @@ export function Overview() {
         </p>
       )}
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
-        <MapPanel data={map} contributors={contributors} focus={focus} onFocus={setFocus} pulses={pulses}
+        {/* A new map per theme: its basemap style and point colours come from the theme. */}
+        <MapPanel key={theme} data={map} contributors={contributors} focus={focus} onFocus={setFocus} pulses={pulses}
           openFor={openFor} onOpened={() => setOpenFor(null)} />
         <div className="flex min-w-0 flex-col gap-5">
           <Brief overview={overview} />

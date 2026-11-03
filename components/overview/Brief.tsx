@@ -146,7 +146,7 @@ function WrittenBrief({ brief, overview }: { brief: NonNullable<NonNullable<Brie
                 {who?.area && <span className="text-muted">{who.area}</span>}
                 <br />
                 {item.finding}
-                <span className="mt-0.5 block text-accent">→ {item.action}</span>
+                <span className="mt-0.5 block text-accent-ink">→ {item.action}</span>
               </li>
             );
           })}
@@ -250,7 +250,7 @@ function BriefBody({ overview }: { overview: Overview }) {
                       : ""}
                   </>
                 )}
-                .{signal && <span className="mt-0.5 block text-accent">→ {cap(CHECK_ACTION[signal])}.</span>}
+                .{signal && <span className="mt-0.5 block text-accent-ink">→ {cap(CHECK_ACTION[signal])}.</span>}
               </li>
             );
           })}
