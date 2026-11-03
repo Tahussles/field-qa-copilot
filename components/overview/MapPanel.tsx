@@ -191,12 +191,17 @@ export function MapPanel({
   focus,
   onFocus,
   pulses,
+  openFor = null,
+  onOpened,
 }: {
   data: MapData | null;
   contributors: Record<string, ContributorRow>;
   focus: string | null;
   onFocus: (code: string | null) => void;
   pulses: string[];
+  /** Open this contributor's biggest hotspot once it is on the map (the demo script). */
+  openFor?: string | null;
+  onOpened?: () => void;
 }) {
   const router = useRouter();
   const wrap = useRef<HTMLDivElement>(null);
@@ -460,6 +465,19 @@ export function MapPanel({
     });
   }
 
+  useEffect(() => {
+    if (!openFor || !ready) return;
+    const theirs = placed.filter((p) => p.hotspot.contributor_code === openFor);
+    if (!theirs.length) return; // not placed yet: the next layout pass runs this again
+    const biggest = theirs.reduce((a, b) => (b.hotspot.count > a.hotspot.count ? b : a));
+    queueMicrotask(() => {
+      openHotspot(biggest);
+      onOpened?.();
+    });
+    // openHotspot reads refs only; placed changes on every layout pass
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openFor, ready, placed]);
+
   const showReset = moved || Boolean(focus) || Boolean(expanded);
   const caption = focus
     ? `${focus} ${contributors[focus]?.display_name ?? ""} · click the row again to clear`
@@ -484,7 +502,7 @@ export function MapPanel({
         {/* Full size, not absolute: MapLibre's own CSS sets position: relative on this element. */}
         <div ref={container} className="h-full w-full" />
         {fallback && (
-          <p className="pointer-events-none absolute bottom-2 left-3 z-10 text-[11px] text-faint" data-testid="map-fallback">
+          <p className="pointer-events-none absolute right-3 bottom-8 z-10 text-right text-[11px] text-faint" data-testid="map-fallback">
             Basemap unavailable · areas and submissions on a plain background
           </p>
         )}
