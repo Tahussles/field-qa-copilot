@@ -6,7 +6,9 @@ A short guide a team could adopt. Each rule says what we do, why, and where it l
 
 **Allowed:** turning speech into text (ElevenLabs Scribe), judging *meaning* that keyword rules cannot read (does the voice note contradict the form? is answer B a reworded copy of answer A?), and writing the morning brief and reading it aloud.
 
-**Not allowed:** deciding whether a submission is flagged. All nine checks are deterministic Python (`engine/checks/`). A model's judgment is stored as an input (`ai_verdicts`) that a check reads, the same way it reads a GPS point. With no verdict the rule-based result stands. The same submission and verdicts always give the same score. The engine never calls a model, and its evidence records who decided (`decided_by: ai | ai_paraphrase | rules`).
+**Not allowed:** deciding whether a submission is flagged. All ten checks are deterministic Python (`engine/checks/`). A model's judgment is stored as an input (`ai_verdicts`) that a check reads, the same way it reads a GPS point. With no verdict the rule-based result stands. The same submission and verdicts always give the same score. The engine never calls a model, and its evidence records who decided (`decided_by: ai | ai_paraphrase | rules`).
+
+Meaning-level contradictions are the model's job, not more keywords: "we fetch from a tap down the road and pay five shillings per jerrycan" on a piped_home form names no source keyword, so the rule stays silent, and the recorded model verdict catches it (confidence 0.9, quoting the sentence). Keywords stay a small, auditable list of source words.
 
 A model's word alone does not send anyone to review:
 - voice_vs_form uses a verdict only at confidence >= 0.7.

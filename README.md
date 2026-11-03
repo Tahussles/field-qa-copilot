@@ -1,6 +1,6 @@
 # Field QA Copilot
 
-Field QA Copilot checks every field-survey submission as it syncs from a phone and flags likely fabrication, such as forms filled in at a tea shop, copied answers or one phone used for several accounts. Each flag comes with evidence a reviewer can check. Nine deterministic checks score each submission, model verdicts (speech to text, voice-vs-form meaning, reworded copies) feed in as extra inputs, flagged items land in a review queue, and the lead researcher gets a written morning brief. It is an interview prototype for Poket Inc, built on a seeded synthetic survey wave (Kisumu, Kenya) with planted fraud, so every number below can be checked against ground truth.
+Field QA Copilot checks every field-survey submission as it syncs from a phone and flags likely fabrication, such as forms filled in at a tea shop, copied answers or one phone used for several accounts. Each flag comes with evidence a reviewer can check. Ten deterministic checks score each submission, model verdicts (speech to text, voice-vs-form meaning, reworded copies) feed in as extra inputs, flagged items land in a review queue, and the lead researcher gets a written morning brief. It is an interview prototype for Poket Inc, built on a seeded synthetic survey wave (Kisumu, Kenya) with planted fraud, so every number below can be checked against ground truth.
 
 ## Live
 
@@ -21,7 +21,7 @@ flowchart LR
   phone["Phone /collect<br/>IndexedDB outbox, offline queue<br/>retries reuse client_submission_id"]
   api["FastAPI on Vercel (yul1)<br/>/api/py"]
   db[("Supabase Postgres<br/>Realtime, Storage")]
-  engine["Python engine<br/>9 deterministic checks"]
+  engine["Python engine<br/>10 deterministic checks"]
   jobs["ai_jobs<br/>pg_net hook on insert<br/>pg_cron re-sends lost hooks"]
   models["ElevenLabs: Scribe, TTS<br/>Claude: Haiku judges, Sonnet briefs"]
   ui["Dashboard /app<br/>Landing /"]
@@ -48,6 +48,7 @@ flowchart LR
 | Held-out precision / recall (seeds 101–110, review threshold 2.0) | **88.9%** (87.0–90.3%) / **99.3%** (97.9–100%) |
 | Hard mode, held-out seeds 201–202: rules only | precision 86.9%, recall 71.7% |
 | Hard mode: rules + AI verdicts | precision **91.5%**, recall **86.9%** |
+| Hard mode's night forger (phone clock set back 3 h): night forms missed per wave | 6.5 without clock_skew, **0** with it |
 | Ingest `POST /submissions` on production | p50 188 ms, p95 254 ms (2 database calls) |
 | Phone, from tapping Submit (12 production runs) | rules result 1.9 s, transcript 4.5 s, model verdict 6.7 s (medians) |
 | Model latency per call (production jobs) | judge p50 1.35 s (Haiku), transcription p50 0.53 s (Scribe), brief p50 7.5 s (Sonnet) |
