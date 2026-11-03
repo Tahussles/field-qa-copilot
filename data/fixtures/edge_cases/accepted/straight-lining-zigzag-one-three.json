@@ -1,0 +1,49 @@
+{
+ "written": "by hand in review (round 9b)",
+ "case": {
+  "id": "straight-lining-zigzag-one-three",
+  "check": "straight_lining",
+  "kind": "adversarial",
+  "title": "1, 3, 1, 3, ... is a strict two-value zig-zag even with a gap between the values",
+  "submissions": [
+   {
+    "ref": "t",
+    "contributor": "E01",
+    "device_id": "dev-e01",
+    "captured_at": "2026-03-12T10:10:00+03:00",
+    "duration_sec": 1500,
+    "lat": -0.08,
+    "lng": 34.77,
+    "water_source": "public_tap",
+    "satisfaction": [
+     1,
+     3,
+     1,
+     3,
+     1,
+     3,
+     1,
+     3
+    ],
+    "open_text": "The kiosk opens late so mornings are slow.",
+    "voice_transcript": ""
+   }
+  ],
+  "target": "t",
+  "should_fire": [
+   "straight_lining"
+  ],
+  "should_not_fire": [
+   "too_fast",
+   "same_spot",
+   "copied_text",
+   "voice_vs_form",
+   "off_hours",
+   "shared_device",
+   "burst",
+   "outside_area",
+   "clock_skew"
+  ],
+  "why": "The pattern rule asks for two values in strict alternation, whatever their distance."
+ }
+}

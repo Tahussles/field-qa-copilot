@@ -1,0 +1,51 @@
+{
+ "written": "by hand in review (round 9b)",
+ "case": {
+  "id": "outside-area-2km-out-far-band-flags",
+  "check": "outside_area",
+  "kind": "boundary",
+  "title": "2 km outside the area: no GPS error explains it, full weight, flagged on its own",
+  "submissions": [
+   {
+    "ref": "t",
+    "contributor": "E01",
+    "device_id": "dev-e01",
+    "captured_at": "2026-03-12T10:10:00+03:00",
+    "duration_sec": 1500,
+    "lat": -0.051913,
+    "lng": 34.77,
+    "water_source": "public_tap",
+    "satisfaction": [
+     3,
+     4,
+     2,
+     4,
+     3,
+     5,
+     2,
+     4
+    ],
+    "open_text": "The kiosk opens late so mornings are slow.",
+    "voice_transcript": "",
+    "gps_accuracy_m": 10.0
+   }
+  ],
+  "target": "t",
+  "should_fire": [
+   "outside_area"
+  ],
+  "should_not_fire": [
+   "too_fast",
+   "same_spot",
+   "copied_text",
+   "straight_lining",
+   "voice_vs_form",
+   "off_hours",
+   "shared_device",
+   "burst",
+   "clock_skew"
+  ],
+  "why": "Beyond 1 km the miss cannot be GPS error at a boundary household, so it weighs 2.0 and reaches the review threshold alone.",
+  "band": "flagged"
+ }
+}

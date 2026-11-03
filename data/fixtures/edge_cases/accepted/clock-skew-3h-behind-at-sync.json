@@ -1,0 +1,52 @@
+{
+ "written": "by hand in review (round 9b)",
+ "case": {
+  "id": "clock-skew-3h-behind-at-sync",
+  "check": "clock_skew",
+  "kind": "adversarial",
+  "title": "The phone's clock is 3 h behind the server's at sync: fires, but only corroborates",
+  "submissions": [
+   {
+    "ref": "t",
+    "contributor": "E01",
+    "device_id": "dev-e01",
+    "captured_at": "2026-03-12T07:10:00+03:00",
+    "duration_sec": 1500,
+    "lat": -0.08,
+    "lng": 34.77,
+    "water_source": "public_tap",
+    "satisfaction": [
+     3,
+     4,
+     2,
+     4,
+     3,
+     5,
+     2,
+     4
+    ],
+    "open_text": "The kiosk opens late so mornings are slow.",
+    "voice_transcript": "",
+    "device_synced_at": "2026-03-12T07:40:00+03:00",
+    "received_at": "2026-03-12T10:40:00+03:00"
+   }
+  ],
+  "target": "t",
+  "should_fire": [
+   "clock_skew"
+  ],
+  "should_not_fire": [
+   "too_fast",
+   "same_spot",
+   "copied_text",
+   "straight_lining",
+   "voice_vs_form",
+   "off_hours",
+   "shared_device",
+   "burst",
+   "outside_area"
+  ],
+  "why": "device_synced_at is 180 minutes before received_at, far beyond 5 minutes. On its own it weighs 1.5: watch.",
+  "band": "watch"
+ }
+}

@@ -1,0 +1,51 @@
+{
+ "written": "by hand in review (round 9b)",
+ "case": {
+  "id": "outside-area-30m-out-accuracy-8m-near-band",
+  "check": "outside_area",
+  "kind": "boundary",
+  "title": "30 m outside with an 8 m fix: beyond the 15 m floor, in the near band, so it only corroborates",
+  "submissions": [
+   {
+    "ref": "t",
+    "contributor": "E01",
+    "device_id": "dev-e01",
+    "captured_at": "2026-03-12T10:10:00+03:00",
+    "duration_sec": 1500,
+    "lat": -0.069729,
+    "lng": 34.77,
+    "water_source": "public_tap",
+    "satisfaction": [
+     3,
+     4,
+     2,
+     4,
+     3,
+     5,
+     2,
+     4
+    ],
+    "open_text": "The kiosk opens late so mornings are slow.",
+    "voice_transcript": "",
+    "gps_accuracy_m": 8.0
+   }
+  ],
+  "target": "t",
+  "should_fire": [
+   "outside_area"
+  ],
+  "should_not_fire": [
+   "too_fast",
+   "same_spot",
+   "copied_text",
+   "straight_lining",
+   "voice_vs_form",
+   "off_hours",
+   "shared_device",
+   "burst",
+   "clock_skew"
+  ],
+  "why": "30 m is more than max(8, 15) m outside, so outside_area fires; within 1 km it weighs 1.5, below the review threshold, so on its own the interview is only on the watch list.",
+  "band": "watch"
+ }
+}

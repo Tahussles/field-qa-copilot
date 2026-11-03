@@ -56,9 +56,7 @@
    }
   ],
   "target": "north",
-  "should_fire": [
-   "outside_area"
-  ],
+  "should_fire": [],
   "should_not_fire": [
    "too_fast",
    "same_spot",
@@ -67,8 +65,10 @@
    "voice_vs_form",
    "off_hours",
    "shared_device",
-   "burst"
+   "burst",
+   "outside_area"
   ],
   "why": "Kondele spans lat -0.09 to -0.07. -0.06995 is greater than -0.07, so the point is 0.00005 deg (about 5.6 m) north of the edge and outside. An implementation that rounds coordinates to 3 decimals (giving -0.070), adds a GPS tolerance buffer, or compares negative latitudes by absolute value (0.06995 < 0.07 looks 'inside') would wrongly stay silent. Only 2 submissions 85 min apart, so same_spot and burst cannot fire; texts share no content words; durations above 12 min; daytime; one contributor per device; no transcripts."
- }
+ },
+ "review": "Corrected in review: 5.6 m outside is inside GPS error (the 15 m floor)."
 }

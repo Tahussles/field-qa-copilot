@@ -1,0 +1,50 @@
+{
+ "written": "by hand in review (round 9b)",
+ "case": {
+  "id": "outside-area-30m-out-accuracy-40m-within-error",
+  "check": "outside_area",
+  "kind": "boundary",
+  "title": "30 m outside with a 40 m fix is inside the phone's own error and stays silent",
+  "submissions": [
+   {
+    "ref": "t",
+    "contributor": "E01",
+    "device_id": "dev-e01",
+    "captured_at": "2026-03-12T10:10:00+03:00",
+    "duration_sec": 1500,
+    "lat": -0.069729,
+    "lng": 34.77,
+    "water_source": "public_tap",
+    "satisfaction": [
+     3,
+     4,
+     2,
+     4,
+     3,
+     5,
+     2,
+     4
+    ],
+    "open_text": "The kiosk opens late so mornings are slow.",
+    "voice_transcript": "",
+    "gps_accuracy_m": 40.0
+   }
+  ],
+  "target": "t",
+  "should_fire": [],
+  "should_not_fire": [
+   "too_fast",
+   "same_spot",
+   "copied_text",
+   "straight_lining",
+   "voice_vs_form",
+   "off_hours",
+   "shared_device",
+   "burst",
+   "outside_area",
+   "clock_skew"
+  ],
+  "why": "The phone reports 40 m accuracy, so a point 30 m past the boundary may well be inside it.",
+  "band": "clear"
+ }
+}

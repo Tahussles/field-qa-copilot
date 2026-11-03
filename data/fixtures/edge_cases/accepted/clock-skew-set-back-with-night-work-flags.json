@@ -1,0 +1,52 @@
+{
+ "written": "by hand in review (round 9b)",
+ "case": {
+  "id": "clock-skew-set-back-with-night-work-flags",
+  "check": "clock_skew",
+  "kind": "adversarial",
+  "title": "Clock set back 3 h, yet the form still reads 21:40: off_hours and clock_skew together flag it",
+  "submissions": [
+   {
+    "ref": "t",
+    "contributor": "E01",
+    "device_id": "dev-e01",
+    "captured_at": "2026-03-12T21:40:00+03:00",
+    "duration_sec": 1500,
+    "lat": -0.08,
+    "lng": 34.77,
+    "water_source": "public_tap",
+    "satisfaction": [
+     3,
+     4,
+     2,
+     4,
+     3,
+     5,
+     2,
+     4
+    ],
+    "open_text": "The kiosk opens late so mornings are slow.",
+    "voice_transcript": "",
+    "device_synced_at": "2026-03-13T04:30:00+03:00",
+    "received_at": "2026-03-13T07:30:00+03:00"
+   }
+  ],
+  "target": "t",
+  "should_fire": [
+   "clock_skew",
+   "off_hours"
+  ],
+  "should_not_fire": [
+   "too_fast",
+   "same_spot",
+   "copied_text",
+   "straight_lining",
+   "voice_vs_form",
+   "shared_device",
+   "burst",
+   "outside_area"
+  ],
+  "why": "A forger who sets the clock back 3 h at 00:40 still lands after 21:00. 1.0 + 1.5 = 2.5.",
+  "band": "flagged"
+ }
+}
