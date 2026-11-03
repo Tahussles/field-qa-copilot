@@ -171,7 +171,8 @@ export function Detectors() {
         <p className="px-4 py-3.5 text-[12px] text-faint">
           Precision: how often a flag is right. Recall: how many planted fakes it catches. Single checks have low recall on purpose,
           since each targets one kind of fraud; the combined score fills the queue. Ground truth exists because the data is synthetic;
-          these numbers are scored against planted fraud.
+          these numbers are scored against planted fraud. Outside area never fires here: every synthetic interview is inside its
+          area, so it has no precision to show; it is for live phones.
         </p>
       </section>
 

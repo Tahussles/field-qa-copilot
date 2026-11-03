@@ -89,6 +89,7 @@ function pointFeatures(points: MapPoint[]) {
         band: p.band,
         flagged: p.band === "flagged",
         score: p.score,
+        live: p.source === "live",
         color: p.score >= 5 ? COLORS.crit : p.band === "flagged" ? COLORS.warn : PASSED,
       },
     })),
@@ -305,6 +306,19 @@ export function MapPanel({
               17, ["case", ["get", "flagged"], 6.5, 5],
             ],
             "circle-opacity": ["case", ["get", "flagged"], 0.95, 0.35],
+          },
+        });
+        // Submissions from a phone on /collect get an indigo ring, so a live demo stands out.
+        map.addLayer({
+          id: "live-ring",
+          type: "circle",
+          source: "points",
+          filter: ["==", ["get", "live"], true],
+          paint: {
+            "circle-radius": ["interpolate", ["linear"], ["zoom"], 11, 5, 14, 7.5, 17, 12],
+            "circle-color": "rgba(0,0,0,0)",
+            "circle-stroke-color": COLORS.accent,
+            "circle-stroke-width": 2,
           },
         });
         const home = homeBounds();
@@ -575,6 +589,10 @@ export function MapPanel({
               {label}
             </span>
           ))}
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block h-2.5 w-2.5 rounded-full border-2" style={{ borderColor: COLORS.accent }} />
+            Live phone
+          </span>
           <span>Hover a dot for details</span>
         </Glass>
 

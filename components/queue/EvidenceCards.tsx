@@ -74,7 +74,28 @@ export function EvidenceCard(props: CardProps) {
       return <SharedDevice {...props} />;
     case "burst":
       return <Burst {...props} />;
+    case "outside_area":
+      return <OutsideArea {...props} />;
   }
+}
+
+// outside_area ---------------------------------------------------------------------------
+
+function OutsideArea({ check, detail }: CardProps) {
+  const e = check.evidence as { area: string; distance: string; distance_m: number };
+  const s = detail.submission;
+  return (
+    <Card check={check}>
+      <p>
+        Recorded <B>{e.distance}</B> outside {detail.contributor.code}&apos;s assigned area, <B>{e.area}</B>.
+      </p>
+      <p className="mt-1 text-[12px] text-muted">
+        GPS <span className="font-mono">{s.lat?.toFixed(5)}, {s.lng?.toFixed(5)}</span>
+        {s.gps_accuracy_m != null && <> · accuracy ±{Math.round(s.gps_accuracy_m)} m</>}
+      </p>
+      <p className="mt-2 text-[12px] !text-faint">Decided by the area rule: the point is outside the area&apos;s boundary.</p>
+    </Card>
+  );
 }
 
 // too_fast ---------------------------------------------------------------------------

@@ -9,6 +9,7 @@ export const CHECK_ORDER: CheckKey[] = [
   "off_hours",
   "shared_device",
   "burst",
+  "outside_area",
 ];
 
 export const CHECK_LABEL: Record<CheckKey, string> = {
@@ -20,6 +21,7 @@ export const CHECK_LABEL: Record<CheckKey, string> = {
   off_hours: "off hours",
   shared_device: "shared device",
   burst: "burst",
+  outside_area: "outside area",
 };
 
 /** Check names for chips and card titles (sentence case, as in the prototype). */
@@ -32,6 +34,7 @@ export const CHECK_TITLE: Record<CheckKey, string> = {
   off_hours: "Off hours",
   shared_device: "Shared device",
   burst: "Burst",
+  outside_area: "Outside area",
 };
 
 /** "What it looks for", for the detectors table. */
@@ -44,6 +47,7 @@ export const CHECK_DESCRIPTION: Record<CheckKey, string> = {
   off_hours: "Captured between 21:00 and 06:00",
   shared_device: "One phone submitting for several accounts",
   burst: "Many submissions inside one hour",
+  outside_area: "GPS point outside the contributor's assigned area",
 };
 
 /** Checks whose evidence is strongest get the red card edge. */
@@ -59,6 +63,7 @@ export const CHECK_ACTION: Record<CheckKey, string> = {
   off_hours: "ask about the late entries and back-check the night submissions",
   shared_device: "verify each account in person; several accounts are using one phone",
   burst: "hold their points and confirm the submissions with them directly",
+  outside_area: "call them about where these interviews happened; the GPS is outside their assigned area",
 };
 
 export const SOURCE_LABEL: Record<string, string> = {
@@ -106,6 +111,7 @@ export function statusColor(status: ContributorStatus): string {
 const TIE_ORDER: CheckKey[] = [
   "shared_device",
   "same_spot",
+  "outside_area",
   "burst",
   "copied_text",
   "voice_vs_form",

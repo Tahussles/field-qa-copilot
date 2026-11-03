@@ -248,6 +248,9 @@ export function QueueView() {
                   <div className="flex items-center justify-between gap-2">
                     <span className="min-w-0 truncate">
                       <span className="font-mono">{shortId(item.submission_id)}</span>{" "}
+                      {item.source === "live" && (
+                        <span className="live-tag" title="Sent from a phone on /collect">Live · phone</span>
+                      )}{" "}
                       <span className="text-muted">
                         {item.contributor.code} · {fmtStamp(item.captured_at, tz)}
                       </span>
