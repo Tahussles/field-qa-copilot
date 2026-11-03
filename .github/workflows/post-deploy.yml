@@ -59,7 +59,6 @@ jobs:
       issues: write
     env:
       SHA: ${{ needs.gate.outputs.sha }}
-      SMOKE_BASE_URL: ${{ env.PROD_URL }}
       DEMO_PASSCODE: ${{ secrets.DEMO_PASSCODE }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
@@ -104,6 +103,8 @@ jobs:
       - run: pnpm exec playwright install --with-deps chromium
 
       - name: Smoke, landing and demo tests against production
+        env:
+          SMOKE_BASE_URL: ${{ env.PROD_URL }}
         run: pnpm exec playwright test --project=desktop
 
       - uses: astral-sh/setup-uv@v6
