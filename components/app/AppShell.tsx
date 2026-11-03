@@ -56,6 +56,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Suspense fallback={null}>
               <MobileNav />
             </Suspense>
+            <ReconnectingPill />
           </DemoProvider>
         </AppDataProvider>
       </PasscodeProvider>
@@ -172,9 +173,10 @@ function SidebarFrame({ active }: { active: string | null }) {
   );
 }
 
-function LiveStatus({ live, engine }: { live: "connecting" | "live" | "offline"; engine?: string }) {
-  const tone = live === "live" ? "st-ok" : live === "connecting" ? "st-warn" : "st-crit";
-  const label = live === "live" ? "Live updates on" : live === "connecting" ? "Connecting…" : "Live updates off";
+function LiveStatus({ live, engine }: { live: "connecting" | "live" | "reconnecting" | "offline"; engine?: string }) {
+  const tone = live === "live" ? "st-ok" : live === "offline" ? "st-crit" : "st-warn";
+  const label =
+    live === "live" ? "Live updates on" : live === "connecting" ? "Connecting…" : live === "reconnecting" ? "Reconnecting… (polling)" : "Live updates off";
   return (
     <span className={`st ${tone} text-[11.5px]`}>
       <span className="text-muted">
@@ -182,6 +184,21 @@ function LiveStatus({ live, engine }: { live: "connecting" | "live" | "offline";
         {engine && <span className="font-mono text-faint"> · engine {engine}</span>}
       </span>
     </span>
+  );
+}
+
+/** While Realtime is down the data polls every 3 s; say so, small and out of the way. */
+function ReconnectingPill() {
+  const { live } = useAppData();
+  if (live !== "reconnecting") return null;
+  return (
+    <Glass
+      className="glass-tint fixed top-3 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded-full px-3 py-1.5 text-[12px] text-ink-2"
+      role="status"
+      data-testid="reconnecting"
+    >
+      <span className="ai-spinner" aria-hidden /> Reconnecting… updating every 3 s
+    </Glass>
   );
 }
 

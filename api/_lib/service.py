@@ -303,6 +303,7 @@ def submission_detail(repo: Repository, submission_id: str) -> dict | None:
         "score": None if score is None else {**score, "band": ctx.params.band(score["score"])},
         "checks": checks,
         "review": reviews[-1] if reviews else None,
+        "ai_jobs": repo.jobs_for(submission_id),  # so a card can say the model was unavailable
     }
 
 

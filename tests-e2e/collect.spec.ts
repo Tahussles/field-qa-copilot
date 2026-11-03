@@ -99,6 +99,28 @@ test.describe("phone collect page", () => {
     expect(href).toMatch(/^\/app\/queue\/[0-9a-f-]{36}\?status=all$/);
   });
 
+  test("when the model is unavailable the result says the rules decided, with no spinner left", async ({ page, request }) => {
+    test.setTimeout(90_000);
+    // The phone is told its transcription failed and never sees a transcript: the AI path is down.
+    await page.route("**/rest/v1/ai_jobs*", (route) =>
+      route.fulfill({ json: [{ kind: "transcribe", status: "failed", model: null, latency_ms: null, created_at: new Date().toISOString() }] }),
+    );
+    await page.route(/\/api\/py\/submissions\/[0-9a-f-]{36}$/, async (route) => {
+      const response = await route.fetch();
+      const body = await response.json();
+      body.submission.voice_transcript = null;
+      await route.fulfill({ response, json: body });
+    });
+    await open(page, request, "E04");
+    await fill(page);
+    await record(page);
+    await page.getByTestId("submit").click();
+    await expect(page.getByRole("region", { name: "Rules result" }).getByTestId("band")).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("ai-unavailable").first()).toContainText("Checked by rules (AI unavailable)", { timeout: 20_000 });
+    await expect(page.getByRole("region", { name: "Final score" })).toBeVisible();
+    await expect(page.locator("[aria-busy=true]")).toHaveCount(0);
+  });
+
   test("saved offline, it waits on the phone; back online it syncs once, even when a response is lost", async ({ page, context, request }) => {
     test.setTimeout(120_000);
     await open(page, request, "E04");

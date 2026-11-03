@@ -2,7 +2,7 @@
 
 import "maplibre-gl/dist/maplibre-gl.css";
 
-import type { GeoJSONSource, LngLatBoundsLike, Map as MlMap, MapLayerMouseEvent } from "maplibre-gl";
+import type { GeoJSONSource, LngLatBoundsLike, Map as MlMap, MapLayerMouseEvent, StyleSpecification } from "maplibre-gl";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -45,6 +45,14 @@ const hotspotKey = (h: Hotspot) => `${h.contributor_code}-${h.first_date}-${h.ce
 const compactWidth = (h: Hotspot) => Math.round(70 + `${h.count} in one spot`.length * 6.6);
 
 /** "Oct 27" or "Oct 27 to 31" from local dates (YYYY-MM-DD). */
+// The basemap is a network dependency; the survey data is not. Past this, draw on a plain style.
+const BASEMAP_TIMEOUT_MS = 5000;
+const FALLBACK_STYLE: StyleSpecification = {
+  version: 8,
+  sources: {},
+  layers: [{ id: "background", type: "background", paint: { "background-color": "#0b0c0f" } }],
+};
+
 function dateSpan(first: string, last: string): string {
   const month = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleString("en-US", { month: "short", timeZone: "UTC" });
   const day = (d: string) => Number(d.slice(8, 10));
@@ -119,6 +127,64 @@ function areaFeatures(data: MapData) {
   };
 }
 
+
+function addOverlays(map: MlMap, current: MapData | null, labels: boolean) {
+  const areas = current ? areaFeatures(current) : null;
+  map.addSource("areas", { type: "geojson", data: areas?.shapes ?? { type: "FeatureCollection", features: [] } });
+  map.addSource("area-labels", { type: "geojson", data: areas?.labels ?? { type: "FeatureCollection", features: [] } });
+  map.addSource("points", { type: "geojson", data: pointFeatures(current?.points ?? []) });
+  map.addLayer({
+    id: "area-line",
+    type: "line",
+    source: "areas",
+    paint: { "line-color": "rgba(255,255,255,0.16)", "line-width": 1, "line-dasharray": [4, 4] },
+  });
+  if (labels) {
+    map.addLayer({
+      id: "area-label",
+      type: "symbol",
+      source: "area-labels",
+      layout: {
+        "text-field": ["get", "name"],
+        "text-font": ["Noto Sans Bold"],
+        "text-size": 9.5,
+        "text-letter-spacing": 0.13,
+        "text-anchor": "top",
+      },
+      paint: { "text-color": "rgba(255,255,255,0.36)", "text-halo-color": "#0b0c0f", "text-halo-width": 1 },
+    });
+  }
+  map.addLayer({
+    id: "points",
+    type: "circle",
+    source: "points",
+    layout: { "circle-sort-key": ["get", "score"] },
+    paint: {
+      "circle-color": ["get", "color"],
+      "circle-radius": [
+        "interpolate", ["linear"], ["zoom"],
+        11, ["case", ["get", "flagged"], 2.3, 1.6],
+        14, ["case", ["get", "flagged"], 3.4, 2.4],
+        17, ["case", ["get", "flagged"], 6.5, 5],
+      ],
+      "circle-opacity": ["case", ["get", "flagged"], 0.95, 0.35],
+    },
+  });
+  // Submissions from a phone on /collect get an indigo ring, so a live demo stands out.
+  map.addLayer({
+    id: "live-ring",
+    type: "circle",
+    source: "points",
+    filter: ["==", ["get", "live"], true],
+    paint: {
+      "circle-radius": ["interpolate", ["linear"], ["zoom"], 11, 5, 14, 7.5, 17, 12],
+      "circle-color": "rgba(0,0,0,0)",
+      "circle-stroke-color": COLORS.accent,
+      "circle-stroke-width": 2,
+    },
+  });
+}
+
 export function MapPanel({
   data,
   contributors,
@@ -145,6 +211,7 @@ export function MapPanel({
   const frame = useRef<number | null>(null);
 
   const [ready, setReady] = useState(false);
+  const [fallback, setFallback] = useState(false);
   const [moved, setMoved] = useState(false);
   const [flaggedOnly, setFlaggedOnly] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -265,62 +332,35 @@ export function MapPanel({
       mapRef.current = instance;
       instance.touchZoomRotate.disableRotation();
       instance.addControl(new maplibregl.ScaleControl({ maxWidth: 90, unit: "metric" }), "bottom-right");
+      // Never a blank map: if the basemap has not rendered within 5 s (or its style or tiles fail
+      // first), swap to a plain dark style and draw the areas, points and hotspots on that.
+      let basemapUp = false;
+      const plain = () => {
+        if (basemapUp || cancelled || !map || plainStyle) return;
+        plainStyle = true;
+        setFallback(true);
+        map.setStyle(FALLBACK_STYLE);
+      };
+      let plainStyle = false;
+      let loadedOnce = false;
+      const watchdog = window.setTimeout(plain, BASEMAP_TIMEOUT_MS);
+      instance.on("error", () => {
+        if (!basemapUp) plain();
+      });
+      instance.on("idle", () => {
+        if (!plainStyle && !basemapUp) {
+          basemapUp = true;
+          window.clearTimeout(watchdog);
+        }
+      });
+      // The overlays live in the style, so a style swap after load needs them added again.
+      instance.on("style.load", () => {
+        if (map && plainStyle && loadedOnce && !map.getSource("points")) addOverlays(map, dataRef.current, false);
+      });
       instance.on("load", () => {
         if (!map) return;
         tuneBasemap(map);
-        const current = dataRef.current;
-        const areas = current ? areaFeatures(current) : null;
-        map.addSource("areas", { type: "geojson", data: areas?.shapes ?? { type: "FeatureCollection", features: [] } });
-        map.addSource("area-labels", { type: "geojson", data: areas?.labels ?? { type: "FeatureCollection", features: [] } });
-        map.addSource("points", { type: "geojson", data: pointFeatures(current?.points ?? []) });
-        map.addLayer({
-          id: "area-line",
-          type: "line",
-          source: "areas",
-          paint: { "line-color": "rgba(255,255,255,0.16)", "line-width": 1, "line-dasharray": [4, 4] },
-        });
-        map.addLayer({
-          id: "area-label",
-          type: "symbol",
-          source: "area-labels",
-          layout: {
-            "text-field": ["get", "name"],
-            "text-font": ["Noto Sans Bold"],
-            "text-size": 9.5,
-            "text-letter-spacing": 0.13,
-            "text-anchor": "top",
-          },
-          paint: { "text-color": "rgba(255,255,255,0.36)", "text-halo-color": "#0b0c0f", "text-halo-width": 1 },
-        });
-        map.addLayer({
-          id: "points",
-          type: "circle",
-          source: "points",
-          layout: { "circle-sort-key": ["get", "score"] },
-          paint: {
-            "circle-color": ["get", "color"],
-            "circle-radius": [
-              "interpolate", ["linear"], ["zoom"],
-              11, ["case", ["get", "flagged"], 2.3, 1.6],
-              14, ["case", ["get", "flagged"], 3.4, 2.4],
-              17, ["case", ["get", "flagged"], 6.5, 5],
-            ],
-            "circle-opacity": ["case", ["get", "flagged"], 0.95, 0.35],
-          },
-        });
-        // Submissions from a phone on /collect get an indigo ring, so a live demo stands out.
-        map.addLayer({
-          id: "live-ring",
-          type: "circle",
-          source: "points",
-          filter: ["==", ["get", "live"], true],
-          paint: {
-            "circle-radius": ["interpolate", ["linear"], ["zoom"], 11, 5, 14, 7.5, 17, 12],
-            "circle-color": "rgba(0,0,0,0)",
-            "circle-stroke-color": COLORS.accent,
-            "circle-stroke-width": 2,
-          },
-        });
+        addOverlays(map, dataRef.current, !plainStyle);
         const home = homeBounds();
         if (home) map.fitBounds(home, { padding: 28, duration: 0 });
         map.on("movestart", (e) => {
@@ -346,6 +386,7 @@ export function MapPanel({
         map.on("idle", () => {
           if (map?.getLayer("points")) setRendered(map.queryRenderedFeatures({ layers: ["points"] }).length);
         });
+        loadedOnce = true;
         setReady(true);
         layout();
       });
@@ -436,11 +477,17 @@ export function MapPanel({
         ref={wrap}
         className="relative aspect-[4/3] overflow-hidden rounded-b-[10px] bg-[#0b0c0f] lg:aspect-[3/2]"
         data-map-ready={ready}
+        data-map-fallback={fallback}
         data-points={data?.points.length ?? 0}
         data-rendered-points={rendered}
       >
         {/* Full size, not absolute: MapLibre's own CSS sets position: relative on this element. */}
         <div ref={container} className="h-full w-full" />
+        {fallback && (
+          <p className="pointer-events-none absolute bottom-2 left-3 z-10 text-[11px] text-faint" data-testid="map-fallback">
+            Basemap unavailable · areas and submissions on a plain background
+          </p>
+        )}
 
         {/* Hotspot rings (dashed, pulsing), live pulses, chips and the open card. */}
         <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden={!placed.length}>
