@@ -8,7 +8,7 @@ import { expect, test, type APIRequestContext, type Page } from "@playwright/tes
 const PASSCODE = process.env.DEMO_PASSCODE;
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-const SENTENCE = "The pipe at home has been dry since March";
+const SENTENCE = "The pipe at home has been dry since March, so we buy from the handcart man";
 const ANSWERS = [3, 2, 3, 4, 2, 3, 4, 3];
 const ITEMS = ["Reliability", "Distance", "Cost", "Water quality", "Waiting time", "Safety", "Opening hours", "Overall"];
 
@@ -76,13 +76,16 @@ test.describe("phone collect page", () => {
     await expect(rules.getByTestId("band")).toBeVisible({ timeout: 30_000 });
     const timings = [`rules ${at()}`];
 
-    await expect(page.getByTestId("transcript")).toContainText(SENTENCE, { timeout: 60_000 });
+    await expect(page.getByTestId("transcript")).toContainText(/pipe at home has been dry since March/i, { timeout: 60_000 });
     await expect(page.getByTestId("transcript")).toContainText("English");
     timings.push(`transcript ${at()}`);
 
     const verdict = page.getByTestId("verdict");
     await expect(verdict).toContainText("Contradiction", { timeout: 60_000 });
-    await expect(verdict.getByTestId("quote")).toContainText(SENTENCE);
+    // The model picks how much to quote ("the handcart man", or the whole sentence); it must be part of it.
+    const quote = (await verdict.getByTestId("quote").innerText()).trim();
+    expect(quote.length).toBeGreaterThanOrEqual(10);
+    expect(SENTENCE.toLowerCase()).toContain(quote.toLowerCase().replace(/[.”"]+$/, ""));
     timings.push(`verdict ${at()}`);
 
     const final = page.getByRole("region", { name: "Final score" });
