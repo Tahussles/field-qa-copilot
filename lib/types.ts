@@ -224,7 +224,8 @@ export interface IngestResponse {
   id: string;
   client_submission_id: string;
   contributor: ContributorRef;
-  captured_at: string;
+  captured_at: string; // on the demo's field clock while projects.as_of is set
+  device_captured_at?: string | null; // the phone's own clock (live submissions)
   score: number | null;
   flagged: boolean | null;
   band: Band | null;

@@ -124,6 +124,16 @@ def _begin(repo: Repository, row: dict, holder: str, heal: bool) -> dict:
         pause = min(pause * 2, 0.4)
 
 
+def field_time(clock: dict, real: datetime, now: datetime) -> datetime:
+    """A real time on the demo's field clock: as_of, running at real speed since it was last set.
+
+    A phone clock ahead of the server's lands at the field's "now", never after it.
+    """
+    as_of = datetime.fromisoformat(clock["as_of"])
+    set_at = datetime.fromisoformat(clock["clock_set_at"]) if clock.get("clock_set_at") else now
+    return as_of + (min(real, now) - set_at)
+
+
 def needs_heal(stored_score: dict | None) -> bool:
     """A stored submission is unfinished if it has no score, or one from an older engine."""
     return stored_score is None or stored_score.get("engine_version") != __version__
@@ -136,6 +146,7 @@ def _view(ctx: ProjectContext, row: dict, score: float | None, flagged: bool | N
         "client_submission_id": row["client_submission_id"],
         "contributor": _contributor_view(ctx, row["contributor_id"]),
         "captured_at": row["captured_at"],
+        "device_captured_at": row.get("device_captured_at"),
         "synced_at": row["synced_at"],
         "score": score,
         "flagged": flagged,
@@ -165,13 +176,21 @@ def ingest(repo: Repository, payload: SubmissionIn) -> tuple[int, dict]:
     contributor = ctx.by_code.get(payload.contributor_code)
     if contributor is None:
         raise UnknownContributor(payload.contributor_code)
+    now = datetime.now(timezone.utc)  # the server decides when it received it
+    captured, synced, device_captured = payload.captured_at, now, None
+    if payload.source == "live":
+        device_captured = payload.captured_at
+        clock = repo.clock()
+        if clock.get("as_of"):  # a demo: the phone's interview happens on the field clock
+            captured, synced = field_time(clock, captured, now), field_time(clock, now, now)
     row = {
         "id": str(uuid.uuid4()),
         "contributor_id": contributor["id"],
         "client_submission_id": payload.client_submission_id,
         "device_id": payload.device_id,
-        "captured_at": _iso(payload.captured_at),
-        "synced_at": _iso(datetime.now(timezone.utc)),  # the server decides when it received it
+        "captured_at": _iso(captured),
+        "device_captured_at": _iso(device_captured) if device_captured else None,
+        "synced_at": _iso(synced),
         "duration_sec": payload.duration_sec,
         "lat": payload.lat,
         "lng": payload.lng,
@@ -273,7 +292,8 @@ def submission_detail(repo: Repository, submission_id: str) -> dict | None:
     reviews = repo.reviews(submission_id)
     return {
         "submission": {k: row.get(k) for k in (
-            "id", "client_submission_id", "device_id", "captured_at", "synced_at", "duration_sec", "lat", "lng",
+            "id", "client_submission_id", "device_id", "captured_at", "device_captured_at", "synced_at",
+            "duration_sec", "lat", "lng",
             "gps_accuracy_m", "answers", "voice_transcript", "transcript_lang", "voice_note_path", "source")},
         "contributor": _contributor_view(ctx, row["contributor_id"]),
         "score": None if score is None else {**score, "band": ctx.params.band(score["score"])},

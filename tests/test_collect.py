@@ -2,13 +2,16 @@
 
 import time
 import uuid
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from fastapi.testclient import TestClient
 
 from api._lib import collect
+from api._lib.repo import InMemoryRepo
 from api.index import app, collect_key, get_repo, passcode_value
-from tests.test_api import AUTH, PASSCODE, make_repo, payload
+from engine import Params
+from tests.test_api import AREAS, AUTH, CONTRIBUTORS, PASSCODE, PROJECT, make_repo, payload
 
 KEY = collect.secret("test-service-key")
 RUN = str(uuid.uuid4())
@@ -113,3 +116,75 @@ def test_switching_contributor_on_one_phone_is_a_shared_device(client):
     shared = next(f for f in second["fired"] if f["key"] == "shared_device")
     assert shared["evidence"]["account_count"] == 2 and {a["code"] for a in shared["evidence"]["accounts"]} == {"P01", "P02"}
     assert any(c["submission_id"] == first["id"] for c in second["changed"])  # the first one flips too
+
+
+# The field clock ---------------------------------------------------------------------
+
+AS_OF = datetime(2026, 10, 31, 8, 0, tzinfo=timezone(timedelta(hours=3)))  # the demo's 08:00 in Kisumu
+
+
+def clocked(as_of, set_minutes_ago=10):
+    """A demo project whose field clock was set to as_of a few real minutes ago."""
+    set_at = datetime.now(timezone.utc) - timedelta(minutes=set_minutes_ago)
+    project = {**PROJECT, "as_of": as_of and as_of.isoformat(), "clock_set_at": as_of and set_at.isoformat()}
+    repo = InMemoryRepo(project, CONTRIBUTORS, AREAS, Params().to_config())
+    repo.set_demo_run(RUN)
+    return repo
+
+
+def send(repo, body):
+    app.dependency_overrides[get_repo] = lambda: repo
+    app.dependency_overrides[passcode_value] = lambda: PASSCODE
+    try:
+        response = TestClient(app).post("/api/py/submissions", headers=AUTH, json=body)
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+def at(value: str) -> datetime:
+    return datetime.fromisoformat(value)
+
+
+def test_in_a_demo_a_phone_interview_lands_on_the_field_clock_and_keeps_its_own_time():
+    repo = clocked(AS_OF, set_minutes_ago=10)
+    phone_time = datetime.now(timezone.utc) - timedelta(minutes=2)  # whatever hour it is where the phone is
+    body = send(repo, {**live(), "captured_at": phone_time.isoformat()})
+    # 8 real minutes after the clock was set: 08:08 in Kisumu, whatever the phone's own time zone says.
+    assert abs(at(body["captured_at"]) - (AS_OF + timedelta(minutes=8))) < timedelta(seconds=5)
+    assert at(body["device_captured_at"]) == phone_time
+    assert abs(at(body["synced_at"]) - (AS_OF + timedelta(minutes=10))) < timedelta(seconds=5)
+    assert "off_hours" not in [f["key"] for f in body["fired"]]
+    stored = repo.submission(body["id"])
+    assert stored["captured_at"] == body["captured_at"] and stored["device_captured_at"] == body["device_captured_at"]
+
+
+def test_a_phone_clock_ahead_of_the_server_lands_at_the_field_clocks_now():
+    repo = clocked(AS_OF, set_minutes_ago=10)
+    ahead = datetime.now(timezone.utc) + timedelta(minutes=1)  # inside the allowed skew
+    body = send(repo, {**live(), "captured_at": ahead.isoformat()})
+    assert at(body["captured_at"]) <= at(body["synced_at"])
+    assert abs(at(body["captured_at"]) - (AS_OF + timedelta(minutes=10))) < timedelta(seconds=5)
+
+
+def test_without_a_demo_clock_a_phone_keeps_its_own_time():
+    repo = clocked(None)
+    phone_time = datetime.now(timezone.utc) - timedelta(minutes=2)
+    body = send(repo, {**live(), "captured_at": phone_time.isoformat()})
+    assert at(body["captured_at"]) == phone_time and at(body["device_captured_at"]) == phone_time
+
+
+def test_the_simulator_already_sends_field_times_and_is_not_mapped():
+    repo = clocked(AS_OF)
+    sent = payload("E01", hour=9)
+    body = send(repo, sent)
+    assert at(body["captured_at"]) == at(sent["captured_at"]) and body["device_captured_at"] is None
+
+
+def test_moving_the_field_clock_restarts_it_from_the_new_as_of():
+    repo = clocked(AS_OF, set_minutes_ago=30)
+    later = AS_OF + timedelta(hours=4)
+    repo.set_as_of(later.isoformat(), forward_only=True)  # a demo step; the clock now runs from 12:00
+    body = send(repo, {**live(), "captured_at": datetime.now(timezone.utc).isoformat()})
+    assert abs(at(body["captured_at"]) - later) < timedelta(seconds=5)
