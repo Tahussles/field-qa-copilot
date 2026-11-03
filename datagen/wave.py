@@ -75,6 +75,8 @@ class Submission:
     synced_at: datetime | None = None
     id: str = ""
     client_submission_id: str = ""
+    # The phone's own clock at sync (hard mode only; the normal waves carry no phone clock).
+    device_synced_at: datetime | None = None
 
     def __post_init__(self) -> None:
         self.point = (round(self.point[0], 6), round(self.point[1], 6))
@@ -649,6 +651,9 @@ def db_rows(wave: Wave) -> dict[str, list[dict]]:
                 "transcript_lang": "en",
                 "source": "synthetic",
                 "created_at": _utc(s.synced_at),
+                # Only hard mode has phone clocks: a phone's clock at sync against the server's receipt.
+                **({"device_synced_at": _utc(s.device_synced_at), "received_at": _utc(s.synced_at)}
+                   if s.device_synced_at else {}),
             }
             for s in wave.submissions
         ],

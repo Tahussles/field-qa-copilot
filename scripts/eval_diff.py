@@ -90,6 +90,15 @@ def render(base: dict, head: dict, base_hard: dict | None, head_hard: dict | Non
             lines.append(row(label, before, head_hard[side]["combined"]))
         if not base_hard:
             lines += ["", "main has no recorded verdicts yet, so there is nothing to compare against."]
+        clock = head_hard.get("clock_skew")
+        if clock:
+            lines += ["", f"clock_skew in this PR's waves ({clock['about']}): off vs on.", "",
+                      "| | precision off | precision on | Δ | recall off | recall on | Δ |",
+                      "|---|---|---|---|---|---|---|"]
+            for label, side in (("rules only", "rules"), ("rules + AI", "rules_ai")):
+                lines.append(row(label, clock["without"][side], clock["with"][side]))
+            lines += ["", f"Night forms missed per wave: {clock['without']['night_missed']} without clock_skew, "
+                          f"{clock['with']['night_missed']} with it."]
         lines += ["", "</details>"]
 
     lines += ["", f"<sub>{head_sha[:7]} vs main {base_sha[:7]} · scripts/evaluate.py · no model calls</sub>", ""]

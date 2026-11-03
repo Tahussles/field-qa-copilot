@@ -406,8 +406,11 @@ def run_hard(args, params: Params) -> int:
 
     # The engine's current params ("rules_ai"), the model-only copy at its old full weight ("rules_ai_before",
     # engine 0.3.0), and on the tuning seeds a sweep of that weight.
+    # And both sides with clock_skew weighing nothing: what the night forger's clock trick gets past without it.
+    no_clock = {"weights": {**params.weights, "clock_skew": 0.0}}
     variants = {"rules": (False, {}), "rules_ai": (True, {}),
-                "rules_ai_before": (True, {"ai_paraphrase_weight": params.weights["copied_text"]})}
+                "rules_ai_before": (True, {"ai_paraphrase_weight": params.weights["copied_text"]}),
+                "rules_no_clock": (False, no_clock), "rules_ai_no_clock": (True, no_clock)}
     sweep_weights = (1.0, 1.5, 2.0, 3.0)
     per_seed = {}
     for seed, (rows, calls) in waves.items():
@@ -491,6 +494,14 @@ def run_hard(args, params: Params) -> int:
             "tuning_after": side("rules_ai", tuning)["combined"],
         },
         "gaps": gaps,
+        "clock_skew": {
+            "about": "the night forger sets the phone clock back 3 h; every other phone drifts at most 2 minutes",
+            "without": {"rules": side("rules_no_clock", held)["combined"],
+                        "rules_ai": side("rules_ai_no_clock", held)["combined"],
+                        "night_missed": side("rules_ai_no_clock", held)["misses_by_fraud_type"]["night"]},
+            "with": {"rules": rules["combined"], "rules_ai": rules_ai["combined"],
+                     "night_missed": rules_ai["misses_by_fraud_type"]["night"]},
+        },
         "unmeasured": {"outside_area": "every synthetic point is inside its area, so it never fires here"},
     }
     args.out.mkdir(parents=True, exist_ok=True)

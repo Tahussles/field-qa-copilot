@@ -12,6 +12,9 @@ planted fraud after the fact, with its own random streams:
   man") while the form says piped_home. The keyword rule hears "pipe" and agrees.
 - E07 becomes a careful curbstoner: the tea-shop forms are walked 60 to 120 m
   apart, with 20+ minute gaps and believable durations.
+- The night forger sets the phone clock back 3 hours for the night's forms, so
+  22:00-01:00 reads 19:00-22:00, and syncs next morning before putting it right.
+  Every other phone has an honest clock, drifting up to 2 minutes either way.
 
 The labels (fraud_type) are unchanged, so precision and recall stay comparable.
 """
@@ -25,6 +28,9 @@ from . import geo
 from .ids import rng_for
 from .text import SWAPS
 from .wave import Submission, Wave, build_wave
+
+CLOCK_SET_BACK = timedelta(hours=3)
+HONEST_DRIFT_SECONDS = 120
 
 HARD_TUNING_SEEDS = (211, 212)
 HARD_HELD_OUT_SEEDS = (201, 202)
@@ -118,6 +124,18 @@ def _careful_curbstoner(seed: int, subs: list[Submission]) -> None:
             when = sub.captured_at
 
 
+def _phone_clocks(seed: int, subs: list[Submission]) -> None:
+    """Every phone reports its clock at sync. The night forger's reads 3 h behind for the night's forms."""
+    rng = rng_for(seed, "hard", "clock")
+    for sub in subs:
+        if sub.fraud_type == "night":
+            sub.captured_at -= CLOCK_SET_BACK
+            sub.device_synced_at = sub.synced_at - CLOCK_SET_BACK
+        else:
+            sub.device_synced_at = sub.synced_at + timedelta(seconds=rng.uniform(-HONEST_DRIFT_SECONDS,
+                                                                                  HONEST_DRIFT_SECONDS))
+
+
 def build_hard_wave(seed: int) -> Wave:
     if seed == 20261031:
         raise ValueError("hard mode never uses the demo seed")
@@ -130,5 +148,6 @@ def build_hard_wave(seed: int) -> Wave:
             template = rng.choice(SUBTLE[_voice_source(sub.voice_transcript)])
             sub.voice_transcript = template.format(month=rng.choice(MONTHS))
     _careful_curbstoner(seed, wave.submissions)
+    _phone_clocks(seed, wave.submissions)
     wave.submissions.sort(key=lambda s: (s.captured_at, s.contributor.code))
     return wave
