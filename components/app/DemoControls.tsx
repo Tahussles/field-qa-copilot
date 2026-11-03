@@ -6,7 +6,7 @@ import { useWithPasscode } from "@/components/app/Passcode";
 import { useToast } from "@/components/app/Toasts";
 import { Glass } from "@/components/ui/Glass";
 import { api, ApiError } from "@/lib/api";
-import { DEFAULT_TZ, fmtDateTime, fmtStamp, localDate } from "@/lib/format";
+import { DEFAULT_TZ, fmtDateTime, fmtStamp, fmtTime, localDate } from "@/lib/format";
 import type { DemoMoment, DemoProgress, DemoStatus, DemoStepResult } from "@/lib/types";
 
 /** Wall-clock seconds per field hour. */
@@ -61,6 +61,7 @@ function DemoRunner({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [last, setLast] = useState<string | null>(null);
+  const [phone, setPhone] = useState<{ url: string; svg: string; expires: number } | null>(null);
 
   const runningRef = useRef(false);
   const speedRef = useRef<number>(speed);
@@ -219,6 +220,24 @@ function DemoRunner({ open, onClose }: { open: boolean; onClose: () => void }) {
       toast({ tone: "error", title: "Skip failed", body: e instanceof Error ? e.message : undefined });
     } finally {
       setBusy(null);
+      void load(); // progress and spend
+    }
+  }
+
+  async function showPhone() {
+    setBusy("Making a phone code…");
+    try {
+      const minted = await withPasscode((code) => api.collectToken(code));
+      if (minted) {
+        const url = `${window.location.origin}${minted.path}`;
+        const QRCode = (await import("qrcode")).default;
+        const svg = await QRCode.toString(url, { type: "svg", margin: 1, color: { dark: "#08090a", light: "#ffffff" } });
+        setPhone({ url, svg, expires: minted.expires_at });
+      }
+    } catch (e) {
+      toast({ tone: "error", title: "Could not make a phone code", body: e instanceof Error ? e.message : undefined });
+    } finally {
+      setBusy(null);
     }
   }
 
@@ -231,6 +250,7 @@ function DemoRunner({ open, onClose }: { open: boolean; onClose: () => void }) {
       if (res) {
         setClock(null);
         setLast(null);
+        setPhone(null); // the reset revoked its token
         await load(); // fresh progress first, so the panel never shows the old run next to the toast
         toast({
           tone: "ok",
@@ -293,7 +313,7 @@ function DemoRunner({ open, onClose }: { open: boolean; onClose: () => void }) {
           <div className="mt-3 flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={() => (running ? pause() : start())}
+              onClick={() => (running ? (pause(), void load()) : start())}
               disabled={Boolean(busy) || progress.done}
               className="btn btn-primary btn-sm"
             >
@@ -341,6 +361,33 @@ function DemoRunner({ open, onClose }: { open: boolean; onClose: () => void }) {
               );
             })}
           </ol>
+
+          <div className="mt-3.5 border-t border-line pt-3" data-testid="phone-section">
+            <div className="flex items-center gap-2">
+              <h3 className="text-[11.5px] font-medium text-muted">Phone</h3>
+              <button type="button" onClick={() => void showPhone()} disabled={Boolean(busy)} className="btn btn-sm ml-auto">
+                {phone ? "New code" : "Show QR for /collect"}
+              </button>
+            </div>
+            {phone && (
+              <div className="mt-2 flex items-start gap-3">
+                <div className="h-[108px] w-[108px] flex-none overflow-hidden rounded-md bg-white p-1" data-testid="phone-qr"
+                  // QRCode's own SVG for a URL we made: no user content in it.
+                  dangerouslySetInnerHTML={{ __html: phone.svg }} />
+                <div className="min-w-0 text-[11.5px] text-muted">
+                  <a href={phone.url} target="_blank" rel="noreferrer" className="block break-all font-mono text-ink-2 hover:text-accent" data-testid="phone-url">
+                    {phone.url.replace(/^https?:\/\//, "")}
+                  </a>
+                  <p className="mt-1">Valid until {fmtTime(new Date(phone.expires * 1000).toISOString(), tz)} (30 min); a reset revokes it.</p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <p className="mt-3 text-[11.5px] text-muted" data-testid="ai-spend">
+            AI spend <span className="font-mono text-ink-2">${status.ai_spend.run_usd.toFixed(4)}</span> this run ({status.ai_spend.run_jobs} jobs) ·{" "}
+            <span className="font-mono text-ink-2">${status.ai_spend.all_time_usd.toFixed(2)}</span> all time
+          </p>
 
           <div className="mt-3.5 border-t border-line pt-3">
             {confirming ? (

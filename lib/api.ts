@@ -82,6 +82,8 @@ export const api = {
     request<{ queued: boolean; job_id: string | null }>("/brief/regenerate", { method: "POST", passcode }),
   briefAudio: (briefId: string) => request<{ url: string }>(`/brief/${briefId}/audio`, { method: "POST" }),
   hardEval: () => request<HardEval>("/eval/hard"),
+  collectToken: (passcode: string) =>
+    request<{ token: string; expires_at: number; path: string }>("/collect/token", { method: "POST", passcode, body: "{}" }),
   demoStatus: (passcode: string) => request<DemoStatus>("/demo/status", { passcode }),
   demoStep: (passcode: string, body: { run_id: string; count?: number; until_field_time?: string }) =>
     request<DemoStepResult>("/demo/step", { method: "POST", passcode, body: JSON.stringify(body) }),
