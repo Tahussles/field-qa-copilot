@@ -468,3 +468,13 @@ def test_a_job_whose_submission_a_reset_removed_is_skipped_not_failed():
     results = [jobs.run_job(repo, FakeProvider(), job_id=job_id) for job_id in queued]
     assert {r["status"] for r in results} == {"skipped"}
     assert all(repo.job(job_id)["output"]["reason"].startswith("its submission was removed") for job_id in queued)
+
+
+def test_a_submission_deleted_after_its_job_was_claimed_skips_the_job(repo):
+    body = payload()
+    body["voice_transcript"] = PIPE_DRY
+    created = service.ingest(repo, SubmissionIn(**body))[1]
+    job = dict(repo.claim_job(created["ai_jobs"][0]["id"]))
+    job["submission_id"] = "00000000-0000-4000-8000-000000000000"  # what the claim saw; a reset deleted it since
+    result = jobs.run_job(repo, FakeProvider(), job=job)
+    assert result["status"] == "skipped" and repo.job(job["id"])["output"]["reason"] == jobs.GONE

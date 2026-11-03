@@ -232,7 +232,9 @@ def run_job(repo: Repository, provider: Provider, job_id: str | None = None, job
         values = {"status": "done", "output": output, **_usage_fields(usage)}
     except AIUnavailable as error:
         values = {"status": "failed", "error": str(error)[:500], **_usage_fields(error.usage)}
-    except (NotFound, LookupError) as error:
+    except NotFound as error:  # deleted after the claim, by a demo reset: nothing left to judge
+        values = {"status": "skipped", "output": {"reason": GONE if job["kind"] not in ("brief", "tts") else f"gone: {error}"}}
+    except LookupError as error:
         values = {"status": "failed", "error": f"gone: {error}"[:500]}
     except Exception as error:  # noqa: BLE001  a job failure must not take the worker down
         log.exception("job %s failed", job["id"])
