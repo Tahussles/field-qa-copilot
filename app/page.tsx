@@ -15,9 +15,14 @@ export default function Home() {
             <span className="logo" aria-hidden />
             Field QA Copilot
           </div>
-          <Link href="/app" className="btn btn-ghost">
-            Open the app <kbd className="kbd">↵</kbd>
-          </Link>
+          <nav className="flex items-center gap-1">
+            <Link href="/architecture" className="btn btn-ghost">
+              How it works
+            </Link>
+            <Link href="/app" className="btn btn-ghost">
+              Open the app <kbd className="kbd">↵</kbd>
+            </Link>
+          </nav>
         </Glass>
 
         <section className="hero">
@@ -44,10 +49,10 @@ export default function Home() {
         <section className="how" aria-label="How it works">
           <div>
             <span className="n">01 · Check</span>
-            <h2>Eight checks on every interview</h2>
+            <h2>Ten checks on every interview</h2>
             <p>
-              Too fast, same spot, copied answers, straight-lining, voice note vs form, off-hours, shared device and bursts.
-              Cheap, explainable, run the moment data syncs.
+              Too fast, same spot, copied answers, straight-lining, voice note vs form, off-hours, shared device, bursts,
+              outside the area and a phone clock that is off. Cheap, explainable, run the moment data syncs.
             </p>
           </div>
           <div>
