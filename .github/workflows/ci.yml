@@ -1,0 +1,191 @@
+name: ci
+
+# Every PR and every push to main. No job has a model key or spends money: hard mode scores
+# rules + AI from the recorded verdicts in data/fixtures/ai_verdicts/.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Any request that tries to leave the runner fails fast (the Python tests must not need the network).
+  OFFLINE_PROXY: http://127.0.0.1:9
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv sync --locked
+      - name: pytest (no network, no AI keys)
+        env:
+          HTTP_PROXY: ${{ env.OFFLINE_PROXY }}
+          HTTPS_PROXY: ${{ env.OFFLINE_PROXY }}
+          NO_PROXY: testserver,localhost,127.0.0.1
+          ANTHROPIC_API_KEY: ""
+          ELEVENLABS_API_KEY: ""
+        run: uv run --offline pytest -q
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm build
+
+  eval-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv sync --locked
+      - name: Held-out precision >= 0.85 and recall >= 0.97 (seeds 101-110)
+        run: uv run scripts/evaluate.py --min-precision 0.85 --min-recall 0.97
+
+  hard-mode:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv sync --locked
+      - name: Rules only
+        run: uv run scripts/evaluate.py --hard --rules-only --out "$RUNNER_TEMP/rules-only"
+      - name: Rules + AI from the recorded verdicts (fails if any is missing or stale)
+        run: uv run scripts/evaluate.py --hard
+      - name: The committed hard.json (served at /api/py/eval/hard) matches the code
+        run: |
+          git show HEAD:data/eval/hard.json > "$RUNNER_TEMP/committed.json"
+          uv run python - "$RUNNER_TEMP/committed.json" data/eval/hard.json <<'EOF'
+          import json, sys
+          committed, fresh = (json.load(open(p)) for p in sys.argv[1:])
+          stale = sorted(k for k in fresh.keys() | committed.keys()
+                         if k != "generated_at" and committed.get(k) != fresh.get(k))
+          if stale:
+              sys.exit(f"data/eval/hard.json is out of date ({', '.join(stale)}): "
+                       "run uv run scripts/evaluate.py --hard and commit it")
+          print("data/eval/hard.json is current")
+          EOF
+
+  eval-diff:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Evaluate this PR
+        run: |
+          uv sync --locked
+          uv run scripts/evaluate.py
+          uv run scripts/evaluate.py --hard
+      - name: Evaluate main
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git worktree add "$RUNNER_TEMP/base" "$BASE"
+          cd "$RUNNER_TEMP/base"
+          uv sync --locked
+          uv run scripts/evaluate.py
+          # Hard mode on main only once main records its verdicts (it never calls a model in CI).
+          if [ -d data/fixtures/ai_verdicts ]; then uv run scripts/evaluate.py --hard; fi
+      - name: Post or update the eval comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          base="$RUNNER_TEMP/base/data/eval"
+          hard=()
+          [ -f "$base/hard.json" ] && hard+=(--base-hard "$base/hard.json")
+          uv run scripts/eval_diff.py --base "$base/report.json" --head data/eval/report.json \
+            "${hard[@]}" --head-hard data/eval/hard.json --base-sha "$BASE_SHA" --head-sha "$HEAD_SHA" > comment.md
+          cat comment.md >> "$GITHUB_STEP_SUMMARY"
+          id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
+                 --jq '.[] | select(.body | startswith("<!-- eval-diff -->")) | .id' | head -n1)
+          if [ -n "$id" ]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -F body=@comment.md > /dev/null
+            echo "updated comment $id"
+          else
+            gh api -X POST "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -F body=@comment.md > /dev/null
+            echo "posted a new comment"
+          fi
+
+  attribution-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Check commit messages and author emails
+        env:
+          ALLOWED_AUTHOR_EMAILS: "173319783+Tahussles@users.noreply.github.com"
+          EVENT_NAME: ${{ github.event_name }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_AFTER: ${{ github.event.after }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          zero=0000000000000000000000000000000000000000
+          pattern='co-authored-by|claude|anthropic|generated with'
+
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            range="$PR_BASE..$PR_HEAD"
+          elif [ "$PUSH_AFTER" = "$zero" ]; then
+            echo "Branch deletion, nothing to check."
+            exit 0
+          elif [ "$PUSH_BEFORE" = "$zero" ] || ! git cat-file -e "$PUSH_BEFORE^{commit}" 2>/dev/null; then
+            # New branch or tag (or an old tip we can't see): check its whole history.
+            range="$PUSH_AFTER"
+          else
+            range="$PUSH_BEFORE..$PUSH_AFTER"
+          fi
+
+          echo "Checking commits in $range"
+          failed=0
+          for sha in $(git rev-list "$range"); do
+            label=$(git log -1 --format='%h %s' "$sha")
+            email=$(git log -1 --format='%ae' "$sha")
+            if git log -1 --format='%B' "$sha" | grep -qiE "$pattern"; then
+              echo "::error::$label -> message contains a forbidden attribution string"
+              failed=1
+            fi
+            case " $ALLOWED_AUTHOR_EMAILS " in
+              *" $email "*) ;;
+              *) echo "::error::$label -> author email $email is not allowed"; failed=1 ;;
+            esac
+          done
+
+          if [ "$failed" -eq 0 ]; then
+            echo "All commits passed."
+          fi
+          exit "$failed"
