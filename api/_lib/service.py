@@ -291,11 +291,13 @@ class Snapshot:
     scored: list[ScoredSubmission]
     fired: dict[str, list[str]]
     active_reviews: dict[str, dict]
+    sources: dict[str, str]  # synthetic, simulator or live (a phone)
 
 
 def snapshot(repo: Repository) -> Snapshot:
     ctx = context(repo)
-    subs = {r["id"]: Submission.from_row(r) for r in repo.submissions(light=True)}
+    rows = repo.submissions(light=True)
+    subs = {r["id"]: Submission.from_row(r) for r in rows}
     fired: dict[str, list[CheckResult]] = {}
     for r in repo.fired_checks(__version__):
         fired.setdefault(r["submission_id"], []).append(CheckResult(r["check_key"], True, r["weight"], {}))
@@ -305,7 +307,8 @@ def snapshot(repo: Repository) -> Snapshot:
         for s in repo.scores() if s["submission_id"] in subs
     ]
     active = {r["submission_id"]: r for r in repo.reviews() if r.get("revoked_at") is None}
-    return Snapshot(ctx, subs, scored, {k: sorted(c.key for c in v) for k, v in fired.items()}, active)
+    return Snapshot(ctx, subs, scored, {k: sorted(c.key for c in v) for k, v in fired.items()}, active,
+                    {r["id"]: r.get("source") for r in rows})
 
 
 def queue(repo: Repository, status: str, contributor: str | None, band: str, limit: int) -> dict:
@@ -327,6 +330,7 @@ def queue(repo: Repository, status: str, contributor: str | None, band: str, lim
             "score": s.score,
             "band": band,
             "fired": snap.fired.get(s.submission_id, []),
+            "source": snap.sources.get(s.submission_id),
             "review": None if review is None else {k: review[k] for k in ("id", "decision", "reviewer", "created_at")},
         })
     items.sort(key=lambda i: (-i["score"], i["captured_at"], i["submission_id"]))
@@ -449,6 +453,7 @@ def map_view(repo: Repository) -> dict:
             "fired": snap.fired.get(s.submission_id, []),
             "captured_at": _iso(sub.captured_at),
             "duration_sec": sub.duration_sec,
+            "source": snap.sources.get(s.submission_id),
         })
     points.sort(key=lambda p: (p["captured_at"], p["id"]))
     return {
@@ -486,6 +491,25 @@ def replay_day(repo: Repository) -> dict:
     points.sort(key=lambda p: (p["captured_at"], p["id"]))
     return {"project": {k: snap.ctx.project.get(k) for k in ("name", "region")}, "date": day.isoformat(),
             "thresholds": {"review": params.review_threshold, "watch": params.watch_threshold}, "points": points}
+
+
+# GET /collect/session ------------------------------------------------------------------
+
+def collect_session(repo: Repository) -> dict:
+    """Contributors (code, name, kind, area) with each one's area outline and last interview spot."""
+    ctx = context(repo)
+    view = map_view(repo)
+    last: dict[str, dict] = {}
+    for p in view["points"]:  # ordered by capture time
+        last[p["code"]] = {"lat": p["lat"], "lng": p["lng"], "captured_at": p["captured_at"]}
+    people = sorted(ctx.contributor_rows.values(), key=lambda r: r["code"])
+    return {
+        "project": {k: ctx.project.get(k) for k in ("name", "region", "timezone")},
+        "contributors": [{"code": r["code"], "display_name": r.get("display_name"), "kind": r["kind"],
+                          "area_id": r.get("area_id"), "area": ctx.area_names.get(r.get("area_id")),
+                          "last_point": last.get(r["code"])} for r in people],
+        "areas": view["areas"],
+    }
 
 
 # POST /rescore ------------------------------------------------------------------------

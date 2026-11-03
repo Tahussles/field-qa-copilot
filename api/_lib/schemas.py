@@ -77,3 +77,17 @@ class DemoStepIn(BaseModel):
                               description="How many pending live-day submissions to send (default 1, or 50 with until)")
     until_field_time: AwareDatetime | None = Field(default=None,
                                                    description="Send what phones had synced by this field time")
+
+
+class CollectTokenIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ttl_seconds: int = Field(default=1800, ge=1, le=1800, strict=True, description="Lifetime; at most 30 minutes")
+
+
+class CollectUploadIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    device_id: str = Field(min_length=6, max_length=80)
+    client_submission_id: str = Field(min_length=6, max_length=80)
+    content_type: str = Field(min_length=5, max_length=80, examples=["audio/webm;codecs=opus", "audio/mp4"])

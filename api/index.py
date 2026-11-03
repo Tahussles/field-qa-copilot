@@ -20,12 +20,12 @@ if str(ROOT) not in sys.path:
 from fastapi import APIRouter, Body, Depends, FastAPI, Header, HTTPException, Query, Response  # noqa: E402
 
 import engine  # noqa: E402
-from api._lib import demo, jobs, service  # noqa: E402
+from api._lib import collect, demo, jobs, service  # noqa: E402
 from api._lib.ai import AIUnavailable, LiveProvider, Provider, jobs_secret  # noqa: E402
 from api._lib.evaluation import evaluate as run_evaluation  # noqa: E402
 from api._lib.postgrest import Supabase  # noqa: E402
 from api._lib.repo import Conflict, NotFound, Repository, SupabaseRepo  # noqa: E402
-from api._lib.schemas import DemoStepIn, EvaluateIn, ReviewIn, SubmissionIn  # noqa: E402
+from api._lib.schemas import CollectTokenIn, CollectUploadIn, DemoStepIn, EvaluateIn, ReviewIn, SubmissionIn  # noqa: E402
 from api._lib.settings import get_settings  # noqa: E402
 
 app = FastAPI(
@@ -83,20 +83,48 @@ def require_passcode(x_demo_passcode: str | None = Header(default=None),
         raise HTTPException(401, "missing or wrong X-Demo-Passcode")
 
 
+def collect_key() -> bytes | None:
+    key = get_settings().service_key
+    return collect.secret(key) if key else None
+
+
+def require_phone(x_demo_passcode: str | None = Header(default=None), x_collect_token: str | None = Header(default=None),
+                  expected: str | None = Depends(passcode_value), key: bytes | None = Depends(collect_key),
+                  repo: Repository = Depends(get_repo)) -> dict:
+    """The collect page's access: the passcode, or a collect token (QR code) that is signed, unexpired and
+    from the current demo run. Returns who is writing, so token holders can be held to phone-shaped writes."""
+    if x_demo_passcode and expected and hmac.compare_digest(x_demo_passcode, expected):
+        return {"via": "passcode", "expires_at": None}
+    if x_collect_token and key:
+        try:
+            expires = collect.verify(key, x_collect_token, (repo.clock() or {}).get("demo_run_id"))
+        except collect.Refused as refused:
+            raise HTTPException(401, str(refused))
+        return {"via": "token", "expires_at": expires}
+    raise HTTPException(401, "scan the QR code from the demo panel, or enter the demo passcode")
+
+
 @router.get("/health")
 def health() -> dict:
     return {"ok": True, "engine_version": engine.__version__}
 
 
-@router.post("/submissions", status_code=201, dependencies=[Depends(require_passcode)])
-def post_submission(payload: SubmissionIn, response: Response, repo: Repository = Depends(get_repo)) -> dict:
+@router.post("/submissions", status_code=201)
+def post_submission(payload: SubmissionIn, response: Response, repo: Repository = Depends(get_repo),
+                    writer: dict = Depends(require_phone)) -> dict:
     """Store a phone's submission and score it, plus every earlier submission it affects.
 
     Idempotent on client_submission_id: a retry returns the stored record with 200,
     and finishes scoring first if an earlier attempt stored it but failed before
     writing results (`healed: true`). `changed` lists earlier submissions whose
-    flagged status flipped because of this arrival.
+    flagged status flipped because of this arrival. Needs the passcode, or a
+    collect token (then only live submissions with the phone's own voice note).
     """
+    if writer["via"] == "token":
+        if payload.source != "live":
+            raise HTTPException(403, "a collect token can only send live submissions")
+        if payload.voice_note_path and not payload.voice_note_path.startswith(f"live/{payload.device_id}/"):
+            raise HTTPException(403, "voice_note_path must be this phone's own upload")
     try:
         status, body = service.ingest(repo, payload)
     except service.UnknownContributor as error:
@@ -220,6 +248,36 @@ def post_demo_reset(repo: Repository = Depends(get_repo)) -> dict:
     return demo.reset(repo)
 
 
+# The phone collect page ----------------------------------------------------------------
+
+@router.post("/collect/token", dependencies=[Depends(require_passcode)])
+def post_collect_token(body: CollectTokenIn, repo: Repository = Depends(get_repo),
+                       key: bytes | None = Depends(collect_key)) -> dict:
+    """A QR-code token for /collect: signed, expires (30 min by default), revoked by a demo reset."""
+    run_id = (repo.clock() or {}).get("demo_run_id")
+    if not key or not run_id:
+        raise HTTPException(503, "collect tokens need the service key and a demo run (reset the demo once)")
+    token, expires = collect.mint(key, str(run_id), body.ttl_seconds)
+    return {"token": token, "expires_at": expires, "path": f"/collect?t={token}"}
+
+
+@router.get("/collect/session")
+def get_collect_session(writer: dict = Depends(require_phone), repo: Repository = Depends(get_repo)) -> dict:
+    """What the phone needs: contributors with their areas and last interview spot, and the token's expiry."""
+    return {"expires_at": writer["expires_at"], **service.collect_session(repo)}
+
+
+@router.post("/collect/upload")
+def post_collect_upload(body: CollectUploadIn, writer: dict = Depends(require_phone),
+                        repo: Repository = Depends(get_repo)) -> dict:
+    """A signed URL the phone PUTs its voice note to, at live/<device>/<client id>.<ext>; a retry gets the same path."""
+    try:
+        path = collect.voice_path(body.device_id, body.client_submission_id, body.content_type)
+    except ValueError as error:
+        raise HTTPException(422, str(error))
+    return {"path": path, "upload_url": repo.signed_upload(collect.VOICE_BUCKET, path)}
+
+
 # AI jobs ---------------------------------------------------------------------------
 
 @router.post("/jobs/run", dependencies=[Depends(require_jobs_secret)])
@@ -248,9 +306,9 @@ def post_job_rerun(job_id: UUID, repo: Repository = Depends(get_repo)) -> dict:
 # The morning brief ------------------------------------------------------------------
 
 @router.get("/brief")
-def get_brief(repo: Repository = Depends(get_repo)) -> dict:
+def get_brief(repo: Repository = Depends(get_repo), provider: Provider = Depends(get_provider)) -> dict:
     """Today's brief (model-written, or the template fallback), the facts it was written from, and its state."""
-    return jobs.brief_state(repo)
+    return jobs.brief_state(repo, provider)
 
 
 @router.post("/brief/regenerate", dependencies=[Depends(require_passcode)])
@@ -267,6 +325,8 @@ def post_brief_audio(brief_id: UUID, repo: Repository = Depends(get_repo),
         return jobs.brief_audio(repo, provider, str(brief_id))
     except NotFound:
         raise HTTPException(404, "no model-written brief with that id")
+    except jobs.SpeechOff as error:
+        raise HTTPException(409, f"text to speech is off here: {error}")
     except AIUnavailable as error:
         raise HTTPException(503, f"text to speech is unavailable: {error}")
 
