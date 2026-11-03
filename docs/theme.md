@@ -53,7 +53,7 @@ Read on 2026-11-03 with Playwright from the live page's computed styles, at 1440
 | `accent-ink` | `#027A56` | **Derived**: the same green, darkened to 5.4:1, for links, small labels and the primary button. Poket's white on `#039B6E` is 3.5:1, below AA at our 12–14px |
 | `accent-soft` | 10% brand | like Poket's `#039C6E2B` tint (selected options on the phone) |
 | `overlay` | brand | selected rows and tabs tint 6–14% brand |
-| `ok` (passed, genuine) | `#1E7B34` | ours: a leaf green (hue 133°, the brand is 162°), 5.3:1, kept apart from the brand |
+| `ok` (passed, genuine) | `#1A6E2E` | ours: a leaf green (hue 134°, the brand is 162°), kept apart from the brand: 6.3:1 on white, 4.7:1 on its own 20% tint (the phone's step marks) |
 | `warn` (flagged) | `#A15C00` | amber darkened to 5.2:1 (Linear's `#F0A23B` is 2.0:1 on white) |
 | `crit` (critical) | `#C42B1C` | red darkened to 5.7:1 (Poket's `#F23731` is 3.9:1) |
 | `pass` | `#6D6D6D` | Poket token |
