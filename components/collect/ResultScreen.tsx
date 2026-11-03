@@ -88,7 +88,7 @@ export function ResultScreen({ item, tz, onNew }: { item: OutboxItem; tz: string
             <BandTag band={rules.band} />
           </p>
           <p className="mt-1 text-[12.5px] text-muted">
-            {rules.fired.length ? rules.fired.map((f) => CHECK_TITLE[f.key]).join(" · ") : "No check fired on arrival"}
+            {rules.fired.length ? rules.fired.map(firedLabel).join(" · ") : "No check fired on arrival"}
           </p>
         </Stage>
       )}
@@ -148,6 +148,12 @@ export function ResultScreen({ item, tz, onNew }: { item: OutboxItem; tz: string
       </div>
     </div>
   );
+}
+
+// The one check whose evidence a field worker can act on at once: how far out they are.
+function firedLabel(f: { key: string; evidence: Record<string, unknown> }) {
+  const title = CHECK_TITLE[f.key as keyof typeof CHECK_TITLE];
+  return f.key === "outside_area" && f.evidence.distance ? `${title} (${f.evidence.distance} from ${f.evidence.area})` : title;
 }
 
 function Stage({ n, title, done, busy, children }: { n: number; title: string; done?: boolean; busy?: boolean; children: React.ReactNode }) {
