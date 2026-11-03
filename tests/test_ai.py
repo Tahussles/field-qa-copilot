@@ -526,3 +526,13 @@ def test_jobs_queued_together_all_have_the_same_keys_as_postgrest_requires():
     queued = repo.queue_jobs(wanted)
     assert len(queued) == 2 and len({frozenset(r) for r in sent[0]}) == 1
     assert all(r["notify"] is True and r["project_id"] == "p1" for r in sent[0])
+
+
+def test_story_serves_the_generated_numbers(repo):
+    app.dependency_overrides[get_repo] = lambda: repo
+    try:
+        story = TestClient(app).get("/api/py/story").json()
+    finally:
+        app.dependency_overrides.clear()
+    assert story["headline"]["held_out"]["recall"] > 0.9 and story["hard"]["rules_ai"]["combined"]["precision"]
+    assert story["measured"]["ingest"]["p50_ms"] > 0 and story["spend_now"]["all_time_jobs"] == 0

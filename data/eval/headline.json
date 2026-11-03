@@ -1,0 +1,91 @@
+{
+  "engine_version": "0.5.0",
+  "review_threshold": 2.0,
+  "held_out_seeds": [
+    101,
+    102,
+    103,
+    104,
+    105,
+    106,
+    107,
+    108,
+    109,
+    110
+  ],
+  "held_out": {
+    "precision": 0.8892,
+    "recall": 0.9933,
+    "flagged": 152.0,
+    "fabricated": 136.1,
+    "false_positives": 16.8,
+    "precision_range": [
+      0.8701,
+      0.903
+    ],
+    "recall_range": [
+      0.9786,
+      1.0
+    ],
+    "submissions_per_wave": 1676.0
+  },
+  "per_check": {
+    "too_fast": {
+      "precision": 0.836,
+      "recall": 0.4327,
+      "fires_on": 70.3
+    },
+    "same_spot": {
+      "precision": 0.2764,
+      "recall": 0.2171,
+      "fires_on": 107.6
+    },
+    "copied_text": {
+      "precision": 1.0,
+      "recall": 0.4916,
+      "fires_on": 66.9
+    },
+    "straight_lining": {
+      "precision": 0.6743,
+      "recall": 0.1368,
+      "fires_on": 27.5
+    },
+    "voice_vs_form": {
+      "precision": 0.7848,
+      "recall": 0.1369,
+      "fires_on": 23.6
+    },
+    "off_hours": {
+      "precision": 0.7247,
+      "recall": 0.0779,
+      "fires_on": 14.6
+    },
+    "shared_device": {
+      "precision": 1.0,
+      "recall": 0.1771,
+      "fires_on": 24.1
+    },
+    "burst": {
+      "precision": 1.0,
+      "recall": 0.3237,
+      "fires_on": 44.0
+    },
+    "outside_area": {
+      "precision": null,
+      "recall": 0.0,
+      "fires_on": 0.0
+    },
+    "clock_skew": {
+      "precision": null,
+      "recall": 0.0,
+      "fires_on": 0.0
+    }
+  },
+  "demo_seed": {
+    "submissions": 1676,
+    "fabricated": 126,
+    "flagged": 143,
+    "precision": 0.8811188811188811,
+    "recall": 1.0
+  }
+}

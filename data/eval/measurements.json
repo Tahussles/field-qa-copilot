@@ -1,0 +1,57 @@
+{
+  "measured_at": "2026-11-03T21:19:46+00:00",
+  "base": "https://field-qa-copilot.vercel.app",
+  "engine_version": "0.5.0",
+  "ingest": {
+    "n": 20,
+    "p50_ms": 340,
+    "p95_ms": 487,
+    "api_p50_ms": 276,
+    "api_p95_ms": 330,
+    "note": "POST /submissions as a phone sends it, from Toronto to Vercel yul1; api_* is the API's own timing (lease and insert, score, fenced commit, queue model work)"
+  },
+  "phone": {
+    "n": 3,
+    "rules_s": 1.0,
+    "transcript_s": 3.9,
+    "verdict_s": 6.5,
+    "note": "seconds from submit: the rules' result, the transcript (Scribe), the model's verdict (Claude)"
+  },
+  "realtime": {
+    "n": 4,
+    "p50_ms": 402,
+    "max_ms": 576,
+    "note": "from POST /submissions to the INSERT arriving over Realtime (publishable key)"
+  },
+  "model_latency": {
+    "transcribe": {
+      "p50_ms": 555,
+      "p95_ms": 853,
+      "n": 47
+    },
+    "consistency": {
+      "p50_ms": 1357,
+      "p95_ms": 1945,
+      "n": 3521
+    },
+    "paraphrase": {
+      "p50_ms": 1758,
+      "p95_ms": 4757,
+      "n": 192
+    },
+    "brief": {
+      "p50_ms": 7450,
+      "p95_ms": 8396,
+      "n": 2
+    },
+    "tts": {
+      "p50_ms": 2131,
+      "p95_ms": 2134,
+      "n": 2
+    }
+  },
+  "spend": {
+    "usd": 0.7395,
+    "jobs": 3800
+  }
+}

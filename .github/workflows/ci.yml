@@ -65,6 +65,14 @@ jobs:
       - run: uv sync --locked
       - name: Held-out precision >= 0.85 and recall >= 0.97 (seeds 101-110)
         run: uv run scripts/evaluate.py --min-precision 0.85 --min-recall 0.97
+      - name: The committed headline.json (shown on /pitch and /architecture) matches the code
+        run: |
+          if ! git diff --quiet -- data/eval/headline.json; then
+            git diff -- data/eval/headline.json | head -40
+            echo "::error::data/eval/headline.json is out of date: run uv run scripts/evaluate.py and commit it"
+            exit 1
+          fi
+          echo "data/eval/headline.json is current"
 
   hard-mode:
     runs-on: ubuntu-latest

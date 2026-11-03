@@ -139,6 +139,25 @@ def aggregate(runs: list[dict]) -> dict:
     }
 
 
+def headline(report: dict) -> dict:
+    """The held-out numbers the story pages show (committed as data/eval/headline.json; CI checks it)."""
+    mean = lambda v: None if v is None else round(v["mean"], 4)  # noqa: E731
+    held, demo = report["held_out"], report["demo"]["combined"]
+    return {
+        "engine_version": report["engine_version"],
+        "review_threshold": report["params"]["review_threshold"],
+        "held_out_seeds": report["seeds"]["held_out"],
+        "held_out": {
+            **{k: mean(held["combined"][k]) for k in ("precision", "recall", "flagged", "fabricated", "false_positives")},
+            "precision_range": [round(held["combined"]["precision"]["min"], 4), round(held["combined"]["precision"]["max"], 4)],
+            "recall_range": [round(held["combined"]["recall"]["min"], 4), round(held["combined"]["recall"]["max"], 4)],
+        },
+        "per_check": {key: {m: mean(held["per_check"][key][m]) for m in ("precision", "recall", "fires_on")}
+                      for key in CHECK_KEYS},
+        "demo_seed": {k: demo[k] for k in ("submissions", "fabricated", "flagged", "precision", "recall")},
+    }
+
+
 # Markdown ---------------------------------------------------------------------
 
 def pct(value) -> str:
@@ -561,6 +580,7 @@ def main() -> int:
     args.out.mkdir(parents=True, exist_ok=True)
     (args.out / "report.json").write_text(json.dumps(report, indent=2) + "\n")
     (args.out / "report.md").write_text(render_markdown(report))
+    (args.out / "headline.json").write_text(json.dumps(headline(report), indent=2) + "\n")
 
     c = held_out["combined"]
     print(f"engine {__version__}: demo precision {pct(demo['combined']['precision'])}, "
