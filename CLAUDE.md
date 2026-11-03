@@ -6,7 +6,7 @@ Field QA Copilot checks every submission as it syncs, flags likely fabrication w
 
 ## Fixed stack
 
-- **Web**: Next.js (App Router) + TypeScript + Tailwind at the repo root: dashboard, landing page, and later a `/collect` phone page. Package manager: pnpm.
+- **Web**: Next.js (App Router) + TypeScript + Tailwind at the repo root: dashboard, landing page and the `/collect` phone page. Package manager: pnpm.
 - **API and detection engine**: Python 3.12 FastAPI at `api/index.py`, deployed as a Vercel Python function. A Next.js rewrite sends `/api/py/:path*` to it (to uvicorn on `127.0.0.1:8000` in dev). Python deps are managed with uv (`pyproject.toml`, `uv.lock`, `.python-version`).
 - **Data**: Supabase Postgres, Realtime and Storage (private `voice-notes` bucket).
 - **Hosting**: Vercel. `vercel.json` bundles `engine/` and `datagen/` (the demo replays its live day) into the Python function and pins functions to `yul1` (Montréal), next to the Supabase project in `ca-central-1`.
@@ -16,17 +16,21 @@ Field QA Copilot checks every submission as it syncs, flags likely fabrication w
 
 ```
 design/prototype.html     the approved design (static, fake data); the dashboard matches its look
-app/                      Next.js routes: / landing, /app overview, /app/queue[/id], /app/detectors, /app/test
+app/                      Next.js routes: / landing, /app overview, /app/queue[/id], /app/detectors, /app/test,
+                          /collect (the phone)
   globals.css             design tokens (@theme), .glass and other component classes (@layer components)
 components/               UI: app/ (shell, data provider, toasts, passcode, demo controls), overview/, queue/,
-                          detectors/, test/, landing/ (stage), ui/Glass
-lib/                      API client and types, formatting, check labels and colours, basemap palette, Supabase client
-tests-e2e/                Playwright smoke test (playwright.config.ts at the root)
+                          detectors/, test/, landing/ (stage), collect/ (phone form, recorder, result), ui/Glass
+lib/                      API client and types, formatting, check labels and colours, basemap palette, Supabase client;
+                          collect/ (IndexedDB outbox, phone API calls, simulated and real locations)
+tests-e2e/                Playwright: smoke, landing and demo on desktop; collect.spec.ts on Pixel and iPhone profiles
+                          with a fake microphone (fixtures/pipe-dry.wav); playwright.config.ts at the root
 public/vendor/            MapLibre worker copied from node_modules before dev and build (gitignored)
 public/landing/           pre-rendered stage basemap (webp) and its bounds and areas (json), committed
 api/index.py              FastAPI routes, all under /api/py (docs at /api/py/docs)
 api/_lib/                 Repository (Supabase + in-memory), service logic, schemas, /evaluate, demo controls,
-                          ai.py (every model call), jobs.py (ai_jobs runner), brief.py (facts and checks)
+                          ai.py (every model call), jobs.py (ai_jobs runner), brief.py (facts and checks),
+                          collect.py (collect tokens, voice-note paths)
                           (underscore: Vercel does not turn these files into functions)
 engine/                   detection engine: stdlib only, no I/O (engine.__version__)
   config.py               Params defaults; check_config.params merges over them
@@ -36,7 +40,7 @@ engine/                   detection engine: stdlib only, no I/O (engine.__versio
   insights.py             hotspots, contributor stats, area rates
   metrics.py              precision/recall against labels the caller supplies
 datagen/                  seeded synthetic wave with planted fraud (may import engine, never the reverse);
-                          hard.py: hard-mode waves for evaluation only (seeds 201-202)
+                          hard.py: hard-mode waves for evaluation only (tuning 211-212, held out 201-202)
 scripts/                  generate.py, score.py, evaluate.py, simulate.py, verify_wave.py, backfill_ai.py,
                           set_job_hook.py, ai_models.py, realtime-probe.mjs,
                           vendor-maplibre.mjs, render-basemap.mjs
@@ -63,6 +67,7 @@ pnpm test:smoke                            # Playwright smoke test against the l
                                            # approve-then-undo needs DEMO_PASSCODE and SUPABASE_SERVICE_ROLE_KEY:
                                            # its reviews use reviewer 'smoke-test' and teardown deletes them)
 SMOKE_BASE_URL=https://field-qa-copilot.vercel.app pnpm test:smoke   # same test against prod
+pnpm exec playwright test --project=pixel --project=iphone   # the phone page (needs DEMO_PASSCODE; ends with a reset)
 uv run pytest                              # Python tests
 uv run scripts/generate.py --seed 20261031 --reset   # rebuild the synthetic wave in Supabase
 uv run scripts/generate.py --seed 20261031 --dry-run # local files only
@@ -94,9 +99,13 @@ After cloning, wire the commit hook once: `git config core.hooksPath .githooks`.
 - Send only what's needed: contributor codes, never names. The brief gets aggregates only (`brief.facts`), and every number it writes must appear in them.
 - Every `ai_jobs` row logs model, tokens, latency and estimated cost (`ai.PRICES`, ElevenLabs per hour / per character).
 - Model ids live in `api/_lib/ai.py` (`JUDGE_MODEL`, `BRIEF_MODEL`, `SCRIBE_MODEL`, `TTS_MODEL`); check them with `scripts/ai_models.py`.
-- Jobs: `ai_jobs` (queued, running, done, failed) with a unique `dedupe_key`, so queueing is idempotent and a finished job never reruns unless forced (`POST /jobs/{id}/rerun`). The database POSTs each new job to `/api/py/jobs/run` (pg_net trigger, migration 0007) with `X-Jobs-Secret` (in Vault, derived from the service key, set by `scripts/set_job_hook.py`); `/api/py/jobs/drain` (passcode) is the safety net. A verdict landing rescores through `service.rescore_submission` (the leased incremental path), so a score can change after arrival and Realtime tells the UI.
+- Jobs: `ai_jobs` (queued, running, done, failed, skipped) with a unique `dedupe_key`, so queueing is idempotent and a finished job never reruns unless forced (`POST /jobs/{id}/rerun`). The database POSTs each new job to `/api/py/jobs/run` (pg_net trigger, migration 0007) with `X-Jobs-Secret` (in Vault, derived from the service key, set by `scripts/set_job_hook.py`); `/api/py/jobs/drain` (passcode) is the safety net. A verdict landing rescores through `service.rescore_submission` (the leased incremental path), so a score can change after arrival and Realtime tells the UI.
 - The wave's verdicts (`scripts/backfill_ai.py`) are part of its fresh state: a demo reset keeps them and `verify_wave.py` scores the generated wave with the stored verdicts. `generate.py --reset` deletes them (cascade): re-run the backfill after.
-- Hard mode (`datagen/hard.py`, seeds 201-202, never the demo seed) is the honest test: `evaluate.py --hard` writes `data/eval/hard.json` (committed, aggregates only, served at `/api/py/eval/hard`); model verdicts are cached in `data/eval/hard-verdicts.json`.
+- Hard mode (`datagen/hard.py`, never the demo seed) is the honest test: tune on seeds 211-212, report on held-out 201-202. `evaluate.py --hard` writes `data/eval/hard.json` (committed, aggregates only, served at `/api/py/eval/hard`); model verdicts are cached in `data/eval/hard-verdicts.json`.
+- A copy found only by the model (`decided_by: ai_paraphrase`) weighs `ai_paraphrase_weight` (1.5, below the review threshold): it corroborates, it never flags on its own.
+- A deployment without a model key skips that job at once (`status: skipped`, no retries) and the rule-based result stands. The job hook always posts to production, so jobs queued by a local or preview ingest run there, with production's keys and engine.
+- `ai_jobs` outlive demo resets: `submission_id` is ON DELETE SET NULL and each job is stamped with its `demo_run_id`, so `ai_spend()` (shown in the demo panel) counts all time and this run.
+- `transcript_lang` holds short codes: `en`, `sw`, `luo`.
 
 ## Git rules (non-negotiable)
 
@@ -139,3 +148,6 @@ After cloning, wire the commit hook once: `git config core.hooksPath .githooks`.
 - Demo controls (`/api/py/demo/*`, all behind the passcode): `reset` deletes simulator and live submissions with their dependents and every review, rescores the wave on the quiet path and sets `as_of` back to Oct 31 08:00; `step` sends the next pending live-day submissions (by client_submission_id, so repeats and two tabs are safe) through `service.ingest` and moves `as_of` forward; `status` lists progress and the key moments derived from the live day's fraud actors. The runner lives in the browser (`components/app/DemoControls.tsx`, D key); the rest of the app only reacts through Realtime. `verify_wave.py` proves a reset left the fresh wave.
 - `as_of` is read fresh for the overview (`repo.as_of()`); the cached project context may hold an old value.
 - Landing (`/`): no MapLibre. The stage draws on a canvas over `public/landing/basemap.webp`, replays yesterday's real submissions from `/api/py/landing` (CDN-cached), and says "Live" only while real score inserts arrive over Realtime. Reduced motion gets a static frame.
+- Phone (`/collect`): opens with a collect token from the demo panel's QR code (`<expiry>.<demo run>.<HMAC>`, keyed from the service key, 30 min, revoked by a demo reset) or the passcode; nothing else. A token can only write `source: live` submissions whose voice note sits under `live/<its device_id>/`. The phone keeps a `device_id` in localStorage, saves each interview to an IndexedDB outbox first (audio included), then uploads the voice note to a signed Storage URL and POSTs `/submissions` with its own `client_submission_id`, so a retry returns the same record. Switching contributor on one phone is real and fires shared_device.
+- Phone location is simulated by default (a new household inside the contributor's area, or the last interview's spot); "Use my real GPS" sends the real fix, so outside_area fires anywhere but Kisumu. `captured_at` is the phone's real clock at submit, not the pinned demo day.
+- outside_area (weight 2) fires when the GPS point is outside the contributor's assigned area; evidence is the distance to the boundary and the area name. The synthetic waves never place a point outside its area, so it is unmeasured there.
