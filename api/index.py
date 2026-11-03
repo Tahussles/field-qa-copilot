@@ -59,12 +59,25 @@ def get_provider() -> Provider:
     return _provider
 
 
+def writes_value() -> bool:
+    return get_settings().writes_enabled
+
+
+READ_ONLY = "this deployment is a read-only preview: writes, demo controls and AI jobs run on production only"
+
+
+def require_writes(enabled: bool = Depends(writes_value)) -> None:
+    """Every credentialed route depends on this, so a preview deployment cannot write or spend."""
+    if not enabled:
+        raise HTTPException(403, READ_ONLY)
+
+
 def jobs_secret_value() -> str | None:
     key = get_settings().service_key
     return jobs_secret(key) if key else None
 
 
-def require_jobs_secret(x_jobs_secret: str | None = Header(default=None),
+def require_jobs_secret(_: None = Depends(require_writes), x_jobs_secret: str | None = Header(default=None),
                         expected: str | None = Depends(jobs_secret_value)) -> None:
     """The database's job hook (pg_net) sends this; it is derived from the service key."""
     if not expected or not x_jobs_secret or not hmac.compare_digest(x_jobs_secret, expected):
@@ -75,7 +88,7 @@ def passcode_value() -> str | None:
     return get_settings().demo_passcode
 
 
-def require_passcode(x_demo_passcode: str | None = Header(default=None),
+def require_passcode(_: None = Depends(require_writes), x_demo_passcode: str | None = Header(default=None),
                      expected: str | None = Depends(passcode_value)) -> None:
     if not expected:
         raise HTTPException(503, "writes are disabled: DEMO_PASSCODE is not set")
@@ -88,7 +101,8 @@ def collect_key() -> bytes | None:
     return collect.secret(key) if key else None
 
 
-def require_phone(x_demo_passcode: str | None = Header(default=None), x_collect_token: str | None = Header(default=None),
+def require_phone(_: None = Depends(require_writes),
+                  x_demo_passcode: str | None = Header(default=None), x_collect_token: str | None = Header(default=None),
                   expected: str | None = Depends(passcode_value), key: bytes | None = Depends(collect_key),
                   repo: Repository = Depends(get_repo)) -> dict:
     """The collect page's access: the passcode, or a collect token (QR code) that is signed, unexpired and
@@ -105,8 +119,8 @@ def require_phone(x_demo_passcode: str | None = Header(default=None), x_collect_
 
 
 @router.get("/health")
-def health() -> dict:
-    return {"ok": True, "engine_version": engine.__version__}
+def health(writes: bool = Depends(writes_value)) -> dict:
+    return {"ok": True, "engine_version": engine.__version__, "writes": writes, "commit": get_settings().commit}
 
 
 @router.post("/submissions", status_code=201)
@@ -306,9 +320,10 @@ def post_job_rerun(job_id: UUID, repo: Repository = Depends(get_repo)) -> dict:
 # The morning brief ------------------------------------------------------------------
 
 @router.get("/brief")
-def get_brief(repo: Repository = Depends(get_repo), provider: Provider = Depends(get_provider)) -> dict:
+def get_brief(repo: Repository = Depends(get_repo), provider: Provider = Depends(get_provider),
+              writes: bool = Depends(writes_value)) -> dict:
     """Today's brief (model-written, or the template fallback), the facts it was written from, and its state."""
-    return jobs.brief_state(repo, provider)
+    return jobs.brief_state(repo, provider, queue=writes)
 
 
 @router.post("/brief/regenerate", dependencies=[Depends(require_passcode)])
@@ -319,10 +334,12 @@ def post_brief_regenerate(repo: Repository = Depends(get_repo)) -> dict:
 
 @router.post("/brief/{brief_id}/audio")
 def post_brief_audio(brief_id: UUID, repo: Repository = Depends(get_repo),
-                     provider: Provider = Depends(get_provider)) -> dict:
+                     provider: Provider = Depends(get_provider), writes: bool = Depends(writes_value)) -> dict:
     """The brief read aloud: a signed URL, synthesised on first use and cached in Storage."""
     try:
-        return jobs.brief_audio(repo, provider, str(brief_id))
+        return jobs.brief_audio(repo, provider, str(brief_id), synthesise=writes)
+    except jobs.ReadOnly:
+        raise HTTPException(403, READ_ONLY)
     except NotFound:
         raise HTTPException(404, "no model-written brief with that id")
     except jobs.SpeechOff as error:

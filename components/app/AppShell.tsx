@@ -8,6 +8,7 @@ import { AppDataProvider, useAppData } from "@/components/app/AppData";
 import { DemoProvider, useDemo } from "@/components/app/DemoControls";
 import { Kpis } from "@/components/app/Kpis";
 import { PasscodeProvider } from "@/components/app/Passcode";
+import { ReadOnlyBanner } from "@/components/app/ReadOnlyBanner";
 import { ToastProvider } from "@/components/app/Toasts";
 import { Glass } from "@/components/ui/Glass";
 import { DEFAULT_TZ, fmtDateTime, fmtMonthDay } from "@/lib/format";
@@ -46,6 +47,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   <Topbar />
                 </Suspense>
                 <main className="flex-1 p-4 pb-24 md:p-5">
+                  <ReadOnlyBanner />
                   <Kpis />
                   {children}
                 </main>
