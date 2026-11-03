@@ -12,7 +12,10 @@ import { browserSupabase } from "@/lib/supabase";
 import type { SubmissionDetail } from "@/lib/types";
 
 const LANGUAGE: Record<string, string> = { en: "English", sw: "Swahili", luo: "Dholuo" };
-type Job = { kind: string; status: string; model: string | null; latency_ms: number | null };
+type Job = { kind: string; status: string; model: string | null; latency_ms: number | null; created_at: string };
+// A model job still queued or running after this long has stalled: the rules' result stands, no spinner.
+const STALLED_MS = 60_000;
+const POLL_MS = 3000; // while the Realtime socket is down
 // The phone's own time zone. During a demo the server puts the interview on the field clock
 // (Kisumu, from the pinned morning), so the screen shows both.
 const PHONE_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -27,13 +30,16 @@ export function ResultScreen({ item, tz, onNew }: { item: OutboxItem; tz: string
   const rules = item.result;
   const [detail, setDetail] = useState<SubmissionDetail | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
+  const [reconnecting, setReconnecting] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+  const [shownAt] = useState(() => Date.now()); // the server's clock is not the phone's: measure from here
 
   const refresh = useCallback(async () => {
     if (!id) return;
     const supabase = browserSupabase();
     const [d, j] = await Promise.all([
       api.submission(id).catch(() => null),
-      supabase?.from("ai_jobs").select("kind,status,model,latency_ms").eq("submission_id", id),
+      supabase?.from("ai_jobs").select("kind,status,model,latency_ms,created_at").eq("submission_id", id),
     ]);
     if (d) setDetail(d);
     if (j?.data) setJobs(j.data as Job[]);
@@ -45,24 +51,55 @@ export function ResultScreen({ item, tz, onNew }: { item: OutboxItem; tz: string
     const supabase = browserSupabase();
     if (!supabase) return;
     const on = (table: string, filter: string) => ({ event: "*" as const, schema: "public", table, filter });
+    let poll: number | null = null;
+    let disposed = false;
     const channel = supabase
       .channel(`collect-${id}`)
       .on("postgres_changes", on("ai_jobs", `submission_id=eq.${id}`), () => void refresh())
       .on("postgres_changes", on("ai_verdicts", `submission_id=eq.${id}`), () => void refresh())
       .on("postgres_changes", on("scores", `submission_id=eq.${id}`), () => void refresh())
       .on("postgres_changes", on("submissions", `id=eq.${id}`), () => void refresh())
-      .subscribe();
-    return () => void supabase.removeChannel(channel);
+      .subscribe((status) => {
+        if (disposed) return;
+        if (status === "SUBSCRIBED") {
+          if (poll) void refresh();
+          if (poll) window.clearInterval(poll);
+          poll = null;
+          setReconnecting(false);
+        } else {
+          setReconnecting(true);
+          if (!poll) poll = window.setInterval(() => void refresh(), POLL_MS);
+        }
+      });
+    return () => {
+      disposed = true;
+      if (poll) window.clearInterval(poll);
+      void supabase.removeChannel(channel);
+    };
   }, [id, refresh]);
 
   const transcribe = jobs.find((j) => j.kind === "transcribe");
   const consistency = jobs.find((j) => j.kind === "consistency");
-  const busy = (j?: Job) => j && (j.status === "queued" || j.status === "running");
   const transcript = detail?.submission.voice_transcript ?? null;
+  const stalled = (j?: Job) =>
+    Boolean(j && (j.status === "queued" || j.status === "running") && now - Date.parse(j.created_at) > STALLED_MS);
+  const busy = (j?: Job) => Boolean(j && (j.status === "queued" || j.status === "running") && !stalled(j));
+  const unavailable = (j?: Job) => Boolean(j && (j.status === "failed" || j.status === "skipped" || stalled(j)));
+  // The check job is queued when the transcript lands; if it never appears, the model is not coming.
+  const checkMissing = Boolean(transcript && !consistency && transcribe && now - Date.parse(transcribe.created_at) > STALLED_MS);
   const vff = detail?.checks.find((c) => c.key === "voice_vs_form");
   const decidedByAi = vff?.evidence.decided_by === "ai";
-  const pending = busy(transcribe) || busy(consistency) || (item.audio && !transcript && transcribe?.status !== "failed");
+  const noTranscript = unavailable(transcribe) || (!transcribe && Boolean(rules) && now - shownAt > STALLED_MS);
+  const noCheck = unavailable(consistency) || checkMissing;
+  const pending = Boolean(item.audio) && !(transcript ? !busy(consistency) && (consistency || noCheck) : noTranscript);
   const current = detail?.score ?? null;
+
+  // While model work is pending, re-check every few seconds whether it has stalled.
+  useEffect(() => {
+    if (!pending) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 5000);
+    return () => window.clearInterval(timer);
+  }, [pending]);
 
   return (
     <div className="flex flex-col gap-3" data-testid="result">
@@ -83,6 +120,11 @@ export function ResultScreen({ item, tz, onNew }: { item: OutboxItem; tz: string
             </>
           ) : null}
         </p>
+        {reconnecting && (
+          <p className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-line px-2.5 py-0.5 text-[11.5px] text-muted" role="status" data-testid="reconnecting">
+            <span className="ai-spinner" aria-hidden /> Reconnecting… updating every 3 s
+          </p>
+        )}
         {item.status !== "synced" ? (
           <p className="mt-2 flex items-center gap-2 text-ink" data-testid="waiting">
             <span className="ai-spinner" aria-hidden />
@@ -104,7 +146,7 @@ export function ResultScreen({ item, tz, onNew }: { item: OutboxItem; tz: string
       )}
 
       {rules && item.audio && (
-        <Stage n={2} title="Voice note" done={Boolean(transcript)} busy={!transcript && transcribe?.status !== "failed"}>
+        <Stage n={2} title="Voice note" done={Boolean(transcript)} busy={!transcript && !noTranscript}>
           {transcript ? (
             <p data-testid="transcript">
               <span className="text-[12px] text-muted">
@@ -113,8 +155,8 @@ export function ResultScreen({ item, tz, onNew }: { item: OutboxItem; tz: string
               </span>
               <br />“{transcript}”
             </p>
-          ) : transcribe?.status === "failed" || transcribe?.status === "skipped" ? (
-            <p className="text-muted">Transcription unavailable here; the rules stand.</p>
+          ) : noTranscript ? (
+            <p className="text-muted" data-testid="ai-unavailable">Checked by rules (AI unavailable): no transcript, the rules&apos; result stands.</p>
           ) : (
             <p className="text-muted" data-testid="transcribing">Transcribing…</p>
           )}
@@ -123,18 +165,20 @@ export function ResultScreen({ item, tz, onNew }: { item: OutboxItem; tz: string
 
       {rules && item.audio && !transcript && (
         <Stage n={3} title="Voice against the form">
-          <p className="text-muted">
-            {transcribe?.status === "failed" || transcribe?.status === "skipped" ? "No transcript, so nothing to check." : "Waits for the transcript."}
-          </p>
+          <p className="text-muted">{noTranscript ? "Checked by rules (AI unavailable)." : "Waits for the transcript."}</p>
         </Stage>
       )}
 
       {rules && transcript && (
-        <Stage n={3} title="Voice against the form" done={!busy(consistency)} busy={busy(consistency)}>
-          {busy(consistency) || !consistency ? (
-            <p className="text-muted" data-testid="checking">Checking voice against the form…</p>
-          ) : decidedByAi && vff ? (
+        <Stage n={3} title="Voice against the form" done={!busy(consistency) && (Boolean(consistency) || noCheck)} busy={busy(consistency) || (!consistency && !noCheck)}>
+          {decidedByAi && vff ? (
             <Verdict transcript={transcript} evidence={vff.evidence} fired={vff.fired} />
+          ) : noCheck ? (
+            <p className="text-muted" data-testid="ai-unavailable">
+              Checked by rules (AI unavailable): the keyword rule found {vff?.fired ? "a contradiction" : "no contradiction"}.
+            </p>
+          ) : busy(consistency) || !consistency ? (
+            <p className="text-muted" data-testid="checking">Checking voice against the form…</p>
           ) : (
             <p className="text-muted">Decided by the keyword rule ({vff?.fired ? "contradiction" : "no contradiction"}).</p>
           )}

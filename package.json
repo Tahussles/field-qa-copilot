@@ -10,7 +10,8 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "next typegen && tsc --noEmit",
-    "test:smoke": "playwright test"
+    "test:smoke": "playwright test",
+    "preflight": "uv run scripts/preflight.py"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.118.0",

@@ -15,6 +15,9 @@ from typing import Callable, Iterable, Protocol
 
 from .postgrest import Supabase, SupabaseError, in_list
 
+# Every queued job row carries the same keys (see SupabaseRepo.queue_jobs).
+JOB_DEFAULTS = {"submission_id": None, "notify": True, "input": None}
+
 # What the engine reads (engine.Submission.from_row); ingest_begin returns the same for the scoring group.
 ENGINE_COLUMNS = ("id,contributor_id,device_id,captured_at,synced_at,duration_sec,lat,lng,answers,voice_transcript,"
                   "gps_accuracy_m,device_captured_at,device_synced_at,received_at")
@@ -88,6 +91,7 @@ class Repository(Protocol):
     def finish_job(self, job_id: str, values: dict) -> None: ...
     def requeue_job(self, job_id: str) -> dict | None: ...  # a forced rerun
     def pending_jobs(self) -> list[dict]: ...  # queued or running: id, submission_id, kind, status
+    def jobs_for(self, submission_id: str) -> list[dict]: ...  # kind, status, created_at of one submission's jobs
     def ai_spend(self, run_id: str | None) -> dict: ...  # all_time_usd, all_time_jobs, run_usd, run_jobs
     def signed_upload(self, bucket: str, path: str) -> str: ...  # absolute URL a phone can PUT the file to
     def briefs(self, for_date: str) -> list[dict]: ...  # newest first
@@ -437,6 +441,10 @@ class InMemoryRepo:
         return [{k: j[k] for k in ("id", "submission_id", "kind", "status")}
                 for j in self._jobs.values() if j["status"] in ("queued", "running")]
 
+    def jobs_for(self, submission_id):
+        return [{k: j.get(k) for k in ("kind", "status", "created_at")}
+                for j in self._jobs.values() if j.get("submission_id") == submission_id]
+
     def ai_spend(self, run_id):
         jobs = list(self._jobs.values())
         cost = lambda js: round(sum(float(j.get("cost_usd") or 0) for j in js), 6)  # noqa: E731
@@ -725,8 +733,10 @@ class SupabaseRepo:
     def queue_jobs(self, rows):
         if not rows:
             return []
-        return self._db.upsert_returning("ai_jobs", [{"project_id": self._pid, **r} for r in rows],
-                                         on_conflict="dedupe_key", ignore=True)
+        # PostgREST takes a bulk insert only when every row has the same keys: a transcription (no
+        # notify key) queued with a paraphrase check was refused whole, and the arrival got no model work.
+        rows = [{**JOB_DEFAULTS, "project_id": self._pid, **r} for r in rows]
+        return self._db.upsert_returning("ai_jobs", rows, on_conflict="dedupe_key", ignore=True)
 
     def job(self, job_id):
         rows = self._db.select("ai_jobs", "*", id=f"eq.{job_id}")
@@ -754,6 +764,10 @@ class SupabaseRepo:
     def pending_jobs(self):
         return self._db.select("ai_jobs", "id,submission_id,kind,status", status="in.(queued,running)",
                                project_id=f"eq.{self._pid}")
+
+    def jobs_for(self, submission_id):
+        return self._db.select("ai_jobs", "kind,status,created_at", submission_id=f"eq.{submission_id}",
+                               order="created_at")
 
     def ai_spend(self, run_id):
         return self._db.rpc("ai_spend", {"project": self._pid, "run": run_id})

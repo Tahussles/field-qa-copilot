@@ -49,13 +49,14 @@ flowchart LR
 | Hard mode, held-out seeds 201–202: rules only | precision 86.9%, recall 71.7% |
 | Hard mode: rules + AI verdicts | precision **91.5%**, recall **86.9%** |
 | Hard mode's night forger (phone clock set back 3 h): night forms missed per wave | 6.5 without clock_skew, **0** with it |
-| Ingest `POST /submissions` on production | p50 188 ms, p95 254 ms (2 database calls) |
-| Phone, from tapping Submit (12 production runs) | rules result 1.9 s, transcript 4.5 s, model verdict 6.7 s (medians) |
+| Ingest `POST /submissions` on production, as a phone sends it | p50 340 ms, p95 487 ms from Toronto (276 ms inside the API) |
+| Realtime, insert to screen | p50 402 ms |
+| Phone, from tapping Submit | rules result 1.0 s, transcript 3.9 s, model verdict 6.5 s (medians of 3) |
 | Model latency per call (production jobs) | judge p50 1.35 s (Haiku), transcription p50 0.53 s (Scribe), brief p50 7.5 s (Sonnet) |
-| Model spend on production, all time | $0.72 over 3,656 jobs (the wave backfill included) |
+| Model spend on production, all time | $0.74 over 3,800 jobs (the wave backfill included) |
 | Hard-mode model verdicts (recorded once, replayed by CI for free) | 6,953 verdicts, $1.16 |
 
-Where the numbers come from: `scripts/evaluate.py` (held-out seeds and hard mode), the `ai_jobs` table (latency and spend), and the round 5 and round 8 timing runs (ingest and phone).
+Where the numbers come from: `scripts/evaluate.py` (held-out seeds and hard mode, `data/eval/headline.json` and `hard.json`) and `scripts/measure.py` (production timings, model latency and spend, `data/eval/measurements.json`). `/architecture` and `/pitch` read the same files.
 
 ## Run it locally
 

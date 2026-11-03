@@ -11,6 +11,8 @@ import type { MapData, Overview } from "@/lib/types";
 
 const REFRESH_DEBOUNCE_MS = 1000;
 const PULSE_MS = 3400;
+// While the Realtime socket is down the dashboard polls instead, and stops the moment it is back.
+export const FALLBACK_POLL_MS = 3000;
 
 interface AppData {
   overview: Overview | null;
@@ -18,7 +20,7 @@ interface AppData {
   error: string | null;
   /** Bumps whenever fresh data arrives; views that fetch their own data refetch on change. */
   version: number;
-  live: "connecting" | "live" | "offline";
+  live: "connecting" | "live" | "reconnecting" | "offline";
   /** Submission ids that just turned flagged, for a brief pulse on the map. */
   pulses: string[];
   refresh: () => void;
@@ -43,6 +45,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [live, setLive] = useState<AppData["live"]>("connecting");
   const [pulses, setPulses] = useState<string[]>([]);
   const timer = useRef<number | null>(null);
+  const poll = useRef<number | null>(null);
   const flagged = useRef(new Map<string, boolean>());
 
   const load = useCallback(async () => {
@@ -93,6 +96,11 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       queueMicrotask(() => setLive("offline"));
       return;
     }
+    let disposed = false;
+    const stopPolling = () => {
+      if (poll.current) window.clearInterval(poll.current);
+      poll.current = null;
+    };
     const channel = supabase
       .channel("dashboard")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "submissions" }, () => refresh())
@@ -110,8 +118,22 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       .on("postgres_changes", { event: "*", schema: "public", table: "ai_verdicts" }, () => refresh())
       .on("postgres_changes", { event: "*", schema: "public", table: "ai_jobs" }, () => refresh())
       .on("postgres_changes", { event: "*", schema: "public", table: "briefs" }, () => refresh())
-      .subscribe((status) => setLive(status === "SUBSCRIBED" ? "live" : status === "CLOSED" ? "offline" : "connecting"));
+      .subscribe((status) => {
+        if (disposed) return;
+        if (status === "SUBSCRIBED") {
+          const caughtUp = poll.current != null;
+          stopPolling();
+          setLive("live");
+          if (caughtUp) void load(); // whatever landed while the socket was down
+        } else {
+          // CHANNEL_ERROR, TIMED_OUT or CLOSED: supabase-js rejoins on its own; poll until it does.
+          setLive("reconnecting");
+          if (!poll.current) poll.current = window.setInterval(() => void load(), FALLBACK_POLL_MS);
+        }
+      });
     return () => {
+      disposed = true;
+      stopPolling();
       if (timer.current) window.clearTimeout(timer.current);
       void supabase.removeChannel(channel);
     };

@@ -38,6 +38,10 @@ router = APIRouter(prefix="/api/py")
 _repo: Repository | None = None
 _provider: Provider | None = None
 HARD_EVAL = ROOT / "data" / "eval" / "hard.json"
+# The numbers /architecture and /pitch show, all generated: evaluate.py (headline.json, hard.json) and
+# measure.py (measurements.json, production timings). Committed, so the pages never show a typed number.
+STORY_FILES = {"headline": ROOT / "data" / "eval" / "headline.json", "hard": HARD_EVAL,
+               "measured": ROOT / "data" / "eval" / "measurements.json"}
 
 
 def get_repo() -> Repository:
@@ -357,6 +361,18 @@ def get_eval_hard(response: Response) -> dict:
         raise HTTPException(404, "no hard-mode evaluation has been run yet")
     response.headers["Cache-Control"] = "public, max-age=60, s-maxage=600"
     return json.loads(HARD_EVAL.read_text())
+
+
+@router.get("/story")
+def get_story(response: Response, repo: Repository = Depends(get_repo)) -> dict:
+    """Held-out headline, hard mode and production measurements, plus the model spend right now."""
+    response.headers["Cache-Control"] = "public, max-age=60, s-maxage=300, stale-while-revalidate=86400"
+    story = {name: json.loads(path.read_text()) if path.exists() else None for name, path in STORY_FILES.items()}
+    try:
+        story["spend_now"] = repo.ai_spend(None)
+    except Exception:  # noqa: BLE001  the pages still render from the files
+        story["spend_now"] = None
+    return story
 
 
 app.include_router(router)

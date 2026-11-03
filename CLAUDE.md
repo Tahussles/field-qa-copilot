@@ -17,7 +17,7 @@ Field QA Copilot checks every submission as it syncs, flags likely fabrication w
 ```
 design/prototype.html     the approved design (static, fake data); the dashboard matches its look
 app/                      Next.js routes: / landing, /app overview, /app/queue[/id], /app/detectors, /app/test,
-                          /collect (the phone)
+                          /collect (the phone), /architecture and /pitch (the story pages)
   globals.css             design tokens (@theme), .glass and other component classes (@layer components)
 components/               UI: app/ (shell, data provider, toasts, passcode, demo controls), overview/, queue/,
                           detectors/, test/, landing/ (stage), collect/ (phone form, recorder, result), ui/Glass
@@ -51,7 +51,8 @@ docs/                     ai-practices.md (how AI is used), decisions.md (key de
 data/fixtures/            committed: ai_verdicts/ (recorded hard-mode model verdicts, CI scores from them),
                           edge_cases/proposed/ (model-proposed, awaiting review) and accepted/ (pytest runs them)
 data/synthetic/           generator output: CSVs, summary.json, preview.png (gitignored)
-data/eval/                evaluation output: report.md, report.json (gitignored); hard.json (committed)
+data/eval/                evaluation output: report.md, report.json (gitignored); hard.json, headline.json (held-out
+                          numbers) and measurements.json (production timings, scripts/measure.py) are committed
 data/sim/                 simulator run logs (gitignored)
 data/screens/             dashboard screenshots (gitignored)
 supabase/migrations/      SQL migrations, numbered and applied in order
@@ -88,6 +89,8 @@ uv run scripts/backfill_ai.py --estimate             # model verdicts over the w
 uv run scripts/evaluate.py --hard                    # rules only vs rules + AI on hard-mode waves (recorded verdicts)
 uv run scripts/refresh_ai_verdicts.py --estimate     # re-record missing or stale verdicts (cost guard $5)
 uv run scripts/gen_edge_cases.py --estimate          # propose edge cases (model calls); --review checks them
+pnpm preflight                                       # before a live demo: green/red checklist on prod, ends with a reset
+uv run scripts/measure.py                            # re-measure prod for the story pages (writes measurements.json)
 RUN_LIVE_AI=1 uv run pytest -k live                  # the one test that calls a real model (prompt injection)
 node scripts/render-basemap.mjs                      # re-render public/landing/basemap.* (areas or palette changed)
 node --env-file=.env.local scripts/realtime-probe.mjs 600        # watch Realtime events
@@ -159,6 +162,10 @@ After cloning, wire the commit hook once: `git config core.hooksPath .githooks`.
 - Map: MapLibre with the OpenFreeMap dark style (no key; attribution from the tile source), loaded after first paint behind a skeleton, with a preconnect to the tile host. Its worker is served from `public/vendor/` because a bundler moves the module it would otherwise resolve against.
 - Demo controls (`/api/py/demo/*`, all behind the passcode): `reset` deletes simulator and live submissions with their dependents and every review, rescores the wave on the quiet path and sets `as_of` back to Oct 31 08:00; `step` sends the next pending live-day submissions (by client_submission_id, so repeats and two tabs are safe) through `service.ingest` and moves `as_of` forward; `status` lists progress and the key moments derived from the live day's fraud actors. The runner lives in the browser (`components/app/DemoControls.tsx`, D key); the rest of the app only reacts through Realtime. `verify_wave.py` proves a reset left the fresh wave.
 - `as_of` is read fresh for the overview (`repo.as_of()`); the cached project context may hold an old value.
+- Story pages (`/architecture`, `/pitch`): every number comes from `GET /api/py/story` (headline.json, hard.json, measurements.json, and the spend now), never typed. CI fails if headline.json or hard.json does not match the code. `/pitch` moves with the arrow keys and `#4` opens slide 4.
+- Demo panel (D): a Script tab with the demo beats, target times, a running timer and jump buttons (`/app?beat=brief`, `/app?beat=hotspot&code=E07`, or the `fqc:beat` window event when the overview is open; `lib/beats.ts`).
+- Live-demo fallbacks: while the Realtime channel is down the dashboard and the phone result poll every 3 s with a "Reconnecting…" pill, and stop once it resubscribes; the map swaps to a plain dark style (areas, points, hotspots) if the basemap has not rendered within 5 s or fails; a model job that failed, was skipped or is stuck for a minute shows "Checked by rules (AI unavailable)".
+- `pnpm preflight` (`scripts/preflight.py`): production health and engine, the tile host, a collect token, an ingest sample with a Realtime round trip, one voice interview end to end (one Scribe and one Claude call), warm caches, then a demo reset and verify_wave. Exit 1 on any red.
 - Landing (`/`): no MapLibre. The stage draws on a canvas over `public/landing/basemap.webp`, replays yesterday's real submissions from `/api/py/landing` (CDN-cached), and says "Live" only while real score inserts arrive over Realtime. Reduced motion gets a static frame.
 - Phone (`/collect`): opens with a collect token from the demo panel's QR code (`<expiry>.<demo run>.<HMAC>`, keyed from the service key, 30 min, revoked by a demo reset) or the passcode; nothing else. A token can only write `source: live` submissions whose voice note sits under `live/<its device_id>/`. The phone keeps a `device_id` in localStorage, saves each interview to an IndexedDB outbox first (audio included), then uploads the voice note to a signed Storage URL and POSTs `/submissions` with its own `client_submission_id`, so a retry returns the same record. Switching contributor on one phone is real and fires shared_device.
 - Phone location is simulated by default (a new household inside the contributor's area, or the last interview's spot); "Use my real GPS" sends the real fix, so outside_area fires anywhere but Kisumu.

@@ -179,6 +179,7 @@ export interface SubmissionRow {
 }
 
 export interface SubmissionDetail {
+  ai_jobs?: { kind: string; status: string; created_at: string }[];
   submission: SubmissionRow;
   contributor: ContributorRef;
   score: { score: number; flagged: boolean; band: Band; engine_version: string; scored_at: string } | null;

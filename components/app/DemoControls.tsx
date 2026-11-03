@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 
+import { DemoScript } from "@/components/app/DemoScript";
 import { useWithPasscode } from "@/components/app/Passcode";
 import { useToast } from "@/components/app/Toasts";
 import { Glass } from "@/components/ui/Glass";
@@ -54,6 +55,7 @@ function DemoRunner({ open, onClose }: { open: boolean; onClose: () => void }) {
   const withPasscode = useWithPasscode();
   const toast = useToast();
   const [status, setStatus] = useState<DemoStatus | null>(null);
+  const [tab, setTab] = useState<"controls" | "script">("controls");
   const [locked, setLocked] = useState(false);
   const [running, setRunning] = useState(false);
   const [speed, setSpeed] = useState<(typeof SPEEDS)[number]>(6);
@@ -289,8 +291,29 @@ function DemoRunner({ open, onClose }: { open: boolean; onClose: () => void }) {
           ×
         </button>
       </div>
+      <div className="mt-2.5 inline-flex rounded-md border border-line p-0.5" role="tablist" aria-label="Demo panel">
+        {(["controls", "script"] as const).map((t) => (
+          <button
+            key={t}
+            type="button"
+            role="tab"
+            aria-selected={tab === t}
+            onClick={() => setTab(t)}
+            className={`rounded px-2.5 py-0.5 text-[11.5px] ${tab === t ? "bg-white/[0.1] text-ink" : "text-muted hover:text-ink"}`}
+          >
+            {t === "controls" ? "Controls" : "Script"}
+          </button>
+        ))}
+      </div>
 
-      {locked && !status ? (
+      {tab === "script" ? (
+        <DemoScript
+          onPhone={() => {
+            setTab("controls");
+            void showPhone();
+          }}
+        />
+      ) : locked && !status ? (
         <div className="mt-3">
           <p className="text-muted">The demo controls change shared data, so they need the demo passcode.</p>
           <button type="button" onClick={() => void load()} className="btn btn-sm mt-2">

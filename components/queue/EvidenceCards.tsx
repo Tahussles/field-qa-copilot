@@ -445,6 +445,14 @@ function VoiceVsForm(props: CardProps) {
   return props.check.evidence.decided_by === "ai" ? <VoiceVsFormAI {...props} /> : <VoiceVsFormRule {...props} />;
 }
 
+/** The model job for this submission failed, was skipped, or has stalled for over a minute. */
+function modelUnavailable(detail: SubmissionDetail, kind: string): boolean {
+  const job = detail.ai_jobs?.filter((j) => j.kind === kind).at(-1);
+  if (!job) return false;
+  if (job.status === "failed" || job.status === "skipped") return true;
+  return (job.status === "queued" || job.status === "running") && Date.now() - Date.parse(job.created_at) > 60_000;
+}
+
 function VoiceVsFormRule({ check, detail }: CardProps) {
   const e = check.evidence as {
     form_source: string;
@@ -480,7 +488,9 @@ function VoiceVsFormRule({ check, detail }: CardProps) {
         rule={
           e.ai
             ? `Decided by the keyword rule: the model's verdict (confidence ${fmtPct(e.ai.confidence)}) is below the ${fmtPct(e.ai.below)} bar.`
-            : "Decided by the keyword rule: the first source word in the transcript decides (no model verdict yet)."
+            : modelUnavailable(detail, "consistency")
+              ? "Checked by rules (AI unavailable): the first source word in the transcript decides."
+              : "Decided by the keyword rule: the first source word in the transcript decides (no model verdict yet)."
         }
       />
     </Card>

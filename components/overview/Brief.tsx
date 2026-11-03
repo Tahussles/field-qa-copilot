@@ -94,7 +94,7 @@ export function Brief({ overview }: { overview: Overview | null }) {
   const fallback = state?.brief?.status === "template" ? state.brief : null;
 
   return (
-    <section aria-labelledby="brief-title" className="panel">
+    <section aria-labelledby="brief-title" className="panel scroll-mt-4" id="brief">
       <div className="ph">
         <h2 id="brief-title">Morning brief</h2>
         <div className="flex items-center gap-1.5">
