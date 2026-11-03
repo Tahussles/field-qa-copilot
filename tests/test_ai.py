@@ -452,3 +452,19 @@ def test_spend_survives_a_reset_and_is_counted_per_demo_run():
     assert reset["deleted"]["ai_jobs"] == len(sent)  # detached, not deleted
     assert after["all_time_usd"] == spend["all_time_usd"] and after["run_jobs"] == 0
     assert all(j["submission_id"] is None for j in sent if repo.job(j["id"]))
+
+
+def test_a_job_whose_submission_a_reset_removed_is_skipped_not_failed():
+    from datagen import build_wave
+    from tests.test_demo import client_for as demo_client, fresh_repo, step
+
+    repo = fresh_repo(build_wave(20261031))
+    with demo_client(repo) as client:
+        run = client.get("/api/py/demo/status", headers=AUTH).json()["run_id"]
+        step(client, repo, count=3)
+        queued = [j["id"] for j in repo._jobs.values() if j.get("demo_run_id") == run]
+        assert queued
+        client.post("/api/py/demo/reset", headers=AUTH)  # before the jobs ran: they are detached
+    results = [jobs.run_job(repo, FakeProvider(), job_id=job_id) for job_id in queued]
+    assert {r["status"] for r in results} == {"skipped"}
+    assert all(repo.job(job_id)["output"]["reason"].startswith("its submission was removed") for job_id in queued)

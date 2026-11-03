@@ -209,6 +209,7 @@ HANDLERS = {"consistency": run_consistency, "paraphrase": run_paraphrase, "trans
             "brief": run_brief, "tts": run_tts}
 NEEDS = {"consistency": "judge", "paraphrase": "judge", "transcribe": "transcribe", "brief": "brief", "tts": "speak"}
 OFF = "no model key on this deployment; the rule-based result stands"
+GONE = "its submission was removed (a demo reset) before the job ran"
 
 
 def run_job(repo: Repository, provider: Provider, job_id: str | None = None, job: dict | None = None) -> dict:
@@ -217,8 +218,13 @@ def run_job(repo: Repository, provider: Provider, job_id: str | None = None, job
     if job is None:
         return {"job_id": job_id, "status": "skipped", "reason": "not queued (already running or finished)"}
     started = time.perf_counter()
+    skip = None
     if not getattr(provider, "can", {}).get(NEEDS[job["kind"]], True):
-        repo.finish_job(job["id"], {"status": "skipped", "output": {"reason": OFF}})
+        skip = OFF
+    elif job["kind"] not in ("brief", "tts") and not job.get("submission_id"):
+        skip = GONE  # ai_jobs.submission_id is set null when a reset deletes the submission
+    if skip:
+        repo.finish_job(job["id"], {"status": "skipped", "output": {"reason": skip}})
         return {"job_id": job["id"], "kind": job["kind"], "status": "skipped", "error": None,
                 "wall_ms": round((time.perf_counter() - started) * 1000), "model": None, "cost_usd": None}
     try:
