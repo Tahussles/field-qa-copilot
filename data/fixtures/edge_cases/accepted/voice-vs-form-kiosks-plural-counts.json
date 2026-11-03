@@ -1,0 +1,49 @@
+{
+ "written": "by hand in review (round 9b)",
+ "case": {
+  "id": "voice-vs-form-kiosks-plural-counts",
+  "check": "voice_vs_form",
+  "kind": "boundary",
+  "title": "'kiosks' is the plural of a keyword and counts, against a river form",
+  "submissions": [
+   {
+    "ref": "t",
+    "contributor": "E01",
+    "device_id": "dev-e01",
+    "captured_at": "2026-03-12T10:10:00+03:00",
+    "duration_sec": 1500,
+    "lat": -0.08,
+    "lng": 34.77,
+    "water_source": "river",
+    "satisfaction": [
+     3,
+     4,
+     2,
+     4,
+     3,
+     5,
+     2,
+     4
+    ],
+    "open_text": "The kiosk opens late so mornings are slow.",
+    "voice_transcript": "There are two kiosks near us and we use the closer one."
+   }
+  ],
+  "target": "t",
+  "should_fire": [
+   "voice_vs_form"
+  ],
+  "should_not_fire": [
+   "too_fast",
+   "same_spot",
+   "copied_text",
+   "straight_lining",
+   "off_hours",
+   "shared_device",
+   "burst",
+   "outside_area",
+   "clock_skew"
+  ],
+  "why": "Whole-word matching keeps plurals: kiosks reads as public_tap, the form says river."
+ }
+}

@@ -1,0 +1,48 @@
+{
+ "written": "by hand in review (round 9b)",
+ "case": {
+  "id": "straight-lining-within-one-point-silent",
+  "check": "straight_lining",
+  "kind": "boundary",
+  "title": "4s and 5s in no pattern stay silent: 'within one point' fires on ~260 genuine forms per tuning seed",
+  "submissions": [
+   {
+    "ref": "t",
+    "contributor": "E01",
+    "device_id": "dev-e01",
+    "captured_at": "2026-03-12T10:10:00+03:00",
+    "duration_sec": 1500,
+    "lat": -0.08,
+    "lng": 34.77,
+    "water_source": "public_tap",
+    "satisfaction": [
+     4,
+     5,
+     5,
+     4,
+     4,
+     5,
+     4,
+     5
+    ],
+    "open_text": "The kiosk opens late so mornings are slow.",
+    "voice_transcript": ""
+   }
+  ],
+  "target": "t",
+  "should_fire": [],
+  "should_not_fire": [
+   "too_fast",
+   "same_spot",
+   "copied_text",
+   "straight_lining",
+   "voice_vs_form",
+   "off_hours",
+   "shared_device",
+   "burst",
+   "outside_area",
+   "clock_skew"
+  ],
+  "why": "Pins the rejected looser rule: a satisfied respondent answering 4 and 5 is normal."
+ }
+}

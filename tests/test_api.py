@@ -83,7 +83,8 @@ def test_retry_with_same_client_id_is_idempotent(client, repo):
     {"duration_sec": 12.5},
     {"answers": None},
     {"source": "synthetic"},
-    {"captured_at": (datetime.now(timezone.utc) + timedelta(hours=2)).isoformat()},
+    # A phone clock hours ahead is accepted and fires clock_skew; days ahead is a broken clock or a forged request.
+    {"captured_at": (datetime.now(timezone.utc) + timedelta(days=2)).isoformat()},
     {"captured_at": "2026-10-27T10:00:00"},  # no UTC offset
 ])
 def test_invalid_bodies_are_rejected(client, change):

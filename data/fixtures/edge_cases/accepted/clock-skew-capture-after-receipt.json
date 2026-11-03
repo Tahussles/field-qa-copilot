@@ -1,0 +1,50 @@
+{
+ "written": "by hand in review (round 9b)",
+ "case": {
+  "id": "clock-skew-capture-after-receipt",
+  "check": "clock_skew",
+  "kind": "boundary",
+  "title": "A capture time 20 minutes after the server received it: the clock runs ahead",
+  "submissions": [
+   {
+    "ref": "t",
+    "contributor": "E01",
+    "device_id": "dev-e01",
+    "captured_at": "2026-03-12T11:00:00+03:00",
+    "duration_sec": 1500,
+    "lat": -0.08,
+    "lng": 34.77,
+    "water_source": "public_tap",
+    "satisfaction": [
+     3,
+     4,
+     2,
+     4,
+     3,
+     5,
+     2,
+     4
+    ],
+    "open_text": "The kiosk opens late so mornings are slow.",
+    "voice_transcript": "",
+    "received_at": "2026-03-12T10:40:00+03:00"
+   }
+  ],
+  "target": "t",
+  "should_fire": [
+   "clock_skew"
+  ],
+  "should_not_fire": [
+   "too_fast",
+   "same_spot",
+   "copied_text",
+   "straight_lining",
+   "voice_vs_form",
+   "off_hours",
+   "shared_device",
+   "burst",
+   "outside_area"
+  ],
+  "why": "No sync clock was sent, but no form can be finished after it arrived."
+ }
+}

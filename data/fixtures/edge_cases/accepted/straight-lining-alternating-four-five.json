@@ -78,9 +78,10 @@
    }
   ],
   "target": "alt",
-  "should_fire": [],
+  "should_fire": [
+   "straight_lining"
+  ],
   "should_not_fire": [
-   "straight_lining",
    "too_fast",
    "same_spot",
    "copied_text",
@@ -91,5 +92,6 @@
    "outside_area"
   ],
   "why": "A fabricator who knows that identical answers get flagged alternates between two adjacent values. The rule as written requires all 8 to be identical, so it must stay silent. An implementation that drifted to a fuzzier test, such as range <= 1, low variance, or at most 2 distinct values, would wrongly fire. This case pins the rule to its specification. Quiet checks: durations are at least 720 s. same_spot does not fire because the points are far apart: alt-mid differs by 0.008 deg lat (~890 m), alt-aft by 0.012 deg lng (~1.3 km), and mid-aft by 0.014 deg lat (~1.5 km), so no neighbour lies within 50 m. The texts share no content words. There are no voice notes. All times are daytime. One contributor uses the device. There are 3 submissions, fewer than the 4 that burst needs. All points are inside Kondele."
- }
+ },
+ "review": "Corrected in review: a strict two-value zig-zag is the one-step dodge of the identical rule and fires."
 }

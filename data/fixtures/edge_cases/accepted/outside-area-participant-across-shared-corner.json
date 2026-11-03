@@ -56,9 +56,7 @@
    }
   ],
   "target": "corner",
-  "should_fire": [
-   "outside_area"
-  ],
+  "should_fire": [],
   "should_not_fire": [
    "too_fast",
    "same_spot",
@@ -67,8 +65,10 @@
    "voice_vs_form",
    "off_hours",
    "shared_device",
-   "burst"
+   "burst",
+   "outside_area"
   ],
   "why": "Kondele and Nyalenda touch only at the corner (34.76, -0.09). The target is 0.00005 deg west and 0.00005 deg south of it (about 7.9 m diagonally), so it is outside Kondele on both axes and inside Nyalenda. A fabricator may hope a point hugging the corner passes a tolerance buffer, a union-of-areas test, or a check that skips participants; the rule applies to every contributor and must fire. same_spot never fires for participants; only 2 submissions so no burst; durations 6.5-7 min exceed the 3-minute participant minimum; 07:50 and 17:30 are daytime; distinct texts; one device; no transcripts."
- }
+ },
+ "review": "Corrected in review: 7.9 m past the corner is inside GPS error (the 15 m floor)."
 }

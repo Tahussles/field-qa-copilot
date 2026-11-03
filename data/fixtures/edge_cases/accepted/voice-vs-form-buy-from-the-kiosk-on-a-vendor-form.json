@@ -1,0 +1,49 @@
+{
+ "written": "by hand in review (round 9b)",
+ "case": {
+  "id": "voice-vs-form-buy-from-the-kiosk-on-a-vendor-form",
+  "check": "voice_vs_form",
+  "kind": "adversarial",
+  "title": "'We buy from the kiosk' on a vendor form: the kiosk decides, so it contradicts the form",
+  "submissions": [
+   {
+    "ref": "t",
+    "contributor": "E01",
+    "device_id": "dev-e01",
+    "captured_at": "2026-03-12T10:10:00+03:00",
+    "duration_sec": 1500,
+    "lat": -0.08,
+    "lng": 34.77,
+    "water_source": "vendor",
+    "satisfaction": [
+     3,
+     4,
+     2,
+     4,
+     3,
+     5,
+     2,
+     4
+    ],
+    "open_text": "The kiosk opens late so mornings are slow.",
+    "voice_transcript": "We buy from the kiosk by the school."
+   }
+  ],
+  "target": "t",
+  "should_fire": [
+   "voice_vs_form"
+  ],
+  "should_not_fire": [
+   "too_fast",
+   "same_spot",
+   "copied_text",
+   "straight_lining",
+   "off_hours",
+   "shared_device",
+   "burst",
+   "outside_area",
+   "clock_skew"
+  ],
+  "why": "The source named is the kiosk (public tap or kiosk); 'buy from' only decides when nothing is named."
+ }
+}

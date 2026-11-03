@@ -31,3 +31,17 @@ Proposed by `scripts/gen_edge_cases.py` (5 per check). Each case was run through
 ## What to change in the next batch
 
 The generator saw the rules, so it tested the rules' edges well and the rules' intent hardly at all. Next time, also ask for cases written from the purpose of each check ("what would a careful supervisor expect here?") without the threshold text. That is where gaps 3 to 5 came from.
+
+# Round 9b: the gaps closed (engine 0.5.0)
+
+All six gap cases are now accepted, with their expectations corrected to what each check is for (each file says so in `review`). The bare-tap case carries its recorded model verdict and is caught by the model, not by a new keyword. 19 hand-written cases pin the fixes and the new clock_skew check. `accepted/` now holds 64 cases.
+
+Run against engine 0.4.0, 15 of the 25 new or corrected cases fail, and all 25 pass on 0.5.0. The other 10 are guards that pass on both: silent cases, and the case the model decides.
+
+| fix | fails on 0.4.0, passes on 0.5.0 | guards (pass on both) |
+|---|---|---|
+| outside_area: tolerance max(gps_accuracy_m, 15 m); 1.5 within 1 km, 2.0 beyond | east-edge-lat-in-band, north-edge-just-outside, participant-across-shared-corner, 30m-out-accuracy-8m-near-band, 30m-out-accuracy-40m-within-error | 2km-out-far-band-flags, 500m-out-with-night-work-flags |
+| straight_lining: strict two-value zig-zag | alternating-four-five, zigzag-one-three | near-zigzag-silent, within-one-point-silent |
+| voice_vs_form: whole words; "buy from" only when no source is named | buy-from-precedes-kiosk, buy-from-the-kiosk-on-a-vendor-form, lakeside-is-not-a-lake, pumpkins-are-not-a-pump | kiosks-plural-counts, buy-from-the-handcart-man, buy-from-them-falls-back-to-vendor |
+| meaning left to the model (no rule change) | none | bare-tap-caught-by-the-model |
+| clock_skew (new) | 3h-behind-at-sync, 6-minutes-ahead-fires, capture-after-receipt, set-back-with-night-work-flags | 4-minutes-ahead-silent, late-sync-right-clock-silent |

@@ -171,7 +171,12 @@ export function ResultScreen({ item, tz, onNew }: { item: OutboxItem; tz: string
 // The one check whose evidence a field worker can act on at once: how far out they are.
 function firedLabel(f: { key: string; evidence: Record<string, unknown> }) {
   const title = CHECK_TITLE[f.key as keyof typeof CHECK_TITLE];
-  return f.key === "outside_area" && f.evidence.distance ? `${title} (${f.evidence.distance} from ${f.evidence.area})` : title;
+  if (f.key === "outside_area" && f.evidence.distance) return `${title} (${f.evidence.distance} from ${f.evidence.area})`;
+  if (f.key === "clock_skew") {
+    const minutes = Math.abs(Number(f.evidence.skew_minutes));
+    return `${title} (${minutes >= 90 ? `${(minutes / 60).toFixed(1)} h` : `${Math.round(minutes)} min`} ${f.evidence.direction})`;
+  }
+  return title;
 }
 
 function Stage({ n, title, done, busy, children }: { n: number; title: string; done?: boolean; busy?: boolean; children: React.ReactNode }) {

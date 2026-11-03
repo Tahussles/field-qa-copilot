@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-11-03T18:08:56+00:00",
-  "engine_version": "0.4.0",
+  "generated_at": "2026-11-03T19:15:14+00:00",
+  "engine_version": "0.5.0",
   "seeds": [
     201,
     202
@@ -62,8 +62,8 @@
         "targeted_recall": 0.993
       },
       "straight_lining": {
-        "fires_on": 25,
-        "precision": 0.7,
+        "fires_on": 26,
+        "precision": 0.6748,
         "recall": 0.1178,
         "targeted_recall": 0.7464
       },
@@ -74,10 +74,10 @@
         "targeted_recall": 0.0
       },
       "off_hours": {
-        "fires_on": 13.5,
-        "precision": 0.7033,
-        "recall": 0.064,
-        "targeted_recall": 1.0
+        "fires_on": 4,
+        "precision": 0.0,
+        "recall": 0.0,
+        "targeted_recall": 0.0
       },
       "shared_device": {
         "fires_on": 29,
@@ -95,6 +95,12 @@
         "fires_on": 0,
         "precision": null,
         "recall": 0.0,
+        "targeted_recall": null
+      },
+      "clock_skew": {
+        "fires_on": 9.5,
+        "precision": 1.0,
+        "recall": 0.064,
         "targeted_recall": null
       }
     },
@@ -139,8 +145,8 @@
         "targeted_recall": 1.0
       },
       "straight_lining": {
-        "fires_on": 25,
-        "precision": 0.7,
+        "fires_on": 26,
+        "precision": 0.6748,
         "recall": 0.1178,
         "targeted_recall": 0.7464
       },
@@ -151,10 +157,10 @@
         "targeted_recall": 1.0
       },
       "off_hours": {
-        "fires_on": 13.5,
-        "precision": 0.7033,
-        "recall": 0.064,
-        "targeted_recall": 1.0
+        "fires_on": 4,
+        "precision": 0.0,
+        "recall": 0.0,
+        "targeted_recall": 0.0
       },
       "shared_device": {
         "fires_on": 29,
@@ -172,6 +178,12 @@
         "fires_on": 0,
         "precision": null,
         "recall": 0.0,
+        "targeted_recall": null
+      },
+      "clock_skew": {
+        "fires_on": 9.5,
+        "precision": 1.0,
+        "recall": 0.064,
         "targeted_recall": null
       }
     },
@@ -262,6 +274,51 @@
       "missed_by_rules": 19.5
     }
   ],
+  "clock_skew": {
+    "about": "the night forger sets the phone clock back 3 h; every other phone drifts at most 2 minutes",
+    "without": {
+      "rules": {
+        "submissions": 1678.5,
+        "fabricated": 148.5,
+        "flagged": 116,
+        "precision": 0.8618,
+        "recall": 0.6731,
+        "false_positives": 16,
+        "false_negatives": 48.5
+      },
+      "rules_ai": {
+        "submissions": 1678.5,
+        "fabricated": 148.5,
+        "flagged": 134.5,
+        "precision": 0.9106,
+        "recall": 0.8248,
+        "false_positives": 12,
+        "false_negatives": 26
+      },
+      "night_missed": 6.5
+    },
+    "with": {
+      "rules": {
+        "submissions": 1678.5,
+        "fabricated": 148.5,
+        "flagged": 122.5,
+        "precision": 0.869,
+        "recall": 0.7169,
+        "false_positives": 16,
+        "false_negatives": 42
+      },
+      "rules_ai": {
+        "submissions": 1678.5,
+        "fabricated": 148.5,
+        "flagged": 141,
+        "precision": 0.9147,
+        "recall": 0.8685,
+        "false_positives": 12,
+        "false_negatives": 19.5
+      },
+      "night_missed": 0
+    }
+  },
   "unmeasured": {
     "outside_area": "every synthetic point is inside its area, so it never fires here"
   }

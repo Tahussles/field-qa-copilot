@@ -58,13 +58,16 @@ def main() -> int:
     batch = score_all([Submission.from_row(r) for r in rows["submissions"]], contributors, params,
                       verdict_index(stored_verdicts))
 
-    stored = db.select("submissions", "id,client_submission_id,source,captured_at,duration_sec,lat,lng",
-                       order="id", **in_project)
+    stored = db.select("submissions", "id,client_submission_id,source,captured_at,duration_sec,lat,lng,"
+                                      "device_captured_at,device_synced_at,received_at", order="id", **in_project)
     expect("submissions (ids and client ids)", {(r["id"], r["client_submission_id"]) for r in stored},
            {(r["id"], r["client_submission_id"]) for r in rows["submissions"]})
     expect("simulator or live submissions", sum(r["source"] != "synthetic" for r in stored), 0)
     wanted_rows = {r["id"]: (r["duration_sec"], r["lat"], r["lng"]) for r in rows["submissions"]}
     expect("submission contents", {r["id"]: (r["duration_sec"], r["lat"], r["lng"]) for r in stored}, wanted_rows)
+    # The wave has no phone clocks (only live phones send them), so clock_skew cannot fire on it.
+    expect("wave rows with a phone clock", sum(any(r[k] for k in ("device_captured_at", "device_synced_at",
+                                                                   "received_at")) for r in stored), 0)
 
     scores = db.select("scores", "submission_id,score,flagged,engine_version,submissions!inner(project_id)", **joined)
     expect("scores", {s["submission_id"]: (s["score"], s["flagged"], s["engine_version"]) for s in scores},

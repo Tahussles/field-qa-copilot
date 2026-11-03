@@ -1,6 +1,6 @@
 # Key design decisions
 
-Ten decisions that shaped Field QA Copilot, each with the reason it was made. The numbers come from `scripts/evaluate.py` and production timing runs. The commit history shows how each one arrived.
+Twelve decisions that shaped Field QA Copilot, each with the reason it was made. The numbers come from `scripts/evaluate.py` and production timing runs. The commit history shows how each one arrived.
 
 ## 1. Checks are code; a model is an input, not a judge
 
@@ -41,3 +41,11 @@ Scoring rules + AI in CI with live calls would need keys, cost money on every pu
 ## 10. Previews read, production writes
 
 Preview deployments share production's database, so a preview that could write would put test data into the demo and spend model money on unreviewed code. `WRITES_ENABLED` is true on Production only: on a preview, every credentialed route returns 403, no brief is queued, and a banner says it is read-only. The phone side is offline-first for the same reason in reverse: the field is the unreliable part. Every interview, audio included, is saved to an IndexedDB outbox before any network call, and syncs when it can.
+
+## 11. Meaning-level contradictions are left to the model
+
+The keyword rule names a source only from a short list of source words, matched as whole words: "pumpkins" is not a pump and "lakeside" is not a lake, and "buy from" means a vendor only when no source is named ("we buy from the kiosk" is the kiosk). It does not try to read meaning. "We fetch from a tap down the road and pay five shillings per jerrycan" on a piped_home form names no source keyword, so the rule stays silent. That is deliberate: every phrase added to catch one sentence like that misfires on others, and the list stops being auditable. The model verdict reads it as a contradiction (confidence 0.9, quoting the sentence; a recorded call in `data/fixtures/edge_cases/accepted/voice-vs-form-bare-tap-caught-by-the-model.json`). When no verdict exists, recall drops for that case, and the error is never a false alarm.
+
+## 12. A phone's clock is evidence, not a reason to refuse it
+
+The phone reports its own clock when it syncs, and the server stamps its own (`device_synced_at`, `received_at`). They are seconds apart on an honest phone. A gap of more than 5 minutes fires clock_skew, and so does a capture time after the server received it. A late sync never fires it, because offline work is normal. The weight is 1.5, so it corroborates only: an honest phone can have a wrong clock, but a forger who sets the clock back 3 h to make night forms read as evening work is caught. In hard mode that forger hides 6.5 night forms per wave from off_hours, and with clock_skew none are missed. For the same reason a capture time hours in the future is now accepted and flagged (up to a day ahead) instead of being refused.

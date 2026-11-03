@@ -5,9 +5,16 @@ Two deciders, and the evidence says which one decided (decided_by):
 - ai: a stored model verdict (model.Verdict, kind voice_vs_form) with
   confidence >= params.ai_min_confidence. It reads meaning, so "the pipe has
   been dry since March, we buy from the handcart man" contradicts piped_home.
-- rules: otherwise, keyword matching. The keyword that appears earliest in the
-  transcript decides the source (ties go to the longer keyword), so "sometimes
-  the vendor, but mostly the public tap" reads as vendor.
+- rules: otherwise, keyword matching on whole words (a plural counts: "pipes",
+  "kiosks"; a longer word does not: "pumpkins" is not a pump, "lakeside" is not
+  a lake). The source named earliest decides (ties go to the longer keyword), so
+  "sometimes the vendor, but mostly the public tap" reads as vendor. "buy from"
+  says vendor only when no source is named at all: "we buy from the kiosk" is
+  the kiosk, which sells water by the jerrycan.
+
+Meaning-level contradictions without a source keyword ("a tap down the road,
+five shillings a jerrycan" on a piped_home form) are deliberately left to the
+model verdict, not to more keywords.
 """
 
 import re
@@ -17,27 +24,32 @@ from ..model import CheckResult, Context, Submission
 
 KEY = "voice_vs_form"
 
+# Source nouns. Compounds that name the same source are listed (pipeline); others are not words
+# for a source at all (upstream, lakeside, pumpkin).
 KEYWORDS = {
     "piped_home": ("our own tap", "own tap", "tap at home", "tap in the compound", "tap inside",
-                   "piped", "pipe", "connected"),
+                   "piped", "pipe", "pipeline", "connected"),
     "public_tap": ("public tap", "communal tap", "kiosk", "water point"),
     "borehole": ("borehole", "hand pump", "pump"),
-    "vendor": ("vendor", "handcart", "buy from", "boda boda", "water seller"),
+    "vendor": ("vendor", "handcart", "boda boda", "water seller"),
     "river": ("river", "stream", "lake"),
 }
-_PATTERNS = [
-    (source, keyword, re.compile(r"\b" + re.escape(keyword)))
-    for source, keywords in KEYWORDS.items()
-    for keyword in keywords
-]
+# How water is got, not where from: decides only when the transcript names no source.
+VERB_KEYWORDS = {"vendor": ("buy from",)}
 
 
-@lru_cache(maxsize=16384)
-def voice_source(transcript: str) -> tuple[str, str, int] | None:
-    """(source, keyword, position) of the earliest keyword in the transcript, or None."""
-    text = transcript.lower()
+def _patterns(table: dict) -> list:
+    return [(source, keyword, re.compile(r"\b" + re.escape(keyword) + r"(?:e?s)?\b"))
+            for source, keywords in table.items() for keyword in keywords]
+
+
+_PATTERNS = _patterns(KEYWORDS)
+_VERB_PATTERNS = _patterns(VERB_KEYWORDS)
+
+
+def _earliest(text: str, patterns: list) -> tuple[str, str, int] | None:
     found = []
-    for source, keyword, pattern in _PATTERNS:
+    for source, keyword, pattern in patterns:
         match = pattern.search(text)
         if match:
             found.append((match.start(), -len(keyword), source, keyword))
@@ -45,6 +57,13 @@ def voice_source(transcript: str) -> tuple[str, str, int] | None:
         return None
     position, _, source, keyword = min(found)
     return source, keyword, position
+
+
+@lru_cache(maxsize=16384)
+def voice_source(transcript: str) -> tuple[str, str, int] | None:
+    """(source, keyword, position) of the earliest source named in the transcript, or None."""
+    text = transcript.lower()
+    return _earliest(text, _PATTERNS) or _earliest(text, _VERB_PATTERNS)
 
 
 def _rule(transcript: str, form_source: str) -> tuple[bool, dict]:

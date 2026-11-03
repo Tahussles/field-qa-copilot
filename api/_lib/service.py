@@ -148,6 +148,8 @@ def _view(ctx: ProjectContext, row: dict, score: float | None, flagged: bool | N
         "captured_at": row["captured_at"],
         "device_captured_at": row.get("device_captured_at"),
         "synced_at": row["synced_at"],
+        "device_synced_at": row.get("device_synced_at"),
+        "received_at": row.get("received_at"),
         "score": score,
         "flagged": flagged,
         "band": ctx.params.band(score) if score is not None else None,
@@ -191,6 +193,8 @@ def ingest(repo: Repository, payload: SubmissionIn) -> tuple[int, dict]:
         "captured_at": _iso(captured),
         "device_captured_at": _iso(device_captured) if device_captured else None,
         "synced_at": _iso(synced),
+        "device_synced_at": _iso(payload.device_synced_at) if payload.device_synced_at else None,
+        "received_at": _iso(now),  # the server's own clock, demo or not
         "duration_sec": payload.duration_sec,
         "lat": payload.lat,
         "lng": payload.lng,
@@ -293,7 +297,7 @@ def submission_detail(repo: Repository, submission_id: str) -> dict | None:
     return {
         "submission": {k: row.get(k) for k in (
             "id", "client_submission_id", "device_id", "captured_at", "device_captured_at", "synced_at",
-            "duration_sec", "lat", "lng",
+            "device_synced_at", "received_at", "duration_sec", "lat", "lng",
             "gps_accuracy_m", "answers", "voice_transcript", "transcript_lang", "voice_note_path", "source")},
         "contributor": _contributor_view(ctx, row["contributor_id"]),
         "score": None if score is None else {**score, "band": ctx.params.band(score["score"])},

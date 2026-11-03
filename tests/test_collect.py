@@ -188,3 +188,47 @@ def test_moving_the_field_clock_restarts_it_from_the_new_as_of():
     repo.set_as_of(later.isoformat(), forward_only=True)  # a demo step; the clock now runs from 12:00
     body = send(repo, {**live(), "captured_at": datetime.now(timezone.utc).isoformat()})
     assert abs(at(body["captured_at"]) - later) < timedelta(seconds=5)
+
+
+# The phone's clock (clock_skew) ----------------------------------------------------------
+
+def test_a_phone_clock_3_hours_behind_is_stored_and_fires_clock_skew():
+    repo = clocked(None)
+    now = datetime.now(timezone.utc)
+    behind = now - timedelta(hours=3)
+    body = send(repo, {**live(), "captured_at": (behind - timedelta(minutes=1)).isoformat(),
+                       "device_synced_at": behind.isoformat()})
+    stored = repo.submission(body["id"])
+    assert at(stored["device_synced_at"]) == behind and abs(at(stored["received_at"]) - now) < timedelta(seconds=5)
+    skew = next(f for f in body["fired"] if f["key"] == "clock_skew")
+    assert skew["weight"] == 1.5 and skew["evidence"]["direction"] == "behind" and skew["evidence"]["basis"] == "sync"
+    assert -181 <= skew["evidence"]["skew_minutes"] <= -179
+
+
+def test_a_right_clock_and_a_late_sync_do_not_fire_clock_skew():
+    repo = clocked(None)
+    now = datetime.now(timezone.utc)
+    body = send(repo, {**live(), "captured_at": (now - timedelta(days=2)).isoformat(),
+                       "device_synced_at": (now + timedelta(seconds=20)).isoformat()})
+    assert "clock_skew" not in [f["key"] for f in body["fired"]]
+
+
+def test_a_phone_clock_ahead_is_accepted_and_flagged_not_refused():
+    repo = clocked(AS_OF, set_minutes_ago=10)  # in a demo, too: the raw phone times are compared
+    ahead = datetime.now(timezone.utc) + timedelta(hours=3)
+    body = send(repo, {**live(), "captured_at": ahead.isoformat(), "device_synced_at": ahead.isoformat()})
+    assert at(body["captured_at"]) <= at(body["synced_at"])  # the field clock never runs into the future
+    skew = next(f for f in body["fired"] if f["key"] == "clock_skew")
+    assert skew["evidence"]["direction"] == "ahead" and 179 <= skew["evidence"]["skew_minutes"] <= 181
+
+
+def test_a_demo_rescore_keeps_the_phone_clock_fields():
+    from api._lib import service
+
+    repo = clocked(AS_OF, set_minutes_ago=10)
+    behind = datetime.now(timezone.utc) - timedelta(hours=3)
+    first = send(repo, {**live(), "captured_at": behind.isoformat(), "device_synced_at": behind.isoformat()})
+    send(repo, {**live(), "captured_at": datetime.now(timezone.utc).isoformat()})  # rescores its group
+    service.rescore(repo)
+    fired = [r["check_key"] for r in repo.check_results(first["id"]) if r["fired"]]
+    assert "clock_skew" in fired

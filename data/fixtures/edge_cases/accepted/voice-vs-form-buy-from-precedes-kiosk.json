@@ -56,9 +56,7 @@
    }
   ],
   "target": "kiosk",
-  "should_fire": [
-   "voice_vs_form"
-  ],
+  "should_fire": [],
   "should_not_fire": [
    "too_fast",
    "same_spot",
@@ -67,8 +65,10 @@
    "off_hours",
    "shared_device",
    "burst",
-   "outside_area"
+   "outside_area",
+   "voice_vs_form"
   ],
   "why": "'buy from' starts at character 3 and 'kiosk' starts later, so the earliest keyword is 'buy from' and the source heard is vendor. Vendor differs from the form's public_tap, so the check fires. An implementation that prefers the most specific keyword, scans keywords in list order (public_tap before vendor), or skips verb phrases would pick kiosk and stay silent. The companion's open_text shares no content words with the target's."
- }
+ },
+ "review": "Corrected in review: kiosks sell water by the jerrycan and the form's label is 'public tap or kiosk', so this is consistent; 'buy from' says vendor only when no source is named."
 }

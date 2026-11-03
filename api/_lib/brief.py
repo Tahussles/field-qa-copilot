@@ -15,11 +15,12 @@ from .ai import BriefOut
 
 # Same order as mainSignal in lib/checks.ts: the check that fired most, ties in this order.
 TIE_ORDER = ("shared_device", "same_spot", "outside_area", "burst", "copied_text", "voice_vs_form",
-             "straight_lining", "off_hours", "too_fast")
+             "straight_lining", "off_hours", "clock_skew", "too_fast")
 CHECK_NAMES = {
     "too_fast": "too fast", "same_spot": "same spot", "copied_text": "copied text",
     "straight_lining": "straight-lining", "voice_vs_form": "voice vs form", "off_hours": "off hours",
     "shared_device": "shared device", "burst": "burst", "outside_area": "outside area",
+    "clock_skew": "clock skew",
 }
 MAX_CONTRIBUTORS = 6
 

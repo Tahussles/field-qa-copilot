@@ -17,7 +17,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from engine import CHECK_KEYS, Params, Submission, contributors_with_areas, score_all
+from engine import CHECK_KEYS, Params, Submission, Verdict, contributors_with_areas, score_all
 
 ROOT = Path(__file__).resolve().parent.parent
 EDGE_CASES = ROOT / "data" / "fixtures" / "edge_cases"
@@ -53,13 +53,18 @@ class CaseSubmission(BaseModel):
     satisfaction: list[int] = Field(min_length=8, max_length=8)
     open_text: str = Field(max_length=600)
     voice_transcript: str = Field(max_length=1000)  # "" for no voice note
+    gps_accuracy_m: float | None = Field(default=None, ge=0, le=100_000)
+    # The phone's own clock and the server's receipt time (clock_skew). Absent: the phone reported no clock.
+    device_synced_at: str | None = None
+    received_at: str | None = None
 
-    @field_validator("captured_at")
+    @field_validator("captured_at", "device_synced_at", "received_at")
     @classmethod
-    def _aware(cls, value: str) -> str:
-        if datetime.fromisoformat(value).tzinfo is None:
-            raise ValueError("captured_at needs a UTC offset")
+    def _aware(cls, value: str | None) -> str | None:
+        if value is not None and datetime.fromisoformat(value).tzinfo is None:
+            raise ValueError("times need a UTC offset")
         return value
+
 
     @field_validator("satisfaction")
     @classmethod
@@ -67,6 +72,17 @@ class CaseSubmission(BaseModel):
         if any(v < 1 or v > 5 for v in value):
             raise ValueError("satisfaction answers are 1 to 5")
         return value
+
+
+class CaseVerdict(BaseModel):
+    """A recorded model verdict about one submission (data/fixtures/ai_verdicts), handed to the engine."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    ref: str
+    kind: Literal["voice_vs_form"]
+    model: str
+    data: dict
 
 
 class EdgeCase(BaseModel):
@@ -81,6 +97,8 @@ class EdgeCase(BaseModel):
     should_fire: list[CheckKey]
     should_not_fire: list[CheckKey]
     why: str = Field(min_length=10, max_length=1200)
+    band: Literal["clear", "watch", "flagged"] | None = None  # the target's expected band, when it matters
+    verdicts: list[CaseVerdict] = []
 
     @model_validator(mode="after")
     def _consistent(self) -> "EdgeCase":
@@ -93,6 +111,8 @@ class EdgeCase(BaseModel):
             raise ValueError("a check cannot both fire and not fire")
         if self.check not in self.should_fire + self.should_not_fire:
             raise ValueError(f"the case is about {self.check}, so it must say whether {self.check} fires")
+        if any(v.ref not in refs for v in self.verdicts):
+            raise ValueError("a verdict names a submission that is not in the case")
         return self
 
 
@@ -109,24 +129,39 @@ def world():
     return contributors_with_areas(contributor_rows, area_rows)
 
 
-def run(case: EdgeCase) -> dict[str, bool]:
-    """Which checks fire on the case's target, scoring every submission in the case together."""
+def score(case: EdgeCase):
+    """The case's target, scored together with every submission in the case."""
     subs = [Submission.from_row({
         "id": s.ref, "contributor_id": f"c-{s.contributor}", "device_id": s.device_id, "captured_at": s.captured_at,
-        "synced_at": None, "duration_sec": s.duration_sec, "lat": s.lat, "lng": s.lng,
+        "synced_at": s.received_at, "duration_sec": s.duration_sec, "lat": s.lat, "lng": s.lng,
         "answers": {"water_source": s.water_source, "satisfaction": s.satisfaction, "open_text": s.open_text},
-        "voice_transcript": s.voice_transcript or None,
+        "voice_transcript": s.voice_transcript or None, "gps_accuracy_m": s.gps_accuracy_m,
+        "device_captured_at": s.captured_at if s.device_synced_at else None,
+        "device_synced_at": s.device_synced_at, "received_at": s.received_at,
     }) for s in case.submissions]
-    scored = score_all(subs, world(), Params.from_config({}, timezone=TIMEZONE))
-    target = next(s for s in scored if s.submission_id == case.target)
+    verdicts: dict[str, list[Verdict]] = {}
+    for v in case.verdicts:
+        verdicts.setdefault(v.ref, []).append(Verdict(v.kind, v.model, v.data))
+    params = Params.from_config({}, timezone=TIMEZONE)
+    scored = score_all(subs, world(), params, verdicts)
+    return next(s for s in scored if s.submission_id == case.target), params
+
+
+def run(case: EdgeCase) -> dict[str, bool]:
+    """Which checks fire on the case's target."""
+    target, _ = score(case)
     return {r.key: r.fired for r in target.results}
 
 
 def mismatches(case: EdgeCase) -> list[str]:
     """How the engine disagrees with the case's expectations; empty when it agrees."""
-    fired = run(case)
-    return ([f"{k} did not fire" for k in case.should_fire if not fired[k]]
-            + [f"{k} fired" for k in case.should_not_fire if fired[k]])
+    target, params = score(case)
+    fired = {r.key: r.fired for r in target.results}
+    wrong = ([f"{k} did not fire" for k in case.should_fire if not fired.get(k)]
+             + [f"{k} fired" for k in case.should_not_fire if fired.get(k)])
+    if case.band and params.band(target.score) != case.band:
+        wrong.append(f"band {params.band(target.score)} (score {target.score:g}), expected {case.band}")
+    return wrong
 
 
 def load(folder: str) -> list[EdgeCase]:

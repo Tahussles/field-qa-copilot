@@ -37,7 +37,7 @@ from engine import CHECK_KEYS, Params  # noqa: E402
 MODEL = "claude-opus-5-5"
 PRICE = (4.00, 20.00)  # USD per million input / output tokens
 EST_TOKENS = (4_000, 14_000)  # per check, output includes thinking at high effort
-PROMPT_VERSION = "edge-v1"
+PROMPT_VERSION = "edge-v2"  # v2: engine 0.5.0 rules (GPS tolerance, zig-zag, whole-word keywords)
 
 P = Params()
 RULES = {
@@ -51,14 +51,17 @@ RULES = {
                    "contributor or from the same device (at any time, before or after): Jaccard similarity of their "
                    "content words (lowercased, English stop words removed) at or above "
                    f"{P.copy_similarity:g}. Empty open_text never fires.",
-    "straight_lining": "Fires when all 8 satisfaction answers are identical.",
+    "straight_lining": "Fires when all 8 satisfaction answers are identical, or when they strictly alternate between "
+                       "two values (5, 4, 5, 4, ...). Any other pattern, even all within one point, stays silent.",
     "voice_vs_form": "Without a model verdict (as here) a keyword rule decides: the earliest water-source keyword "
                      "in the voice transcript names the source heard (ties go to the longer keyword); it fires when "
                      "that source differs from the form's water_source. Keywords: piped_home = our own tap, own tap, "
-                     "tap at home, tap in the compound, tap inside, piped, pipe, connected; public_tap = public tap, "
-                     "communal tap, kiosk, water point; borehole = borehole, hand pump, pump; vendor = vendor, "
-                     "handcart, buy from, boda boda, water seller; river = river, stream, lake. A keyword matches at "
-                     "the start of a word. No keyword, or no transcript, never fires.",
+                     "tap at home, tap in the compound, tap inside, piped, pipe, pipeline, connected; public_tap = "
+                     "public tap, communal tap, kiosk, water point; borehole = borehole, hand pump, pump; vendor = "
+                     "vendor, handcart, boda boda, water seller; river = river, stream, lake. Keywords match whole "
+                     "words, plurals included ('kiosks'), never part of a longer word ('pumpkins', 'lakeside'). "
+                     "'buy from' reads as vendor only when the transcript names none of those sources. No keyword, "
+                     "or no transcript, never fires.",
     "off_hours": f"Fires when captured_at, in the project time zone ({TIMEZONE}, UTC+3), is at or after "
                  f"{P.off_hours_start} or before {P.off_hours_end}. Only captured_at counts, never the sync time.",
     "shared_device": f"Fires when the device_id has submissions from at least {P.shared_device_min_accounts} "
@@ -66,7 +69,11 @@ RULES = {
     "burst": f"Fires when some window of {P.burst_window_minutes:g} minutes that contains this submission holds at least "
              f"{P.burst_min_count['enumerator']} (enumerators) or {P.burst_min_count['participant']} (participants) "
              "submissions by the same contributor, this one included, by captured_at (window ends inclusive).",
-    "outside_area": "Fires when the GPS point is outside the contributor's assigned area polygon.",
+    "outside_area": f"Fires when the GPS point is outside the contributor's assigned area polygon by more than "
+                    f"{P.outside_area_min_tolerance_m:g} m (no GPS accuracy is reported in these cases). Within "
+                    f"{P.outside_area_far_m:g} m of the area it weighs {P.outside_area_near_weight:g}, beyond it "
+                    f"{P.weights['outside_area']:g}.",
+    "clock_skew": "The phones in these cases report no clock of their own, so clock_skew never fires here.",
 }
 
 SYSTEM = f"""You write test cases for the quality checks of a household water survey app. Field contributors \
