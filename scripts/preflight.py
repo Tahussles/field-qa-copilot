@@ -3,7 +3,8 @@
     pnpm preflight                                   # = uv run scripts/preflight.py
     uv run scripts/preflight.py --base https://<deployment>.vercel.app
 
-Checks, in order: production health and engine version; the basemap tile host;
+Checks, in order: the network path to production (TCP connects over IPv4 and
+IPv6: a flaky path stalls a connect for 20-35 s); production health and engine version; the basemap tile host;
 a collect token mint (and the phone session it opens); an ingest latency sample
 with a Realtime round trip; one phone interview with a voice note, end to end on
 production (one ElevenLabs transcription and one Claude judgment, about $0.001);
@@ -77,6 +78,29 @@ class Preflight:
                 "source": "live", **extra}
 
     # The checks ---------------------------------------------------------------------------
+
+    def network(self):
+        """Ten TCP connects per address family. This machine's path, not production: a lost SYN costs 20 s or more."""
+        host = self.base.split("//", 1)[1].split("/", 1)[0]
+        report, slow = [], []
+        for family in ("4", "6"):
+            times = []
+            for _ in range(10):
+                run = subprocess.run(["curl", f"-{family}", "-s", "-o", "/dev/null", "--max-time", "8", "-w", "%{time_connect}",
+                                      f"https://{host}/api/py/health"], capture_output=True, text=True)
+                times.append(float(run.stdout or 8) if run.returncode == 0 else None)
+            reachable = [t for t in times if t is not None]
+            if not reachable and family == "6":
+                report.append("IPv6 none")
+                continue
+            worst = max(t if t is not None else 8 for t in times)
+            report.append(f"IPv{family} worst {worst * 1000:.0f} ms")
+            if worst > 2:
+                slow.append(f"IPv{family} stalled {sum(t is None or t > 2 for t in times)}/10")
+        detail = " · ".join(report) + " (10 connects each)"
+        if slow:
+            raise Red(detail + f"; {', '.join(slow)}: use another network, or turn IPv6 off on this one")
+        return detail, None
 
     def health(self):
         start = time.perf_counter()
@@ -230,6 +254,7 @@ def main() -> int:
     started = time.perf_counter()
     print(f"preflight against {args.base} · {datetime.now().strftime('%Y-%m-%d %H:%M')}\n")
     p = Preflight(args.base, env)
+    p.check("network path", p.network)
     p.check("production health", p.health)
     p.check("basemap tile host", p.tiles)
     p.check("collect token", p.collect_token)
