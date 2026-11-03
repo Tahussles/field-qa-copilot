@@ -19,12 +19,19 @@ const phone = {
   },
 };
 
+// Every suite runs in either theme: PW_THEME=linear for the dark one (poket, the default, otherwise).
+// The choice is the app's own localStorage key, seeded into each test's browser context.
+const BASE_URL = process.env.SMOKE_BASE_URL ?? "http://localhost:3000";
+const THEME = process.env.PW_THEME ?? "poket";
+if (!["poket", "linear"].includes(THEME)) throw new Error(`PW_THEME is poket or linear, not ${THEME}`);
+const storageState = { cookies: [], origins: [{ origin: new URL(BASE_URL).origin, localStorage: [{ name: "fqc-theme", value: THEME }] }] };
+
 export default defineConfig({
   testDir: "tests-e2e",
   timeout: 90_000,
   workers: 1,
   reporter: [["list"]],
-  use: { baseURL: process.env.SMOKE_BASE_URL ?? "http://localhost:3000" },
+  use: { baseURL: BASE_URL, storageState },
   projects: [
     {
       name: "desktop",

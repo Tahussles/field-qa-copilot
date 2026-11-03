@@ -11,7 +11,8 @@
     "lint": "eslint",
     "typecheck": "next typegen && tsc --noEmit",
     "test:smoke": "playwright test",
-    "preflight": "uv run scripts/preflight.py"
+    "preflight": "uv run scripts/preflight.py",
+    "contrast": "node --env-file=.env.local scripts/contrast.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.118.0",
