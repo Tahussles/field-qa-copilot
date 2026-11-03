@@ -49,7 +49,7 @@ async function fill(page: Page, source = "piped_home") {
 async function record(page: Page) {
   await page.getByTestId("record").click();
   await expect(page.getByTestId("recording")).toBeVisible();
-  await page.waitForTimeout(7_500);
+  await page.waitForTimeout(6_400); // the fixture is 6.4 s and the fake mic loops it
   await page.getByTestId("record").click();
   await expect(page.getByTestId("playback")).toBeVisible({ timeout: 10_000 });
 }
