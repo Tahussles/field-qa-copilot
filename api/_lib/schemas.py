@@ -7,7 +7,9 @@ from uuid import UUID
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
 
 WaterSource = Literal["piped_home", "public_tap", "borehole", "vendor", "river"]
-MAX_CLOCK_SKEW = timedelta(minutes=5)
+# A phone clock running ahead is evidence (clock_skew), not a reason to drop the interview; more than a
+# day ahead is a broken clock or a forged request.
+MAX_FUTURE = timedelta(days=1)
 
 
 class Answers(BaseModel):
@@ -43,12 +45,15 @@ class SubmissionIn(BaseModel):
                                         description="Audio already uploaded to the voice-notes bucket; transcribed "
                                                     "when there is no transcript")
     source: Literal["simulator", "live"]
+    device_synced_at: AwareDatetime | None = Field(
+        default=None, description="The phone's own clock when it sent this request; clock_skew compares it with "
+                                  "the server's")
 
-    @field_validator("captured_at")
+    @field_validator("captured_at", "device_synced_at")
     @classmethod
-    def _not_in_the_future(cls, value: datetime) -> datetime:
-        if value > datetime.now(timezone.utc) + MAX_CLOCK_SKEW:
-            raise ValueError("captured_at is in the future")
+    def _not_in_the_future(cls, value: datetime | None) -> datetime | None:
+        if value is not None and value > datetime.now(timezone.utc) + MAX_FUTURE:
+            raise ValueError("more than a day in the future")
         return value
 
 

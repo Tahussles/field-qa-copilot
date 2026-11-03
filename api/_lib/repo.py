@@ -15,7 +15,9 @@ from typing import Callable, Iterable, Protocol
 
 from .postgrest import Supabase, SupabaseError, in_list
 
-ENGINE_COLUMNS = "id,contributor_id,device_id,captured_at,synced_at,duration_sec,lat,lng,answers,voice_transcript"
+# What the engine reads (engine.Submission.from_row); ingest_begin returns the same for the scoring group.
+ENGINE_COLUMNS = ("id,contributor_id,device_id,captured_at,synced_at,duration_sec,lat,lng,answers,voice_transcript,"
+                  "gps_accuracy_m,device_captured_at,device_synced_at,received_at")
 LIGHT_COLUMNS = "id,contributor_id,device_id,captured_at,duration_sec,lat,lng,source"
 LEASE_LOST_CODE = "FQ409"
 
@@ -546,7 +548,7 @@ class SupabaseRepo:
             return []
         if source:
             filters["source"] = f"eq.{source}"
-        columns = LIGHT_COLUMNS if light else ENGINE_COLUMNS + ",client_submission_id,gps_accuracy_m,source,project_id"
+        columns = LIGHT_COLUMNS if light else ENGINE_COLUMNS + ",client_submission_id,source,project_id"
         # Paged reads: a row inserted mid-read (a phone syncing) can shift a page boundary
         # and repeat a row on the next page. Keep each submission once.
         rows = self._db.select("submissions", columns, **filters)
