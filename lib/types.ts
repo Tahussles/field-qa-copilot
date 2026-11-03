@@ -3,6 +3,7 @@
 export type Band = "flagged" | "watch" | "clear";
 export type ContributorStatus = "investigate" | "watch" | "ok";
 export type CheckKey =
+  | "outside_area"
   | "too_fast"
   | "same_spot"
   | "copied_text"
@@ -103,6 +104,8 @@ export interface MapPoint {
   fired: CheckKey[];
   captured_at: string;
   duration_sec: number | null;
+  /** synthetic, simulator, or live (a phone on /collect) */
+  source?: string;
 }
 
 export interface MapArea {
@@ -147,6 +150,7 @@ export interface QueueItem {
   review: Review | null;
   /** A model job (transcription, meaning check) for this submission is queued or running. */
   ai_pending?: boolean;
+  source?: string;
 }
 
 export interface CheckResult {
@@ -229,6 +233,8 @@ export interface IngestResponse {
   changed: { submission_id: string; flagged: boolean; previously_flagged: boolean; score: number }[];
   duplicate: boolean;
   healed: boolean;
+  synced_at?: string;
+  ai_jobs?: { id: string; kind: string }[];
   timing_ms?: Record<string, number>;
 }
 
@@ -262,6 +268,8 @@ export interface DemoStatus {
   run_id: string;
   progress: DemoProgress;
   moments: DemoMoment[];
+  /** Logged on ai_jobs (kept across resets): everything, and this demo run. */
+  ai_spend: { all_time_usd: number; all_time_jobs: number; run_usd: number; run_jobs: number };
 }
 
 export interface DemoStepResult {
@@ -357,4 +365,22 @@ export interface HardEval {
   rules: HardSide;
   rules_ai: HardSide;
   gaps: { fraud_type: string; planted: number; missed: number; missed_by_rules: number }[];
+}
+
+// The phone collect page (/collect) ---------------------------------------------------------
+
+export interface CollectContributor {
+  code: string;
+  display_name: string | null;
+  kind: "enumerator" | "participant";
+  area_id: string | null;
+  area: string | null;
+  last_point: { lat: number; lng: number; captured_at: string } | null;
+}
+
+export interface CollectSession {
+  expires_at: number | null;
+  project: { name: string; region: string; timezone: string };
+  contributors: CollectContributor[];
+  areas: MapArea[];
 }

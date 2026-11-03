@@ -310,6 +310,16 @@ mark {
     border-radius: 4px;
     vertical-align: 1px;
   }
+  /* A submission from a phone on /collect. */
+  .live-tag {
+    padding: 0 6px;
+    font-size: 10.5px;
+    line-height: 16px;
+    color: var(--color-accent);
+    border: 1px solid rgb(124 132 248 / 0.45);
+    border-radius: 999px;
+    white-space: nowrap;
+  }
   .ai-spinner {
     display: inline-block;
     width: 10px;
@@ -945,4 +955,18 @@ mark {
   to {
     transform: rotate(360deg);
   }
+}
+
+/* The collect page's record button while recording. */
+@keyframes rec-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgb(235 90 87 / 0.45);
+  }
+  80%,
+  100% {
+    box-shadow: 0 0 0 14px rgb(235 90 87 / 0);
+  }
+}
+.rec-live {
+  animation: rec-pulse 1.4s ease-out infinite;
 }
