@@ -1,0 +1,74 @@
+{
+ "generated": {
+  "model": "claude-opus-5-5",
+  "prompt": "edge-v1",
+  "at": "2026-11-03T18:18:21+00:00"
+ },
+ "case": {
+  "id": "too-fast-enumerator-one-second-short",
+  "check": "too_fast",
+  "kind": "boundary",
+  "title": "Enumerator interview lasting 719 s fires",
+  "submissions": [
+   {
+    "ref": "cleo",
+    "contributor": "E01",
+    "device_id": "dev-e01",
+    "captured_at": "2024-03-13T14:05:00+03:00",
+    "duration_sec": 719,
+    "lat": -0.082,
+    "lng": 34.772,
+    "water_source": "borehole",
+    "satisfaction": [
+     3,
+     4,
+     2,
+     5,
+     3,
+     4,
+     1,
+     3
+    ],
+    "open_text": "Hand pump handle broke last month and repairs took two weeks.",
+    "voice_transcript": ""
+   },
+   {
+    "ref": "dan",
+    "contributor": "E01",
+    "device_id": "dev-e01",
+    "captured_at": "2024-03-13T10:20:00+03:00",
+    "duration_sec": 1380,
+    "lat": -0.074,
+    "lng": 34.764,
+    "water_source": "vendor",
+    "satisfaction": [
+     1,
+     2,
+     3,
+     2,
+     4,
+     2,
+     3,
+     1
+    ],
+    "open_text": "Prices from cart sellers doubled during the dry season.",
+    "voice_transcript": ""
+   }
+  ],
+  "target": "cleo",
+  "should_fire": [
+   "too_fast"
+  ],
+  "should_not_fire": [
+   "same_spot",
+   "copied_text",
+   "straight_lining",
+   "voice_vs_form",
+   "off_hours",
+   "shared_device",
+   "burst",
+   "outside_area"
+  ],
+  "why": "719 s is one second below the 720 s enumerator minimum, so too_fast must fire. Two wrong implementations would miss it. One converts to whole minutes with rounding (719/60 = 11.98, which rounds to 12 and so is 'not below 12'). The other compares against 12*60 with an off-by-one. Other checks are quiet: there are 2 submissions only. Both points are inside Kondele. The times are 14:05 and 10:20 local. The texts are distinct. There is no voice note, and the device is used by a single contributor."
+ }
+}

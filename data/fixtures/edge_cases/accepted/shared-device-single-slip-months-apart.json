@@ -1,0 +1,140 @@
+{
+ "generated": {
+  "model": "claude-opus-5-5",
+  "prompt": "edge-v1",
+  "at": "2026-11-03T18:26:22+00:00"
+ },
+ "case": {
+  "id": "shared-device-single-slip-months-apart",
+  "check": "shared_device",
+  "kind": "adversarial",
+  "title": "Fabricator keeps a fake participant on its own phone except for one slip months later",
+  "submissions": [
+   {
+    "ref": "e1",
+    "contributor": "E02",
+    "device_id": "dev-n2",
+    "captured_at": "2024-02-05T10:30:00+03:00",
+    "duration_sec": 1490,
+    "lat": -0.0975,
+    "lng": 34.7462,
+    "water_source": "borehole",
+    "satisfaction": [
+     3,
+     4,
+     3,
+     2,
+     4,
+     3,
+     3,
+     4
+    ],
+    "open_text": "The community borehole committee collects fees but the pump handle is still broken.",
+    "voice_transcript": ""
+   },
+   {
+    "ref": "e2",
+    "contributor": "E02",
+    "device_id": "dev-n2",
+    "captured_at": "2024-02-07T11:15:00+03:00",
+    "duration_sec": 1360,
+    "lat": -0.1058,
+    "lng": 34.7547,
+    "water_source": "river",
+    "satisfaction": [
+     2,
+     1,
+     2,
+     2,
+     3,
+     1,
+     1,
+     2
+    ],
+    "open_text": "Livestock drink upstream so river water is muddy during the dry season.",
+    "voice_transcript": ""
+   },
+   {
+    "ref": "q1",
+    "contributor": "P02",
+    "device_id": "dev-p02",
+    "captured_at": "2024-02-20T15:40:00+03:00",
+    "duration_sec": 300,
+    "lat": -0.0941,
+    "lng": 34.7496,
+    "water_source": "public_tap",
+    "satisfaction": [
+     3,
+     3,
+     4,
+     2,
+     3,
+     4,
+     3,
+     2
+    ],
+    "open_text": "Tap water point opens at six and closes before noon most days.",
+    "voice_transcript": ""
+   },
+   {
+    "ref": "q2",
+    "contributor": "P02",
+    "device_id": "dev-p02",
+    "captured_at": "2024-03-02T16:10:00+03:00",
+    "duration_sec": 480,
+    "lat": -0.1072,
+    "lng": 34.7583,
+    "water_source": "vendor",
+    "satisfaction": [
+     2,
+     2,
+     3,
+     1,
+     2,
+     3,
+     2,
+     2
+    ],
+    "open_text": "We buy from the handcart man when the nearby tap is dry.",
+    "voice_transcript": ""
+   },
+   {
+    "ref": "q3",
+    "contributor": "P02",
+    "device_id": "dev-n2",
+    "captured_at": "2024-07-18T12:25:00+03:00",
+    "duration_sec": 390,
+    "lat": -0.0996,
+    "lng": 34.7521,
+    "water_source": "piped_home",
+    "satisfaction": [
+     4,
+     5,
+     4,
+     3,
+     4,
+     4,
+     5,
+     3
+    ],
+    "open_text": "After the new connection our household saves time every morning.",
+    "voice_transcript": ""
+   }
+  ],
+  "target": "e1",
+  "should_fire": [
+   "shared_device"
+  ],
+  "should_not_fire": [
+   "too_fast",
+   "same_spot",
+   "copied_text",
+   "straight_lining",
+   "voice_vs_form",
+   "off_hours",
+   "burst",
+   "outside_area"
+  ],
+  "why": "An enumerator running a fake participant account keeps it on a separate phone (dev-p02) so the two logins never look linked, but slips once. q3 is a P02 submission made on E02's phone dev-n2, over five months after e1. dev-n2 therefore has 2 distinct contributors (E02, P02), and the rule counts submissions at any time, before or after, so e1 must fire. Several wrong implementations would let the fabricator through: one that limits the lookup to a time window around the submission; one that only considers earlier submissions, since q3 is later than e1; one that requires each contributor to have several submissions on the device; and one that assigns each device to its majority user and ignores minority contributors. The other checks stay quiet for e1: E02's submissions are on different days, all points are inside Nyalenda, e1 is a daytime interview of 1490 s, and its transcript is empty."
+ }
+}

@@ -1,0 +1,73 @@
+{
+ "generated": {
+  "model": "claude-opus-5-5",
+  "prompt": "edge-v1",
+  "at": "2026-11-03T18:21:42+00:00"
+ },
+ "case": {
+  "id": "copied-text-both-empty-silent",
+  "check": "copied_text",
+  "kind": "boundary",
+  "title": "Two empty open_text answers by the same contributor do not count as duplicates",
+  "submissions": [
+   {
+    "ref": "blank1",
+    "contributor": "E01",
+    "device_id": "dev-e01",
+    "captured_at": "2025-03-13T11:20:00+03:00",
+    "duration_sec": 1440,
+    "lat": -0.0812,
+    "lng": 34.7695,
+    "water_source": "piped_home",
+    "satisfaction": [
+     4,
+     4,
+     3,
+     2,
+     3,
+     4,
+     2,
+     3
+    ],
+    "open_text": "",
+    "voice_transcript": ""
+   },
+   {
+    "ref": "blank2",
+    "contributor": "E01",
+    "device_id": "dev-e01",
+    "captured_at": "2025-03-14T14:05:00+03:00",
+    "duration_sec": 1680,
+    "lat": -0.0765,
+    "lng": 34.7741,
+    "water_source": "piped_home",
+    "satisfaction": [
+     3,
+     2,
+     4,
+     3,
+     2,
+     4,
+     3,
+     4
+    ],
+    "open_text": "",
+    "voice_transcript": ""
+   }
+  ],
+  "target": "blank2",
+  "should_fire": [],
+  "should_not_fire": [
+   "copied_text",
+   "too_fast",
+   "same_spot",
+   "straight_lining",
+   "voice_vs_form",
+   "off_hours",
+   "shared_device",
+   "burst",
+   "outside_area"
+  ],
+  "why": "The rule says empty open_text never fires. A naive implementation computes Jaccard of two empty sets, then either treats 0/0 as 1.0 (identical, so it fires) or crashes on division by zero. Same contributor and same device are both true here, so only the empty-text exemption keeps the check silent. Other checks are quiet: durations of 24 and 28 min, different days, daytime, points inside Kondele, single contributor on the device, no transcript."
+ }
+}

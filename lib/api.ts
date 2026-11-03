@@ -57,6 +57,7 @@ async function request<T>(path: string, init?: RequestInit & { passcode?: string
 }
 
 export const api = {
+  health: () => request<{ ok: boolean; engine_version: string; writes: boolean; commit: string | null }>("/health"),
   overview: () => request<Overview>("/overview"),
   map: () => request<MapData>("/map"),
   queue: (params: { status: string; band: string; contributor?: string; limit?: number }) => {

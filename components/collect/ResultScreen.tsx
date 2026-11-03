@@ -7,12 +7,16 @@ import { Glass } from "@/components/ui/Glass";
 import { api } from "@/lib/api";
 import { CHECK_TITLE, scoreClass } from "@/lib/checks";
 import type { OutboxItem } from "@/lib/collect/outbox";
-import { fmtScore, fmtStamp, shortId } from "@/lib/format";
+import { fmtScore, fmtStamp, fmtTime, shortId } from "@/lib/format";
 import { browserSupabase } from "@/lib/supabase";
 import type { SubmissionDetail } from "@/lib/types";
 
 const LANGUAGE: Record<string, string> = { en: "English", sw: "Swahili", luo: "Dholuo" };
 type Job = { kind: string; status: string; model: string | null; latency_ms: number | null };
+// The phone's own time zone. During a demo the server puts the interview on the field clock
+// (Kisumu, from the pinned morning), so the screen shows both.
+const PHONE_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
+const place = (zone: string) => zone.split("/").pop()?.replace(/_/g, " ") ?? zone;
 
 /**
  * One phone submission, live: the rules' result at once, then the model's work as it
@@ -20,6 +24,7 @@ type Job = { kind: string; status: string; model: string | null; latency_ms: num
  */
 export function ResultScreen({ item, tz, onNew }: { item: OutboxItem; tz: string; onNew: () => void }) {
   const id = item.result?.id ?? null;
+  const rules = item.result;
   const [detail, setDetail] = useState<SubmissionDetail | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
 
@@ -50,7 +55,6 @@ export function ResultScreen({ item, tz, onNew }: { item: OutboxItem; tz: string
     return () => void supabase.removeChannel(channel);
   }, [id, refresh]);
 
-  const rules = item.result;
   const transcribe = jobs.find((j) => j.kind === "transcribe");
   const consistency = jobs.find((j) => j.kind === "consistency");
   const busy = (j?: Job) => j && (j.status === "queued" || j.status === "running");
@@ -63,13 +67,19 @@ export function ResultScreen({ item, tz, onNew }: { item: OutboxItem; tz: string
   return (
     <div className="flex flex-col gap-3" data-testid="result">
       <Glass className="glass-tint rounded-xl p-4">
-        <p className="text-[12px] text-muted">
-          {shortId(item.client_submission_id.replace(/^phone-/, ""))} · captured{" "}
-          <span className="font-mono text-ink-2">{fmtStamp(item.saved_at, tz)}</span>
+        <p className="text-[12px] text-muted" data-testid="clocks">
+          {shortId(item.client_submission_id.replace(/^phone-/, ""))} · phone{" "}
+          <span className="font-mono text-ink-2">{fmtStamp(item.saved_at, PHONE_TZ)}</span> {place(PHONE_TZ)}
+          {rules ? (
+            <>
+              {" "}
+              · field <span className="font-mono text-ink-2" data-testid="field-time">{fmtStamp(rules.captured_at, tz)}</span> Kisumu
+            </>
+          ) : null}
           {item.synced_at ? (
             <>
               {" "}
-              · synced <span className="font-mono text-ink-2" data-testid="synced-at">{fmtStamp(item.synced_at, tz)}</span>
+              · synced <span className="font-mono text-ink-2" data-testid="synced-at">{fmtTime(item.synced_at, PHONE_TZ)}</span>
             </>
           ) : null}
         </p>

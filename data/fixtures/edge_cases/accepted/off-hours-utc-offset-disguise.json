@@ -1,0 +1,74 @@
+{
+ "generated": {
+  "model": "claude-opus-5-5",
+  "prompt": "edge-v1",
+  "at": "2026-11-03T18:24:49+00:00"
+ },
+ "case": {
+  "id": "off-hours-utc-offset-disguise",
+  "check": "off_hours",
+  "kind": "adversarial",
+  "title": "Night interview stamped in UTC so the clock digits look like early evening",
+  "submissions": [
+   {
+    "ref": "night",
+    "contributor": "E01",
+    "device_id": "dev-e01",
+    "captured_at": "2024-05-16T18:30:00Z",
+    "duration_sec": 1560,
+    "lat": -0.073,
+    "lng": 34.775,
+    "water_source": "vendor",
+    "satisfaction": [
+     3,
+     2,
+     2,
+     4,
+     3,
+     1,
+     2,
+     3
+    ],
+    "open_text": "Riders bring jerricans after dark when the price is lower.",
+    "voice_transcript": ""
+   },
+   {
+    "ref": "day",
+    "contributor": "E01",
+    "device_id": "dev-e01",
+    "captured_at": "2024-05-16T11:00:00+03:00",
+    "duration_sec": 1440,
+    "lat": -0.085,
+    "lng": 34.763,
+    "water_source": "piped_home",
+    "satisfaction": [
+     4,
+     5,
+     4,
+     3,
+     4,
+     4,
+     5,
+     3
+    ],
+    "open_text": "Our compound connection was fixed by the county last month.",
+    "voice_transcript": ""
+   }
+  ],
+  "target": "night",
+  "should_fire": [
+   "off_hours"
+  ],
+  "should_not_fire": [
+   "too_fast",
+   "same_spot",
+   "copied_text",
+   "straight_lining",
+   "voice_vs_form",
+   "shared_device",
+   "burst",
+   "outside_area"
+  ],
+  "why": "A fabricator sets the phone to UTC so captured_at reads 18:30, which looks like a plausible evening interview. 18:30Z is 21:30 in Africa/Nairobi (UTC+3), so off_hours must fire. An implementation that reads the hour straight from the string, or treats the timestamp as local without converting the offset, sees 18:30 and stays silent. Other checks are quiet. Duration is at least 720 s. Converted, 'night' is 21:30 local on 2024-05-16, the same day as 'day', but that is only one other submission, fewer than the 2 same_spot needs. There are 2 submissions in total. Both points are inside Kondele, the texts are distinct, and there is no voice note."
+ }
+}

@@ -1,0 +1,117 @@
+{
+ "generated": {
+  "model": "claude-opus-5-5",
+  "prompt": "edge-v1",
+  "at": "2026-11-03T18:26:22+00:00"
+ },
+ "case": {
+  "id": "shared-device-contributor-shares-elsewhere",
+  "check": "shared_device",
+  "kind": "boundary",
+  "title": "Contributor shares a different phone, but the target's own device is single-user",
+  "submissions": [
+   {
+    "ref": "t",
+    "contributor": "E01",
+    "device_id": "dev-k1",
+    "captured_at": "2024-05-13T10:00:00+03:00",
+    "duration_sec": 1500,
+    "lat": -0.0781,
+    "lng": 34.7688,
+    "water_source": "piped_home",
+    "satisfaction": [
+     4,
+     4,
+     3,
+     5,
+     4,
+     3,
+     4,
+     2
+    ],
+    "open_text": "Our own connection was installed last year and bills are manageable.",
+    "voice_transcript": ""
+   },
+   {
+    "ref": "u",
+    "contributor": "E01",
+    "device_id": "dev-k9",
+    "captured_at": "2024-05-14T11:30:00+03:00",
+    "duration_sec": 1320,
+    "lat": -0.0836,
+    "lng": 34.7724,
+    "water_source": "borehole",
+    "satisfaction": [
+     3,
+     2,
+     3,
+     2,
+     4,
+     3,
+     2,
+     3
+    ],
+    "open_text": "Borehole water tastes salty so we boil it before drinking.",
+    "voice_transcript": ""
+   },
+   {
+    "ref": "w",
+    "contributor": "E01",
+    "device_id": "dev-k1",
+    "captured_at": "2024-05-15T14:10:00+03:00",
+    "duration_sec": 1390,
+    "lat": -0.0729,
+    "lng": 34.7615,
+    "water_source": "vendor",
+    "satisfaction": [
+     3,
+     3,
+     4,
+     2,
+     3,
+     4,
+     3,
+     3
+    ],
+    "open_text": "Water seller comes twice a week and the containers look dirty.",
+    "voice_transcript": ""
+   },
+   {
+    "ref": "v",
+    "contributor": "E02",
+    "device_id": "dev-k9",
+    "captured_at": "2024-05-16T09:45:00+03:00",
+    "duration_sec": 1470,
+    "lat": -0.1025,
+    "lng": 34.7533,
+    "water_source": "river",
+    "satisfaction": [
+     2,
+     1,
+     2,
+     3,
+     1,
+     2,
+     2,
+     1
+    ],
+    "open_text": "Flooding last month washed latrine waste into the river where we collect water.",
+    "voice_transcript": ""
+   }
+  ],
+  "target": "t",
+  "should_fire": [],
+  "should_not_fire": [
+   "shared_device",
+   "too_fast",
+   "same_spot",
+   "copied_text",
+   "straight_lining",
+   "voice_vs_form",
+   "off_hours",
+   "burst",
+   "outside_area"
+  ],
+  "why": "The check is keyed on device_id, not on the contributor. dev-k9 is genuinely shared (E01 via u and E02 via v), so u and v would fire. The target t, however, is on dev-k1, which only E01 has used (t and w): 1 distinct contributor. A wrong implementation that flags every submission of a contributor who has ever touched a shared device would fire on t. So would one that unions all devices per contributor. The other checks stay quiet for t: it is E01's only submission on 2024-05-13, its point is inside Kondele, it is a daytime interview of 1500 s, and its transcript is empty."
+ }
+}

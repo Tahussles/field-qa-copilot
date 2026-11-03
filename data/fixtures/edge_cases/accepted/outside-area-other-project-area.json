@@ -1,0 +1,74 @@
+{
+ "generated": {
+  "model": "claude-opus-5-5",
+  "prompt": "edge-v1",
+  "at": "2026-11-03T18:28:45+00:00"
+ },
+ "case": {
+  "id": "outside-area-other-project-area",
+  "check": "outside_area",
+  "kind": "adversarial",
+  "title": "Nyalenda enumerator submits from the middle of Kondele, inside a valid project area but not her own",
+  "submissions": [
+   {
+    "ref": "own",
+    "contributor": "E02",
+    "device_id": "e02-phone",
+    "captured_at": "2024-05-14T09:15:00+03:00",
+    "duration_sec": 1500,
+    "lat": -0.1,
+    "lng": 34.75,
+    "water_source": "borehole",
+    "satisfaction": [
+     4,
+     3,
+     5,
+     3,
+     4,
+     2,
+     4,
+     3
+    ],
+    "open_text": "Hand pump handle broke and was fixed by neighbours.",
+    "voice_transcript": ""
+   },
+   {
+    "ref": "away",
+    "contributor": "E02",
+    "device_id": "e02-phone",
+    "captured_at": "2024-05-14T14:10:00+03:00",
+    "duration_sec": 1410,
+    "lat": -0.08,
+    "lng": 34.77,
+    "water_source": "vendor",
+    "satisfaction": [
+     2,
+     4,
+     3,
+     1,
+     3,
+     2,
+     4,
+     2
+    ],
+    "open_text": "Buys jerricans from a boda boda rider twice weekly.",
+    "voice_transcript": ""
+   }
+  ],
+  "target": "away",
+  "should_fire": [
+   "outside_area"
+  ],
+  "should_not_fire": [
+   "too_fast",
+   "same_spot",
+   "copied_text",
+   "straight_lining",
+   "voice_vs_form",
+   "off_hours",
+   "shared_device",
+   "burst"
+  ],
+  "why": "A fabricator could fill interviews from home in the neighbouring area, betting the check only asks whether the point is inside any project area. (34.77, -0.08) is inside Kondele but outside E02's assigned Nyalenda (lng 34.74-34.76, lat -0.11..-0.09). The rule uses the contributor's own area, so it must fire; an implementation testing against the union of areas would miss it. The 'own' submission at (34.75, -0.10) is inside Nyalenda. Other checks quiet: 2 submissions about 5 h apart, distinct texts, 23-25 min durations, daytime, one device, no transcripts."
+ }
+}

@@ -21,6 +21,10 @@ class Settings:
     db_timeout: float
     anthropic_key: str | None
     elevenlabs_key: str | None
+    # Ingest, reviews, demo controls and the job hook. On Vercel only where WRITES_ENABLED=true (Production),
+    # so a preview deployment is a read-only view of the same database; off Vercel (local dev, tests) on.
+    writes_enabled: bool
+    commit: str | None  # the deployed git commit (Vercel sets it), for the post-deploy check
 
 
 @lru_cache(maxsize=1)
@@ -31,6 +35,7 @@ def get_settings() -> Settings:
     def value(key: str) -> str | None:
         return os.environ.get(key) or file_env.get(key) or None
 
+    writes = value("WRITES_ENABLED")
     return Settings(
         supabase_url=value("NEXT_PUBLIC_SUPABASE_URL"),
         service_key=value("SUPABASE_SERVICE_ROLE_KEY"),
@@ -39,4 +44,6 @@ def get_settings() -> Settings:
         db_timeout=20.0 if os.environ.get("VERCEL") else 45.0,
         anthropic_key=value("ANTHROPIC_API_KEY"),
         elevenlabs_key=value("ELEVENLABS_API_KEY"),
+        writes_enabled=writes.lower() == "true" if writes else not os.environ.get("VERCEL"),
+        commit=os.environ.get("VERCEL_GIT_COMMIT_SHA") or None,
     )

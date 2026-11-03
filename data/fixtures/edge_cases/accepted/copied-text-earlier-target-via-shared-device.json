@@ -1,0 +1,74 @@
+{
+ "generated": {
+  "model": "claude-opus-5-5",
+  "prompt": "edge-v1",
+  "at": "2026-11-03T18:21:42+00:00"
+ },
+ "case": {
+  "id": "copied-text-earlier-target-via-shared-device",
+  "check": "copied_text",
+  "kind": "adversarial",
+  "title": "Original fires when a different contributor later copies it on the same device",
+  "submissions": [
+   {
+    "ref": "e02orig",
+    "contributor": "E02",
+    "device_id": "dev-e02",
+    "captured_at": "2025-03-12T10:05:00+03:00",
+    "duration_sec": 1560,
+    "lat": -0.1003,
+    "lng": 34.7487,
+    "water_source": "vendor",
+    "satisfaction": [
+     4,
+     3,
+     2,
+     3,
+     4,
+     2,
+     3,
+     3
+    ],
+    "open_text": "The vendor brings water by handcart but the price doubled after the drought",
+    "voice_transcript": ""
+   },
+   {
+    "ref": "p02copy",
+    "contributor": "P02",
+    "device_id": "dev-e02",
+    "captured_at": "2025-03-12T15:30:00+03:00",
+    "duration_sec": 600,
+    "lat": -0.1041,
+    "lng": 34.7522,
+    "water_source": "vendor",
+    "satisfaction": [
+     3,
+     2,
+     4,
+     4,
+     3,
+     2,
+     4,
+     3
+    ],
+    "open_text": "After the drought the price doubled but the vendor brings water by handcart",
+    "voice_transcript": ""
+   }
+  ],
+  "target": "e02orig",
+  "should_fire": [
+   "copied_text",
+   "shared_device"
+  ],
+  "should_not_fire": [
+   "too_fast",
+   "same_spot",
+   "straight_lining",
+   "voice_vs_form",
+   "off_hours",
+   "burst",
+   "outside_area"
+  ],
+  "why": "In this scenario an enumerator fabricates a 'participant' interview on her own phone by reordering her earlier answer. Both texts have the content set {vendor, brings, water, handcart, price, doubled, drought} (the/by/but/after removed), so the Jaccard similarity is 7/7 = 1.0. The pair links through the same device, not the same contributor. The target is the earlier submission, and the rule says 'at any time, before or after'. An implementation that compares only within one contributor, or only against earlier submissions, misses it. shared_device also fires because dev-e02 carries E02 and P02. Other checks are quiet: durations of 26 min (enumerator) and 10 min (participant), daytime, points inside Nyalenda, E02 has no other submissions, no transcript."
+ }
+}

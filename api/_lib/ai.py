@@ -7,6 +7,7 @@ these judgments are stored as verdicts that the checks read.
 
 Every call:
 - has strict structured output, validated with pydantic (plus our own checks);
+  over-long prose (an explanation, a reason) is trimmed, never a reason to fail;
 - times out after 12 s and is tried at most 3 times with backoff, then raises
   AIUnavailable so the caller falls back to the rules (ingest never waits on it);
 - wraps transcripts and answers (untrusted field data) in delimiters, tells the
@@ -22,11 +23,11 @@ import json
 import re
 import time
 from dataclasses import dataclass, field
-from typing import Callable, Protocol, TypeVar
+from typing import Annotated, Callable, Protocol, TypeVar
 
 import anthropic
 import httpx
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, ValidationError
 
 # Checked against GET /v1/models (scripts/ai_models.py): a Haiku-class model for the
 # per-submission judgments, a Sonnet-class model for the brief.
@@ -93,22 +94,37 @@ def jobs_secret(service_key: str) -> str:
 # Outputs ---------------------------------------------------------------------------
 
 
+def trimmed(limit: int) -> AfterValidator:
+    """Model prose cut to fit at a word boundary: a long-winded explanation is not a wrong verdict.
+
+    Only prose is trimmed. The decision, the confidence and the quote stay strict
+    (a quote must still be an exact span of the transcript), and so do the brief's numbers.
+    """
+    def trim(value: str) -> str:
+        if len(value) <= limit:
+            return value
+        cut = value[:limit - 1]
+        cut = cut.rsplit(" ", 1)[0] if " " in cut else cut
+        return cut.rstrip(" ,;:.-") + "…"
+    return AfterValidator(trim)
+
+
 class ConsistencyVerdict(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     contradiction: bool
     confidence: float = Field(ge=0, le=1)
-    form_says: str = Field(max_length=200)
-    voice_says: str = Field(max_length=200)
+    form_says: Annotated[str, trimmed(200)]
+    voice_says: Annotated[str, trimmed(200)]
     quote: str = Field(max_length=400)
-    explanation: str = Field(min_length=1, max_length=600)
+    explanation: Annotated[str, Field(min_length=1), trimmed(300)]
 
 
 class ParaphraseVerdict(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     reworded: bool
-    reason: str = Field(min_length=1, max_length=500)
+    reason: Annotated[str, Field(min_length=1), trimmed(240)]
 
 
 class BriefItem(BaseModel):

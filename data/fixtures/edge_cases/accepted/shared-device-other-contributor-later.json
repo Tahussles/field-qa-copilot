@@ -1,0 +1,96 @@
+{
+ "generated": {
+  "model": "claude-opus-5-5",
+  "prompt": "edge-v1",
+  "at": "2026-11-03T18:26:22+00:00"
+ },
+ "case": {
+  "id": "shared-device-other-contributor-later",
+  "check": "shared_device",
+  "kind": "boundary",
+  "title": "Exactly two contributors on one device, and the second one only appears after the target",
+  "submissions": [
+   {
+    "ref": "a",
+    "contributor": "E01",
+    "device_id": "dev-k1",
+    "captured_at": "2024-03-04T10:15:00+03:00",
+    "duration_sec": 1560,
+    "lat": -0.0812,
+    "lng": 34.7705,
+    "water_source": "piped_home",
+    "satisfaction": [
+     4,
+     3,
+     4,
+     2,
+     5,
+     3,
+     4,
+     3
+    ],
+    "open_text": "The tap in our compound runs only in the mornings so we store water in jerry cans.",
+    "voice_transcript": ""
+   },
+   {
+    "ref": "c",
+    "contributor": "E01",
+    "device_id": "dev-k1",
+    "captured_at": "2024-03-06T11:40:00+03:00",
+    "duration_sec": 1420,
+    "lat": -0.0745,
+    "lng": 34.7652,
+    "water_source": "public_tap",
+    "satisfaction": [
+     2,
+     3,
+     2,
+     1,
+     3,
+     2,
+     4,
+     2
+    ],
+    "open_text": "Queue at the communal kiosk takes almost an hour on weekends.",
+    "voice_transcript": ""
+   },
+   {
+    "ref": "b",
+    "contributor": "P01",
+    "device_id": "dev-k1",
+    "captured_at": "2024-03-20T14:05:00+03:00",
+    "duration_sec": 540,
+    "lat": -0.0858,
+    "lng": 34.7741,
+    "water_source": "vendor",
+    "satisfaction": [
+     3,
+     2,
+     3,
+     3,
+     4,
+     2,
+     3,
+     1
+    ],
+    "open_text": "Handcart sellers raised prices after the rains damaged the road.",
+    "voice_transcript": ""
+   }
+  ],
+  "target": "a",
+  "should_fire": [
+   "shared_device"
+  ],
+  "should_not_fire": [
+   "too_fast",
+   "same_spot",
+   "copied_text",
+   "straight_lining",
+   "voice_vs_form",
+   "off_hours",
+   "burst",
+   "outside_area"
+  ],
+  "why": "dev-k1 has submissions from exactly 2 distinct contributors: E01 (a, c) and P01 (b). That meets the 'at least 2' threshold, so a must fire. Two edges are probed. First, the target's own contributor counts toward the 2; an implementation that requires 2 contributors other than the target's own would stay silent. Second, P01's submission comes 16 days after a; an implementation that only looks at earlier submissions on the device, or that evaluates once at sync time and never re-evaluates, would miss it. The other checks stay quiet: E01's two submissions are on different days, durations are above the minimums, all points are inside Kondele, times are daytime and voice transcripts are empty."
+ }
+}

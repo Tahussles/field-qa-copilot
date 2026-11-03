@@ -87,6 +87,31 @@ def test_a_quote_that_is_not_in_the_transcript_is_rejected():
     assert ai.check_consistency(ConsistencyVerdict(**contradiction(quote="")), PIPE_DRY) is not None
 
 
+def test_an_over_long_explanation_is_trimmed_not_a_failed_verdict():
+    rambling = "The household says the pipe at home is dry, " + "and they keep explaining at length " * 30
+    provider, messages = live_with([contradiction(explanation=rambling, voice_says="v" * 250)])
+    verdict, usage = provider.judge_consistency("piped_home", "", PIPE_DRY)
+    assert usage.attempts == 1 and len(messages.requests) == 1
+    assert len(verdict.explanation) <= 300 and verdict.explanation.endswith("…")
+    assert verdict.explanation.startswith("The household says the pipe at home is dry")
+    assert len(verdict.voice_says) <= 200
+
+    provider, _ = live_with([{"reworded": False, "reason": "different specifics " * 40}])
+    paraphrase, usage = provider.judge_paraphrase("Queues are long at the kiosk.", "The kiosk queue is long.")
+    assert usage.attempts == 1 and len(paraphrase.reason) <= 240 and paraphrase.reason.endswith("…")
+    short = ParaphraseVerdict(reworded=True, reason="Same answer, two words swapped.")
+    assert short.reason == "Same answer, two words swapped."  # within the limit: untouched
+
+
+def test_trimming_never_loosens_the_strict_fields():
+    with pytest.raises(ValueError):
+        ConsistencyVerdict(**contradiction(quote="x" * 401))  # a quote is never cut, it is checked
+    with pytest.raises(ValueError):
+        ConsistencyVerdict(**contradiction(explanation=""))
+    invented = contradiction(quote="we buy from the vendor at the market", explanation="long " * 200)
+    assert ai.check_consistency(ConsistencyVerdict(**invented), PIPE_DRY) is not None
+
+
 def test_timeouts_fall_back_to_rules():
     provider, messages = live_with([TIMEOUT, TIMEOUT, TIMEOUT])
     with pytest.raises(AIUnavailable, match="APITimeoutError"):

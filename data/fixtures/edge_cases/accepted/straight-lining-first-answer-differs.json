@@ -1,0 +1,73 @@
+{
+ "generated": {
+  "model": "claude-opus-5-5",
+  "prompt": "edge-v1",
+  "at": "2026-11-03T18:22:41+00:00"
+ },
+ "case": {
+  "id": "straight-lining-first-answer-differs",
+  "check": "straight_lining",
+  "kind": "boundary",
+  "title": "Only the first answer differs from the other seven: no fire",
+  "submissions": [
+   {
+    "ref": "first",
+    "contributor": "P01",
+    "device_id": "dev-p01",
+    "captured_at": "2024-05-16T08:20:00+03:00",
+    "duration_sec": 420,
+    "lat": -0.085,
+    "lng": 34.772,
+    "water_source": "public_tap",
+    "satisfaction": [
+     4,
+     5,
+     5,
+     5,
+     5,
+     5,
+     5,
+     5
+    ],
+    "open_text": "Queue at the communal point is short before seven",
+    "voice_transcript": ""
+   },
+   {
+    "ref": "later",
+    "contributor": "P01",
+    "device_id": "dev-p01",
+    "captured_at": "2024-05-16T17:45:00+03:00",
+    "duration_sec": 390,
+    "lat": -0.078,
+    "lng": 34.768,
+    "water_source": "public_tap",
+    "satisfaction": [
+     3,
+     4,
+     2,
+     5,
+     4,
+     3,
+     3,
+     4
+    ],
+    "open_text": "Children carry containers home after school",
+    "voice_transcript": ""
+   }
+  ],
+  "target": "first",
+  "should_fire": [],
+  "should_not_fire": [
+   "straight_lining",
+   "too_fast",
+   "same_spot",
+   "copied_text",
+   "voice_vs_form",
+   "off_hours",
+   "shared_device",
+   "burst",
+   "outside_area"
+  ],
+  "why": "This probes an off-by-one at the start of the array. An implementation that compares answers[1..7] against answers[1], starting its loop at index 1 and using the wrong reference, would see seven 5s and fire. The index-0 answer of 4 must break the run, so it stays silent. Quiet checks: as a participant, 420 s is at least 180 s. same_spot never applies to participants. The texts share no content words. There is no voice note. 08:20 and 17:45 are inside working hours. There is a single contributor on the device. There are only 2 submissions. Both points are inside Kondele."
+ }
+}

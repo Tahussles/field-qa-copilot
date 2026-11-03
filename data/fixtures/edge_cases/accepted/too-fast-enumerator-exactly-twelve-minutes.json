@@ -1,0 +1,73 @@
+{
+ "generated": {
+  "model": "claude-opus-5-5",
+  "prompt": "edge-v1",
+  "at": "2026-11-03T18:18:21+00:00"
+ },
+ "case": {
+  "id": "too-fast-enumerator-exactly-twelve-minutes",
+  "check": "too_fast",
+  "kind": "boundary",
+  "title": "Enumerator interview lasting exactly 720 s does not fire",
+  "submissions": [
+   {
+    "ref": "ann",
+    "contributor": "E01",
+    "device_id": "dev-e01",
+    "captured_at": "2024-03-12T09:15:00+03:00",
+    "duration_sec": 720,
+    "lat": -0.08,
+    "lng": 34.77,
+    "water_source": "piped_home",
+    "satisfaction": [
+     4,
+     3,
+     5,
+     4,
+     2,
+     4,
+     3,
+     5
+    ],
+    "open_text": "Water pressure drops every evening so we fill jerrycans early.",
+    "voice_transcript": ""
+   },
+   {
+    "ref": "ben",
+    "contributor": "E01",
+    "device_id": "dev-e01",
+    "captured_at": "2024-03-12T11:40:00+03:00",
+    "duration_sec": 1560,
+    "lat": -0.075,
+    "lng": 34.765,
+    "water_source": "public_tap",
+    "satisfaction": [
+     2,
+     3,
+     2,
+     4,
+     3,
+     1,
+     2,
+     3
+    ],
+    "open_text": "The kiosk attendant often closes before noon on Sundays.",
+    "voice_transcript": ""
+   }
+  ],
+  "target": "ann",
+  "should_fire": [],
+  "should_not_fire": [
+   "too_fast",
+   "same_spot",
+   "copied_text",
+   "straight_lining",
+   "voice_vs_form",
+   "off_hours",
+   "shared_device",
+   "burst",
+   "outside_area"
+  ],
+  "why": "The enumerator minimum is 12 minutes = 720 s and the rule is strictly below. ann lasts exactly 720 s, so too_fast must stay silent. An implementation using <= instead of < would wrongly fire. Other checks are quiet: there are only 2 submissions, so same_spot (needs 2 others) and burst (needs 4) cannot fire. Both points are inside Kondele (lng 34.76-34.78, lat -0.09 to -0.07). The times are 09:15 and 11:40 local. The texts share no content words. There is no voice transcript, and the device is used only by E01."
+ }
+}

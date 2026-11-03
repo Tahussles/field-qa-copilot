@@ -1,0 +1,96 @@
+{
+ "generated": {
+  "model": "claude-opus-5-5",
+  "prompt": "edge-v1",
+  "at": "2026-11-03T18:20:09+00:00"
+ },
+ "case": {
+  "id": "same-spot-local-day-not-utc-date",
+  "check": "same_spot",
+  "kind": "boundary",
+  "title": "Target written in UTC on 11 March is 00:30 on 12 March in Nairobi",
+  "submissions": [
+   {
+    "ref": "n1",
+    "contributor": "E01",
+    "device_id": "dev-e01",
+    "captured_at": "2024-03-11T10:00:00+03:00",
+    "duration_sec": 1500,
+    "lat": -0.08,
+    "lng": 34.77,
+    "water_source": "public_tap",
+    "satisfaction": [
+     3,
+     2,
+     4,
+     3,
+     2,
+     4,
+     3,
+     5
+    ],
+    "open_text": "Caretaker says the kiosk attendant opens late on weekends.",
+    "voice_transcript": ""
+   },
+   {
+    "ref": "n2",
+    "contributor": "E01",
+    "device_id": "dev-e01",
+    "captured_at": "2024-03-11T15:00:00+03:00",
+    "duration_sec": 1350,
+    "lat": -0.0796,
+    "lng": 34.77,
+    "water_source": "borehole",
+    "satisfaction": [
+     4,
+     4,
+     3,
+     5,
+     2,
+     3,
+     4,
+     3
+    ],
+    "open_text": "Boda rider's household treats pump water with chlorine tablets.",
+    "voice_transcript": ""
+   },
+   {
+    "ref": "t",
+    "contributor": "E01",
+    "device_id": "dev-e01",
+    "captured_at": "2024-03-11T21:30:00+00:00",
+    "duration_sec": 1560,
+    "lat": -0.08,
+    "lng": 34.77,
+    "water_source": "vendor",
+    "satisfaction": [
+     2,
+     3,
+     1,
+     2,
+     4,
+     2,
+     3,
+     1
+    ],
+    "open_text": "Night guard buys from a seller because his landlord disconnected the line.",
+    "voice_transcript": ""
+   }
+  ],
+  "target": "t",
+  "should_fire": [
+   "off_hours"
+  ],
+  "should_not_fire": [
+   "same_spot",
+   "too_fast",
+   "copied_text",
+   "straight_lining",
+   "voice_vs_form",
+   "shared_device",
+   "burst",
+   "outside_area"
+  ],
+  "why": "Probes using the local calendar day. t is written as 2024-03-11T21:30:00+00:00, which is 2024-03-12T00:30 in Nairobi. n1 and n2 fall on local 2024-03-11. They are 0 m and about 44.5 m from t, so each would qualify on distance. Because they are on a different local day, t has zero same-day neighbours and same_spot must not fire. An implementation that would wrongly fire: one that groups by UTC date, or by the date prefix of the captured_at string, or that uses a rolling 24-hour window. Each of those puts t on 11 March, or within 24 hours of both neighbours, giving 2 neighbours. off_hours does fire on t, since 00:30 local is before 06:00. That is expected and listed. There is no burst: t is 9.5 hours after n2."
+ }
+}

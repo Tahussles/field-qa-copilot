@@ -36,6 +36,10 @@ class SpeechOff(Exception):
     """Text to speech is not configured here and the brief has no cached audio."""
 
 
+class ReadOnly(Exception):
+    """A read-only (preview) deployment was asked for work that writes or spends."""
+
+
 def _hash(*parts) -> str:
     return hashlib.sha1(json.dumps(parts, sort_keys=True, default=str).encode()).hexdigest()[:12]
 
@@ -273,16 +277,17 @@ def queue_brief(repo: Repository, force: bool = False) -> dict | None:
     return None
 
 
-def brief_state(repo: Repository, provider: Provider | None = None) -> dict:
+def brief_state(repo: Repository, provider: Provider | None = None, queue: bool = True) -> dict:
     """The newest brief for today, whether it matches today's numbers, and whether one is being written.
 
-    The first visit of the day queues one; after that only Regenerate does, so a
-    busy demo does not pay for a new brief on every arrival.
+    The first visit of the day queues one (unless queue is false: a read-only
+    deployment); after that only Regenerate does, so a busy demo does not pay for
+    a new brief on every arrival.
     """
     for_date, facts, version = _brief_inputs(repo)
     rows = repo.briefs(for_date)
     writing = any(j["kind"] == "brief" for j in repo.pending_jobs())
-    if not rows and not writing:
+    if not rows and not writing and queue:
         writing = queue_brief(repo) is not None or writing
     latest = rows[0] if rows else None
     return {
@@ -298,11 +303,13 @@ def brief_state(repo: Repository, provider: Provider | None = None) -> dict:
     }
 
 
-def brief_audio(repo: Repository, provider: Provider, brief_id: str) -> dict:
+def brief_audio(repo: Repository, provider: Provider, brief_id: str, synthesise: bool = True) -> dict:
     """A signed URL for the brief read aloud, synthesising it the first time (cached in Storage)."""
     saved = repo.brief(brief_id)
     if saved is None or saved["status"] != "ai":
         raise NotFound(brief_id)
+    if not saved.get("audio_path") and not synthesise:
+        raise ReadOnly(brief_id)
     if not saved.get("audio_path") and not getattr(provider, "can", {}).get("speak", True):
         raise SpeechOff(OFF)
     if not saved.get("audio_path"):

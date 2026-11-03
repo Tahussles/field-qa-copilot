@@ -1,0 +1,73 @@
+{
+ "generated": {
+  "model": "claude-opus-5-5",
+  "prompt": "edge-v1",
+  "at": "2026-11-03T18:23:44+00:00"
+ },
+ "case": {
+  "id": "voice-vs-form-keyword-inside-word-does-not-match",
+  "check": "voice_vs_form",
+  "kind": "boundary",
+  "title": "'upstream' contains 'stream' mid-word, which must not count as a river keyword",
+  "submissions": [
+   {
+    "ref": "up",
+    "contributor": "P02",
+    "device_id": "dev-p02",
+    "captured_at": "2024-05-15T09:30:00+03:00",
+    "duration_sec": 420,
+    "lat": -0.1,
+    "lng": 34.75,
+    "water_source": "public_tap",
+    "satisfaction": [
+     3,
+     4,
+     2,
+     4,
+     3,
+     5,
+     2,
+     3
+    ],
+    "open_text": "The tap attendant opens late and closes early.",
+    "voice_transcript": "Our house is upstream from the market, we use the communal tap."
+   },
+   {
+    "ref": "other",
+    "contributor": "P02",
+    "device_id": "dev-p02",
+    "captured_at": "2024-05-15T16:10:00+03:00",
+    "duration_sec": 360,
+    "lat": -0.095,
+    "lng": 34.745,
+    "water_source": "vendor",
+    "satisfaction": [
+     1,
+     2,
+     2,
+     3,
+     1,
+     2,
+     3,
+     2
+    ],
+    "open_text": "Prices rose sharply during the dry season.",
+    "voice_transcript": ""
+   }
+  ],
+  "target": "up",
+  "should_fire": [],
+  "should_not_fire": [
+   "voice_vs_form",
+   "too_fast",
+   "same_spot",
+   "copied_text",
+   "straight_lining",
+   "off_hours",
+   "shared_device",
+   "burst",
+   "outside_area"
+  ],
+  "why": "Keywords match only at the start of a word. In 'upstream', 'stream' starts at the third letter, so it is not a match. No other word begins a keyword ('Our house' is not 'our own tap'; 'from' alone is not 'buy from'). The first real match is 'communal tap' (public_tap), which equals the form, so the check stays silent. A plain substring search would find 'stream' first, classify the source as river, and fire wrongly."
+ }
+}

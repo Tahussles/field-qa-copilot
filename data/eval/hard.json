@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-03T01:16:04+00:00",
+  "generated_at": "2026-11-03T18:08:56+00:00",
   "engine_version": "0.4.0",
   "seeds": [
     201,
@@ -11,6 +11,7 @@
   ],
   "model": "claude-haiku-5-5",
   "rules_only_run": false,
+  "prompt": "v2",
   "calls": {
     "total": 6954,
     "consistency": 6624,
@@ -20,8 +21,6 @@
     "median_latency_ms": 1316
   },
   "cost_usd": {
-    "estimated_before_run": 0.8671,
-    "spent_this_run": 0.5807,
     "all_cached_calls": 1.1628
   },
   "planted_per_wave": {

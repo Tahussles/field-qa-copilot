@@ -1,0 +1,117 @@
+{
+ "generated": {
+  "model": "claude-opus-5-5",
+  "prompt": "edge-v1",
+  "at": "2026-11-03T18:27:49+00:00"
+ },
+ "case": {
+  "id": "burst-enum-60min-plus-1s",
+  "check": "burst",
+  "kind": "boundary",
+  "title": "Enumerator: 4 submissions spanning 60:01 never share a 60-minute window",
+  "submissions": [
+   {
+    "ref": "a",
+    "contributor": "E02",
+    "device_id": "dev-e02",
+    "captured_at": "2024-05-15T10:00:00+03:00",
+    "duration_sec": 800,
+    "lat": -0.1,
+    "lng": 34.745,
+    "water_source": "borehole",
+    "satisfaction": [
+     3,
+     4,
+     2,
+     5,
+     3,
+     4,
+     3,
+     2
+    ],
+    "open_text": "Borehole water tastes salty during the dry season.",
+    "voice_transcript": ""
+   },
+   {
+    "ref": "b",
+    "contributor": "E02",
+    "device_id": "dev-e02",
+    "captured_at": "2024-05-15T10:20:00+03:00",
+    "duration_sec": 760,
+    "lat": -0.096,
+    "lng": 34.749,
+    "water_source": "vendor",
+    "satisfaction": [
+     2,
+     2,
+     3,
+     1,
+     4,
+     2,
+     3,
+     3
+    ],
+    "open_text": "We pay the vendor twenty shillings per jerrycan.",
+    "voice_transcript": ""
+   },
+   {
+    "ref": "c",
+    "contributor": "E02",
+    "device_id": "dev-e02",
+    "captured_at": "2024-05-15T10:40:00+03:00",
+    "duration_sec": 870,
+    "lat": -0.104,
+    "lng": 34.752,
+    "water_source": "piped_home",
+    "satisfaction": [
+     4,
+     5,
+     4,
+     3,
+     4,
+     2,
+     5,
+     4
+    ],
+    "open_text": "Our tap has been dry since the pipe burst in March.",
+    "voice_transcript": ""
+   },
+   {
+    "ref": "d",
+    "contributor": "E02",
+    "device_id": "dev-e02",
+    "captured_at": "2024-05-15T11:00:01+03:00",
+    "duration_sec": 820,
+    "lat": -0.098,
+    "lng": 34.756,
+    "water_source": "public_tap",
+    "satisfaction": [
+     1,
+     3,
+     2,
+     4,
+     2,
+     3,
+     1,
+     2
+    ],
+    "open_text": "Women walk far at night which feels unsafe.",
+    "voice_transcript": ""
+   }
+  ],
+  "target": "d",
+  "should_fire": [],
+  "should_not_fire": [
+   "burst",
+   "too_fast",
+   "same_spot",
+   "copied_text",
+   "straight_lining",
+   "voice_vs_form",
+   "off_hours",
+   "shared_device",
+   "outside_area"
+  ],
+  "why": "Probes the window edge one second past the boundary. Submission a (10:00:00) and submission d (11:00:01) are 3601 s apart. No 60-minute window holds all four, so every window containing d holds at most 3 (b, c, d), which is below the enumerator threshold of 4. Three kinds of wrong implementation would fire here: one that truncates captured_at to minutes, one that rounds the gap to 60 minutes, or one that counts submissions within plus or minus 60 min of the target (which would find a, b, c, d). The other checks stay quiet. Durations are all at least 720 s. Points are at least about 400 m apart. All points are inside Nyalenda (lng 34.745-34.756, lat -0.096 to -0.104). There are no shared words, no voice notes, daytime times, and one device."
+ }
+}

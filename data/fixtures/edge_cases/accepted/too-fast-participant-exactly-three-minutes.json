@@ -1,0 +1,73 @@
+{
+ "generated": {
+  "model": "claude-opus-5-5",
+  "prompt": "edge-v1",
+  "at": "2026-11-03T18:18:21+00:00"
+ },
+ "case": {
+  "id": "too-fast-participant-exactly-three-minutes",
+  "check": "too_fast",
+  "kind": "boundary",
+  "title": "Participant submission lasting exactly 180 s does not fire",
+  "submissions": [
+   {
+    "ref": "eva",
+    "contributor": "P02",
+    "device_id": "dev-p02",
+    "captured_at": "2024-03-14T08:30:00+03:00",
+    "duration_sec": 180,
+    "lat": -0.1,
+    "lng": 34.75,
+    "water_source": "river",
+    "satisfaction": [
+     2,
+     1,
+     3,
+     2,
+     2,
+     4,
+     1,
+     2
+    ],
+    "open_text": "We walk to the lake shore at dawn because the nearby stream dried up.",
+    "voice_transcript": ""
+   },
+   {
+    "ref": "fay",
+    "contributor": "P02",
+    "device_id": "dev-p02",
+    "captured_at": "2024-03-15T17:10:00+03:00",
+    "duration_sec": 420,
+    "lat": -0.095,
+    "lng": 34.745,
+    "water_source": "public_tap",
+    "satisfaction": [
+     3,
+     4,
+     3,
+     5,
+     2,
+     3,
+     4,
+     3
+    ],
+    "open_text": "Queues at the communal point are shorter since a second spout opened.",
+    "voice_transcript": ""
+   }
+  ],
+  "target": "eva",
+  "should_fire": [],
+  "should_not_fire": [
+   "too_fast",
+   "same_spot",
+   "copied_text",
+   "straight_lining",
+   "voice_vs_form",
+   "off_hours",
+   "shared_device",
+   "burst",
+   "outside_area"
+  ],
+  "why": "The participant minimum is 3 minutes = 180 s and the rule is strictly below. eva lasts exactly 180 s, so too_fast must not fire. Using <= would wrongly fire. So would applying the 720 s enumerator minimum to a participant. Other checks are quiet: same_spot never fires for participants, and burst needs 5. Both points are inside Nyalenda (lng 34.74-34.76, lat -0.11 to -0.09). The times are 08:30 and 17:10 local on different days. The texts are distinct. There is no voice note, and the device is used only by P02."
+ }
+}

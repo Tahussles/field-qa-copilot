@@ -429,3 +429,63 @@ def test_project_as_of_anchors_today_and_yesterday():
         assert data["yesterday"]["date"] == "2026-10-27" and data["yesterday"]["received"] == 5
     finally:
         app.dependency_overrides.clear()
+
+
+# Read-only previews ---------------------------------------------------------------------
+
+def test_a_read_only_deployment_refuses_every_write_and_queues_nothing(repo):
+    from api.index import get_provider, writes_value
+
+    app.dependency_overrides[get_repo] = lambda: repo
+    app.dependency_overrides[passcode_value] = lambda: PASSCODE
+    app.dependency_overrides[writes_value] = lambda: False
+    app.dependency_overrides[get_provider] = lambda: None
+    client = TestClient(app)
+    try:
+        writes = [
+            ("POST", "/api/py/submissions", payload()),
+            ("POST", "/api/py/reviews", {"submission_id": str(uuid.uuid4()), "decision": "approve"}),
+            ("DELETE", f"/api/py/reviews/{uuid.uuid4()}", None),
+            ("POST", "/api/py/rescore", None),
+            ("GET", "/api/py/demo/status", None),
+            ("POST", "/api/py/demo/step", {"run_id": str(uuid.uuid4())}),
+            ("POST", "/api/py/demo/reset", None),
+            ("POST", "/api/py/collect/token", {}),
+            ("GET", "/api/py/collect/session", None),
+            ("POST", "/api/py/collect/upload", {"device_id": "phone-abc123", "client_submission_id": "client-123456",
+                                                "content_type": "audio/webm"}),
+            ("POST", "/api/py/jobs/run", {"job_id": str(uuid.uuid4())}),
+            ("POST", "/api/py/jobs/drain", None),
+            ("POST", f"/api/py/jobs/{uuid.uuid4()}/rerun", None),
+            ("POST", "/api/py/brief/regenerate", None),
+        ]
+        for method, path, body in writes:
+            response = client.request(method, path, json=body, headers=AUTH)
+            assert response.status_code == 403, (method, path, response.status_code)
+            assert "read-only preview" in response.json()["detail"]
+        assert client.get("/api/py/health").json()["writes"] is False
+        assert client.get("/api/py/brief").json()["writing"] is False  # the first visit of the day queues nothing
+        assert repo.pending_jobs() == [] and repo.submissions() == []
+        assert client.get("/api/py/overview").status_code == 200  # reads still work
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_writes_are_on_off_vercel_and_only_where_the_flag_says_on_vercel(monkeypatch):
+    from api._lib import settings
+
+    def writes(**env):
+        for key in ("VERCEL", "WRITES_ENABLED"):
+            monkeypatch.delenv(key, raising=False)
+        for key, value in env.items():
+            monkeypatch.setenv(key, value)
+        settings.get_settings.cache_clear()
+        try:
+            return settings.get_settings().writes_enabled
+        finally:
+            settings.get_settings.cache_clear()
+
+    assert writes() is True  # local dev and tests
+    assert writes(VERCEL="1") is False  # a preview without the flag
+    assert writes(VERCEL="1", WRITES_ENABLED="true") is True  # production
+    assert writes(WRITES_ENABLED="false") is False

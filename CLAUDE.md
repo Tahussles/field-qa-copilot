@@ -40,18 +40,22 @@ engine/                   detection engine: stdlib only, no I/O (engine.__versio
   insights.py             hotspots, contributor stats, area rates
   metrics.py              precision/recall against labels the caller supplies
 datagen/                  seeded synthetic wave with planted fraud (may import engine, never the reverse);
-                          hard.py: hard-mode waves for evaluation only (tuning 211-212, held out 201-202)
+                          hard.py: hard-mode waves for evaluation only (tuning 211-212, held out 201-202);
+                          edge_cases.py: the fixed world and schema for reviewed edge cases
 scripts/                  generate.py, score.py, evaluate.py, simulate.py, verify_wave.py, backfill_ai.py,
-                          set_job_hook.py, ai_models.py, realtime-probe.mjs,
-                          vendor-maplibre.mjs, render-basemap.mjs
+                          set_job_hook.py, ai_models.py, refresh_ai_verdicts.py, eval_diff.py, gen_edge_cases.py,
+                          realtime-probe.mjs, vendor-maplibre.mjs, render-basemap.mjs
 tests/                    pytest suite
+docs/                     ai-practices.md (how AI is used), decisions.md (key design decisions)
+data/fixtures/            committed: ai_verdicts/ (recorded hard-mode model verdicts, CI scores from them),
+                          edge_cases/proposed/ (model-proposed, awaiting review) and accepted/ (pytest runs them)
 data/synthetic/           generator output: CSVs, summary.json, preview.png (gitignored)
-data/eval/                evaluation output: report.md, report.json (gitignored)
+data/eval/                evaluation output: report.md, report.json (gitignored); hard.json (committed)
 data/sim/                 simulator run logs (gitignored)
 data/screens/             dashboard screenshots (gitignored)
 supabase/migrations/      SQL migrations, numbered and applied in order
 .githooks/commit-msg      rejects attribution strings in commit messages
-.github/workflows/        attribution-guard CI check on every push and PR
+.github/workflows/        ci.yml (every PR and push to main), post-deploy.yml (after a Production deployment)
 vercel.json               function bundling and region
 ```
 
@@ -62,7 +66,7 @@ pnpm install
 uv sync
 pnpm dev                                   # Next.js on :3000 and FastAPI on :8000
 curl http://localhost:3000/api/py/health   # {"ok":true,"engine_version":"..."}
-pnpm typecheck && pnpm lint                # TypeScript and ESLint
+pnpm typecheck && pnpm lint                # TypeScript (after next typegen) and ESLint
 pnpm test:smoke                            # Playwright smoke test against the local app (reads prod data;
                                            # approve-then-undo needs DEMO_PASSCODE and SUPABASE_SERVICE_ROLE_KEY:
                                            # its reviews use reviewer 'smoke-test' and teardown deletes them)
@@ -78,9 +82,11 @@ uv run scripts/simulate.py --target local --speed 0 --limit 40   # replay the Oc
 uv run scripts/simulate.py --target prod --reset-live            # full live day against production
 uv run scripts/verify_wave.py                        # is the database exactly the fresh wave? (after a demo reset)
 uv run scripts/ai_models.py                          # check the model ids against the providers' lists
-uv run scripts/set_job_hook.py                       # point the database's job hook at production
+uv run scripts/set_job_hook.py                       # point the database's job hook at JOB_HOOK_URL (production)
 uv run scripts/backfill_ai.py --estimate             # model verdicts over the wave: cost first, then without --estimate
-uv run scripts/evaluate.py --hard                    # rules only vs rules + AI on hard-mode waves (cost guard $5)
+uv run scripts/evaluate.py --hard                    # rules only vs rules + AI on hard-mode waves (recorded verdicts)
+uv run scripts/refresh_ai_verdicts.py --estimate     # re-record missing or stale verdicts (cost guard $5)
+uv run scripts/gen_edge_cases.py --estimate          # propose edge cases (model calls); --review checks them
 RUN_LIVE_AI=1 uv run pytest -k live                  # the one test that calls a real model (prompt injection)
 node scripts/render-basemap.mjs                      # re-render public/landing/basemap.* (areas or palette changed)
 node --env-file=.env.local scripts/realtime-probe.mjs 600        # watch Realtime events
@@ -101,9 +107,11 @@ After cloning, wire the commit hook once: `git config core.hooksPath .githooks`.
 - Model ids live in `api/_lib/ai.py` (`JUDGE_MODEL`, `BRIEF_MODEL`, `SCRIBE_MODEL`, `TTS_MODEL`); check them with `scripts/ai_models.py`.
 - Jobs: `ai_jobs` (queued, running, done, failed, skipped) with a unique `dedupe_key`, so queueing is idempotent and a finished job never reruns unless forced (`POST /jobs/{id}/rerun`). The database POSTs each new job to `/api/py/jobs/run` (pg_net trigger, migration 0007) with `X-Jobs-Secret` (in Vault, derived from the service key, set by `scripts/set_job_hook.py`); `/api/py/jobs/drain` (passcode) is the safety net. A verdict landing rescores through `service.rescore_submission` (the leased incremental path), so a score can change after arrival and Realtime tells the UI.
 - The wave's verdicts (`scripts/backfill_ai.py`) are part of its fresh state: a demo reset keeps them and `verify_wave.py` scores the generated wave with the stored verdicts. `generate.py --reset` deletes them (cascade): re-run the backfill after.
-- Hard mode (`datagen/hard.py`, never the demo seed) is the honest test: tune on seeds 211-212, report on held-out 201-202. `evaluate.py --hard` writes `data/eval/hard.json` (committed, aggregates only, served at `/api/py/eval/hard`); model verdicts are cached in `data/eval/hard-verdicts.json`.
+- Hard mode (`datagen/hard.py`, never the demo seed) is the honest test: tune on seeds 211-212, report on held-out 201-202. `evaluate.py --hard` writes `data/eval/hard.json` (committed, aggregates only, served at `/api/py/eval/hard`) and never calls a model: it scores from the recorded verdicts in `data/fixtures/ai_verdicts/hard-<seed>.json`, keyed by kind, input hash, `PROMPT_VERSION` and model id and re-validated on load, and exits 2 on a missing or stale one. After a prompt or model change, `scripts/refresh_ai_verdicts.py` re-records only those (cost guard) and the files are committed. CI fails if `hard.json` does not match the code.
 - A copy found only by the model (`decided_by: ai_paraphrase`) weighs `ai_paraphrase_weight` (1.5, below the review threshold): it corroborates, it never flags on its own.
-- A deployment without a model key skips that job at once (`status: skipped`, no retries) and the rule-based result stands. The job hook always posts to production, so jobs queued by a local or preview ingest run there, with production's keys and engine.
+- A deployment without a model key skips that job at once (`status: skipped`, no retries) and the rule-based result stands. The job hook posts to `JOB_HOOK_URL` (production), so jobs queued by a local ingest run there, with production's keys and engine. pg_cron (`resend-stale-job-hooks`, migration 0009) re-sends a hook for a job still queued 30 s to 10 min after it was created.
+- Model prose (explanation, reason, form/voice summaries) is trimmed at a word boundary when long, never a failed verdict; decisions, confidence, quotes and the brief's numbers stay strict.
+- Edge cases: `scripts/gen_edge_cases.py` gives a model each check's rule in plain words (never the code) and writes validated cases to `data/fixtures/edge_cases/proposed/`. A human reviews them (`--review` runs them through the engine); accepted ones move to `accepted/` and run in `tests/test_edge_cases.py`. A case the engine disagrees with is a wrong expectation (reject) or a real gap (report it; never bend the case to the code).
 - `ai_jobs` outlive demo resets: `submission_id` is ON DELETE SET NULL and each job is stamped with its `demo_run_id`, so `ai_spend()` (shown in the demo panel) counts all time and this run.
 - `transcript_lang` holds short codes: `en`, `sw`, `luo`.
 
@@ -115,7 +123,8 @@ After cloning, wire the commit hook once: `git config core.hooksPath .githooks`.
 - Never force-push or rewrite history unless Taha asks.
 - Conventional commits (`feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, `test:`) that describe the change, not the tool that made it.
 - The hook and CI match those strings case-insensitively, so a commit message cannot name this file. Call it "project guide".
-- CI (`attribution-guard`) fails any push or PR containing a commit whose message has those strings or whose author email is not `173319783+Tahussles@users.noreply.github.com`.
+- CI (`attribution-guard`, a job in `ci.yml`) fails any push to main or PR containing a commit whose message has those strings or whose author email is not `173319783+Tahussles@users.noreply.github.com`.
+- Work goes through a branch and a PR so CI runs on it. When green, merge locally with `git merge --no-ff` and push; never GitHub's merge button (it stamps a private email).
 
 ## Round-based workflow
 
@@ -125,7 +134,9 @@ After cloning, wire the commit hook once: `git config core.hooksPath .githooks`.
 
 ## Conventions
 
-- Secrets live only in `.env.local`, which is never committed. `.env.example` lists the keys with empty values. Vercel holds the deployed values.
+- Secrets live only in `.env.local`, which is never committed. `.env.example` lists the keys with empty values. Vercel holds the deployed values; GitHub Actions secrets hold what post-deploy.yml needs (`DEMO_PASSCODE`, `SUPABASE_SERVICE_ROLE_KEY`; `NEXT_PUBLIC_SUPABASE_URL` is a repository variable).
+- `WRITES_ENABLED`: on Vercel only Production sets it to `true`; a preview is a read-only view (every credentialed route answers 403, no brief is queued, a banner says so). Off Vercel it defaults to true. `/health` reports `writes` and the deployed `commit`.
+- CI (`ci.yml`): python (pytest with no network and no keys), web (typecheck, lint, build), eval-gate (held-out precision >= 0.85, recall >= 0.97), hard-mode (from recorded verdicts), attribution-guard, and on PRs one eval-diff comment (`scripts/eval_diff.py`, per check and combined, PR vs main). post-deploy.yml: on a successful Production deployment (Vercel's commit status on main's tip, or deployment_status), the desktop Playwright tests against production, a demo reset, `verify_wave.py`, and an issue on failure.
 - The browser uses the anon key and can only read. All writes go through the server with the service role key.
 - `synthetic_truth` has no anon access. `ai_jobs` and `ai_verdicts` are readable by anon (Realtime drives the UI; they hold no ground truth).
 - `engine/` never reads ground truth or imports `datagen`. In `api/`, only the /evaluate path (`api/_lib/evaluation.py` through `repo.truth_labels()`) reads `synthetic_truth`, server-side, and it returns aggregates only. `/demo/step` writes the generator's labels for what it sends (`repo.write_truth`) and never reads them. Scripts may read it (`evaluate.py`, `verify_wave.py`; `simulate.py` writes it). Tests enforce this.
@@ -149,5 +160,6 @@ After cloning, wire the commit hook once: `git config core.hooksPath .githooks`.
 - `as_of` is read fresh for the overview (`repo.as_of()`); the cached project context may hold an old value.
 - Landing (`/`): no MapLibre. The stage draws on a canvas over `public/landing/basemap.webp`, replays yesterday's real submissions from `/api/py/landing` (CDN-cached), and says "Live" only while real score inserts arrive over Realtime. Reduced motion gets a static frame.
 - Phone (`/collect`): opens with a collect token from the demo panel's QR code (`<expiry>.<demo run>.<HMAC>`, keyed from the service key, 30 min, revoked by a demo reset) or the passcode; nothing else. A token can only write `source: live` submissions whose voice note sits under `live/<its device_id>/`. The phone keeps a `device_id` in localStorage, saves each interview to an IndexedDB outbox first (audio included), then uploads the voice note to a signed Storage URL and POSTs `/submissions` with its own `client_submission_id`, so a retry returns the same record. Switching contributor on one phone is real and fires shared_device.
-- Phone location is simulated by default (a new household inside the contributor's area, or the last interview's spot); "Use my real GPS" sends the real fix, so outside_area fires anywhere but Kisumu. `captured_at` is the phone's real clock at submit, not the pinned demo day.
+- Phone location is simulated by default (a new household inside the contributor's area, or the last interview's spot); "Use my real GPS" sends the real fix, so outside_area fires anywhere but Kisumu.
+- Field clock (migration 0010): while `projects.as_of` is set, a `source: live` submission's `captured_at` and `synced_at` are mapped onto the field clock, `as_of + (real time - projects.clock_set_at)` (a trigger stamps `clock_set_at` whenever `as_of` changes), never past the field's "now"; the phone's own time is stored in `device_captured_at`. With `as_of` null the phone's time is used as is. The simulator and the demo step already send field times and are not mapped.
 - outside_area (weight 2) fires when the GPS point is outside the contributor's assigned area; evidence is the distance to the boundary and the area name. The synthetic waves never place a point outside its area, so it is unmeasured there.

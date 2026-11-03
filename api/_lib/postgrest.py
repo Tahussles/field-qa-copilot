@@ -3,6 +3,7 @@
 Shared by the API (SupabaseRepo) and the offline scripts.
 """
 
+import os
 from pathlib import Path
 from typing import Any
 
@@ -44,10 +45,12 @@ class Supabase:
 
     @classmethod
     def from_env_file(cls, path: Path) -> "Supabase":
-        env = load_env(path)
-        url, key = env.get("NEXT_PUBLIC_SUPABASE_URL"), env.get("SUPABASE_SERVICE_ROLE_KEY")
+        """From the environment (CI), else the file (.env.local)."""
+        env = load_env(path) if path.exists() else {}
+        url = os.environ.get("NEXT_PUBLIC_SUPABASE_URL") or env.get("NEXT_PUBLIC_SUPABASE_URL")
+        key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or env.get("SUPABASE_SERVICE_ROLE_KEY")
         if not url or not key:
-            raise SupabaseError(f"NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set in {path}")
+            raise SupabaseError(f"NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set (env or {path})")
         return cls(url, key)
 
     def _check(self, response: httpx.Response) -> httpx.Response:

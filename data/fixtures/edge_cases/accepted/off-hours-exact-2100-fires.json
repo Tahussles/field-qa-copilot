@@ -1,0 +1,74 @@
+{
+ "generated": {
+  "model": "claude-opus-5-5",
+  "prompt": "edge-v1",
+  "at": "2026-11-03T18:24:49+00:00"
+ },
+ "case": {
+  "id": "off-hours-exact-2100-fires",
+  "check": "off_hours",
+  "kind": "boundary",
+  "title": "Interview captured at exactly 21:00:00 local is off-hours",
+  "submissions": [
+   {
+    "ref": "late",
+    "contributor": "E01",
+    "device_id": "dev-e01",
+    "captured_at": "2024-05-14T21:00:00+03:00",
+    "duration_sec": 1500,
+    "lat": -0.08,
+    "lng": 34.77,
+    "water_source": "piped_home",
+    "satisfaction": [
+     4,
+     3,
+     5,
+     2,
+     4,
+     3,
+     4,
+     5
+    ],
+    "open_text": "Tap runs only in the evening so we fill jerricans before dinner.",
+    "voice_transcript": ""
+   },
+   {
+    "ref": "noon",
+    "contributor": "E01",
+    "device_id": "dev-e01",
+    "captured_at": "2024-05-14T12:10:00+03:00",
+    "duration_sec": 1620,
+    "lat": -0.075,
+    "lng": 34.765,
+    "water_source": "public_tap",
+    "satisfaction": [
+     3,
+     2,
+     4,
+     3,
+     2,
+     4,
+     3,
+     3
+    ],
+    "open_text": "Queue at the kiosk takes almost an hour every morning.",
+    "voice_transcript": ""
+   }
+  ],
+  "target": "late",
+  "should_fire": [
+   "off_hours"
+  ],
+  "should_not_fire": [
+   "too_fast",
+   "same_spot",
+   "copied_text",
+   "straight_lining",
+   "voice_vs_form",
+   "shared_device",
+   "burst",
+   "outside_area"
+  ],
+  "why": "The evening threshold is inclusive ('at or after 21:00'). 21:00:00+03:00 is exactly on it, so off_hours must fire. An implementation using a strict comparison (hour > 21, or time > 21:00) would stay silent. Other checks are quiet. The duration is 1500 s, which is at least 720 s. Only one other same-day submission exists, which is fewer than the 2 neighbours same_spot needs; it is also about 556 m away (0.005 deg of lat). There are 2 submissions, fewer than the 4 burst needs. Both points are inside Kondele, the texts share no content words, and there is no voice note."
+ }
+}

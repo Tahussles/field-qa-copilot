@@ -1,0 +1,118 @@
+{
+ "generated": {
+  "model": "claude-opus-5-5",
+  "prompt": "edge-v1",
+  "at": "2026-11-03T18:27:49+00:00"
+ },
+ "case": {
+  "id": "burst-enum-exact-60min-inclusive",
+  "check": "burst",
+  "kind": "boundary",
+  "title": "Enumerator: 4 submissions whose first and last are exactly 60:00 apart",
+  "submissions": [
+   {
+    "ref": "a",
+    "contributor": "E01",
+    "device_id": "dev-e01",
+    "captured_at": "2024-05-14T09:00:00+03:00",
+    "duration_sec": 780,
+    "lat": -0.08,
+    "lng": 34.765,
+    "water_source": "piped_home",
+    "satisfaction": [
+     4,
+     3,
+     5,
+     2,
+     4,
+     3,
+     4,
+     2
+    ],
+    "open_text": "Water comes only in the morning so we fill jerrycans before sunrise.",
+    "voice_transcript": ""
+   },
+   {
+    "ref": "b",
+    "contributor": "E01",
+    "device_id": "dev-e01",
+    "captured_at": "2024-05-14T09:20:00+03:00",
+    "duration_sec": 840,
+    "lat": -0.082,
+    "lng": 34.768,
+    "water_source": "public_tap",
+    "satisfaction": [
+     2,
+     3,
+     3,
+     4,
+     1,
+     2,
+     3,
+     3
+    ],
+    "open_text": "The landlord shares one meter among six families and bills are disputed.",
+    "voice_transcript": ""
+   },
+   {
+    "ref": "c",
+    "contributor": "E01",
+    "device_id": "dev-e01",
+    "captured_at": "2024-05-14T09:40:00+03:00",
+    "duration_sec": 900,
+    "lat": -0.078,
+    "lng": 34.772,
+    "water_source": "vendor",
+    "satisfaction": [
+     5,
+     4,
+     4,
+     3,
+     5,
+     4,
+     2,
+     4
+    ],
+    "open_text": "Children miss school some days because they queue for water.",
+    "voice_transcript": ""
+   },
+   {
+    "ref": "d",
+    "contributor": "E01",
+    "device_id": "dev-e01",
+    "captured_at": "2024-05-14T10:00:00+03:00",
+    "duration_sec": 810,
+    "lat": -0.084,
+    "lng": 34.775,
+    "water_source": "borehole",
+    "satisfaction": [
+     3,
+     2,
+     4,
+     4,
+     3,
+     5,
+     3,
+     1
+    ],
+    "open_text": "Pressure dropped after the road works last month near the market.",
+    "voice_transcript": ""
+   }
+  ],
+  "target": "d",
+  "should_fire": [
+   "burst"
+  ],
+  "should_not_fire": [
+   "too_fast",
+   "same_spot",
+   "copied_text",
+   "straight_lining",
+   "voice_vs_form",
+   "off_hours",
+   "shared_device",
+   "outside_area"
+  ],
+  "why": "Probes the inclusive window end at the enumerator threshold of 4. The window 09:00:00-10:00:00 contains this submission (10:00) and holds a, b, c, d = 4, so burst fires. An implementation that uses a half-open window or requires the span to be strictly under 60 minutes sees only 3 and stays silent. The other checks stay quiet. Durations are all at least 720 s. Points are at least about 400 m apart (for example a-b: dlat 0.002, dlng 0.003), so no point has a neighbour within 50 m. All points are inside Kondele. Texts share no content words, satisfaction answers vary, there are no voice notes, the times are daytime, and there is one device."
+ }
+}

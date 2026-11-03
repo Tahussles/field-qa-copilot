@@ -1,0 +1,139 @@
+name: post-deploy
+
+# After every successful Production deployment: the browser tests against production, then a demo
+# reset and verify_wave.py (the database is exactly the fresh wave again). A failure opens an issue.
+#
+# Vercel reports this project's deployments to GitHub as a "Vercel" commit status, so the status event
+# on main's tip is the trigger; deployment_status covers Vercel's GitHub Deployments if they are turned on.
+on:
+  deployment_status:
+  status:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: post-deploy
+  cancel-in-progress: false
+
+env:
+  PROD_URL: https://field-qa-copilot.vercel.app
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.which.outputs.run }}
+      sha: ${{ steps.which.outputs.sha }}
+    steps:
+      - id: which
+        env:
+          EVENT: ${{ github.event_name }}
+          STATE: ${{ github.event.deployment_status.state || github.event.state }}
+          ENVIRONMENT: ${{ github.event.deployment.environment }}
+          CONTEXT: ${{ github.event.context }}
+          SHA: ${{ github.event.deployment.sha || github.event.sha || github.sha }}
+          BRANCHES: ${{ toJSON(github.event.branches) }}
+        run: |
+          run=false
+          case "$EVENT" in
+            workflow_dispatch) run=true ;;
+            deployment_status) [ "$STATE" = success ] && [ "$ENVIRONMENT" = Production ] && run=true ;;
+            # Production is main's tip: a status on an older commit, or on a branch, is a preview.
+            status) [ "$STATE" = success ] && [ "$CONTEXT" = Vercel ] \
+                      && echo "$BRANCHES" | jq -e --arg sha "$SHA" 'any(.[]; .name == "main" and .commit.sha == $sha)' > /dev/null \
+                      && run=true ;;
+          esac
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "event $EVENT, state ${STATE:-none}, sha $SHA: run=$run"
+
+  verify:
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: write
+    env:
+      SHA: ${{ needs.gate.outputs.sha }}
+      DEMO_PASSCODE: ${{ secrets.DEMO_PASSCODE }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.gate.outputs.sha }}
+
+      - name: Secrets are set
+        run: |
+          missing=()
+          for name in DEMO_PASSCODE SUPABASE_SERVICE_ROLE_KEY NEXT_PUBLIC_SUPABASE_URL; do
+            [ -n "${!name}" ] || missing+=("$name")
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::missing Actions secrets or variables: ${missing[*]}"
+            exit 1
+          fi
+
+      - name: Production serves this commit
+        run: |
+          for i in $(seq 1 60); do
+            health=$(curl -fsS "$PROD_URL/api/py/health" || true)
+            commit=$(echo "$health" | jq -r '.commit // empty' 2>/dev/null || true)
+            writes=$(echo "$health" | jq -r '.writes' 2>/dev/null || true)
+            if [ "$commit" = "$SHA" ]; then
+              echo "production is at $SHA (writes: $writes)"
+              [ "$writes" = true ] || { echo "::error::production reports writes off: set WRITES_ENABLED=true for Production"; exit 1; }
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::production did not report commit $SHA within 10 minutes (last: ${commit:-none})"
+          exit 1
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+
+      - name: Smoke, landing and demo tests against production
+        env:
+          SMOKE_BASE_URL: ${{ env.PROD_URL }}
+        run: pnpm exec playwright test --project=desktop
+
+      - uses: astral-sh/setup-uv@v6
+        if: always()
+        with:
+          enable-cache: true
+
+      - name: Demo reset
+        if: always()
+        run: |
+          curl -fsS -X POST "$PROD_URL/api/py/demo/reset" -H "X-Demo-Passcode: $DEMO_PASSCODE" \
+            --max-time 180 | jq '{deleted, rescored, as_of, timing_ms}'
+
+      - name: verify_wave.py
+        run: |
+          uv sync --locked
+          uv run scripts/verify_wave.py
+
+      - name: Open an issue on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="Post-deploy check failed on production"
+          body="The post-deploy run for ${SHA:0:7} failed: $RUN_URL"
+          open=$(gh issue list --state open --search "$title in:title" --json number --jq '.[0].number // empty')
+          if [ -n "$open" ]; then
+            gh issue comment "$open" --body "$body"
+          else
+            gh issue create --title "$title" --body "$body"
+          fi

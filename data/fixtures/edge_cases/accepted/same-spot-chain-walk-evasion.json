@@ -1,0 +1,96 @@
+{
+ "generated": {
+  "model": "claude-opus-5-5",
+  "prompt": "edge-v1",
+  "at": "2026-11-03T18:20:09+00:00"
+ },
+ "case": {
+  "id": "same-spot-chain-walk-evasion",
+  "check": "same_spot",
+  "kind": "adversarial",
+  "title": "Fabricated points stepped 44.5 m apart in a line still catch the middle one",
+  "submissions": [
+   {
+    "ref": "a",
+    "contributor": "E01",
+    "device_id": "dev-e01",
+    "captured_at": "2024-03-12T09:00:00+03:00",
+    "duration_sec": 1460,
+    "lat": -0.0804,
+    "lng": 34.77,
+    "water_source": "river",
+    "satisfaction": [
+     1,
+     3,
+     2,
+     2,
+     1,
+     3,
+     2,
+     4
+    ],
+    "open_text": "Farmer irrigates vegetables and also drinks from the stream after storms.",
+    "voice_transcript": ""
+   },
+   {
+    "ref": "t",
+    "contributor": "E01",
+    "device_id": "dev-e01",
+    "captured_at": "2024-03-12T11:00:00+03:00",
+    "duration_sec": 1520,
+    "lat": -0.08,
+    "lng": 34.77,
+    "water_source": "piped_home",
+    "satisfaction": [
+     5,
+     4,
+     3,
+     5,
+     4,
+     4,
+     5,
+     3
+    ],
+    "open_text": "Retired clerk has an indoor tap and rarely experiences shortages.",
+    "voice_transcript": ""
+   },
+   {
+    "ref": "c",
+    "contributor": "E01",
+    "device_id": "dev-e01",
+    "captured_at": "2024-03-12T13:00:00+03:00",
+    "duration_sec": 1390,
+    "lat": -0.0796,
+    "lng": 34.77,
+    "water_source": "public_tap",
+    "satisfaction": [
+     3,
+     2,
+     4,
+     2,
+     3,
+     1,
+     3,
+     2
+    ],
+    "open_text": "Student hostel residents queue at a shared standpipe before lectures.",
+    "voice_transcript": ""
+   }
+  ],
+  "target": "t",
+  "should_fire": [
+   "same_spot"
+  ],
+  "should_not_fire": [
+   "too_fast",
+   "copied_text",
+   "straight_lining",
+   "voice_vs_form",
+   "off_hours",
+   "shared_device",
+   "burst",
+   "outside_area"
+  ],
+  "why": "Adversarial: a fabricator nudges each fake GPS fix about 44.5 m (0.0004 deg latitude) along a line, hoping no tight cluster forms. a and c are each about 44.5 m from t, but about 89 m from each other. The rule counts each submission's own neighbours. So t, the middle point, has 2 neighbours within 50 m and must fire, while a and c each have only 1 and would not. An implementation that would miss t: one that needs the neighbours to be mutually within 50 m (a clique), or measures from the day's first point or the centroid. Times are two hours apart, so there is no burst. Each text is distinct and every point is inside Kondele."
+ }
+}

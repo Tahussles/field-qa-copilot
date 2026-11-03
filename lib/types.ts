@@ -224,7 +224,8 @@ export interface IngestResponse {
   id: string;
   client_submission_id: string;
   contributor: ContributorRef;
-  captured_at: string;
+  captured_at: string; // on the demo's field clock while projects.as_of is set
+  device_captured_at?: string | null; // the phone's own clock (live submissions)
   score: number | null;
   flagged: boolean | null;
   band: Band | null;
@@ -360,7 +361,7 @@ export interface HardEval {
   rules_only_run: boolean;
   calls: { total: number; consistency: number; paraphrase: number; verdicts: number; failed: number;
     median_latency_ms: number | null };
-  cost_usd: { estimated_before_run: number; spent_this_run: number; all_cached_calls: number };
+  cost_usd: { all_cached_calls: number }; // the recorded verdicts' model cost (data/fixtures/ai_verdicts)
   planted_per_wave: Record<string, number>;
   rules: HardSide;
   rules_ai: HardSide;
