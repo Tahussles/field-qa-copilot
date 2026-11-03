@@ -13,6 +13,11 @@ on:
 permissions:
   contents: read
 
+# bash with pipefail: a failing command inside a pipe fails the step.
+defaults:
+  run:
+    shell: bash
+
 concurrency:
   group: post-deploy
   cancel-in-progress: false
