@@ -469,7 +469,7 @@ function DemoClock() {
   useEffect(() => {
     const tick = () => {
       setOff(clockOffsetMinutes() !== 0);
-      setShown(phoneNow().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
+      setShown(phoneNow().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }));
     };
     tick();
     const timer = window.setInterval(tick, 15_000);
@@ -486,7 +486,7 @@ function DemoClock() {
           onChange={(e) => {
             setClockOffsetMinutes(e.target.checked ? CLOCK_OFF_MINUTES : 0);
             setOff(e.target.checked);
-            setShown(phoneNow().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
+            setShown(phoneNow().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }));
           }}
         />
         Phone clock off by 3 h
