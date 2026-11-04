@@ -2,7 +2,7 @@
 
 import { useAppData } from "@/components/app/AppData";
 
-/** The KPI strip above every section: one hairline-divided band, mono values, label underneath. */
+/** The KPI strip on Overview: one hairline-divided band, mono values, label underneath. */
 export function Kpis() {
   const { overview } = useAppData();
   const k = overview?.kpis;
@@ -17,7 +17,7 @@ export function Kpis() {
   return (
     <section
       aria-label="Key numbers"
-      className="mb-5 grid grid-cols-2 gap-px overflow-hidden rounded-[10px] border border-line bg-line lg:grid-cols-5 [&>*:last-child]:col-span-2 lg:[&>*:last-child]:col-span-1"
+      className="grid grid-cols-2 gap-px overflow-hidden rounded-panel border border-line-strong bg-line-strong lg:grid-cols-5 [&>*:last-child]:col-span-2 lg:[&>*:last-child]:col-span-1"
     >
       {items.map((item) => (
         <div key={item.id} className="bg-bg px-4 py-3.5">

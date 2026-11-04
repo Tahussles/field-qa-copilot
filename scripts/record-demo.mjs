@@ -151,10 +151,12 @@ await pause(18);
 
 // 7. How it works.
 await beat("architecture", () => page.goto(base + "/architecture"), () => page.getByTestId("architecture").filter({ hasNotText: "…" }).waitFor({ timeout: 20000 }));
-await pause(8);
-await pause(6);
-await glide(page.getByRole("region", { name: "Trade-offs" }), 80);
-await pause(24);
+await pause(10);
+// The trade-offs are notes on their boxes: open two.
+await page.getByRole("button", { name: "Trade-off: Rules first" }).click();
+await pause(9);
+await page.getByRole("button", { name: "Trade-off: AI as an input, not the judge" }).click();
+await pause(14);
 
 const total = Date.now() - t0;
 await ctx.close();

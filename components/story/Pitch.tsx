@@ -28,9 +28,8 @@ function slides(s: Story | null): ReactNode[] {
     <>
       <h2>Rewards invite fakes.</h2>
       <p>
-        Contributors are paid per submission, so a few invent them: forms filled in at a tea shop, answers copied from
-        yesterday, one phone running several accounts, interviews written at night. The researcher finds out weeks later, if at
-        all.
+        Paid per submission, a few contributors invent them: forms filled in at a tea shop, copied answers, one phone running
+        several accounts. The researcher finds out weeks later, if at all.
       </p>
       <p className="text-faint">
         The demo wave: {d?.submissions?.toLocaleString("en-US") ?? "…"} interviews in Kisumu, {d?.fabricated ?? "…"} of them
@@ -49,8 +48,8 @@ function slides(s: Story | null): ReactNode[] {
     <>
       <h2>Rules first; the model is an input.</h2>
       <p>
-        A phone posts the interview; two database calls lease, score and commit it in {msec(m?.ingest.p50_ms)} (p50). Speech to
-        text and meaning checks run after, never holding the phone up, and land as verdicts a rule reads.
+        Two database calls lease, score and commit an interview in {msec(m?.ingest.p50_ms)} (p50). Speech to text and meaning
+        checks follow, never holding the phone up, and land as verdicts a rule reads.
       </p>
       <p>
         <Link href="/architecture" className="text-accent-ink hover:underline">
@@ -73,24 +72,23 @@ function slides(s: Story | null): ReactNode[] {
         />
       </div>
       <p className="mt-4 text-faint">
-        Model spend so far {usd(spend?.all_time_usd)} for {spend?.all_time_jobs?.toLocaleString("en-US") ?? "…"} jobs. Held-out seeds{" "}
-        {s?.headline?.held_out_seeds.at(0)}–{s?.headline?.held_out_seeds.at(-1)}; hard mode rewrites three fraud actors to dodge the
-        rules (seeds {s?.hard?.seeds.join(", ")}).
+        Model spend so far {usd(spend?.all_time_usd)} for {spend?.all_time_jobs?.toLocaleString("en-US") ?? "…"} jobs · held-out seeds{" "}
+        {s?.headline?.held_out_seeds.at(0)}–{s?.headline?.held_out_seeds.at(-1)} · hard mode seeds {s?.hard?.seeds.join(", ")}, three
+        fraud actors rewritten to dodge the rules.
       </p>
     </>,
     <>
       <h2>What&apos;s next</h2>
       <ul>
         <li>
-          <b>A monotonic clock check.</b> A phone that sets its clock back and puts it right before syncing leaves no skew; the
-          time since boot, sent with every form, would.
+          <b>A monotonic clock check.</b> Time since boot, sent with every form, catches a clock set back and put right before sync.
         </li>
         <li>
           <b>Reward-gaming checks.</b> Submissions bunched just under a payout threshold, or at the end of a reward period.
         </li>
         <li>
-          <b>Plug into the existing verification queue.</b> Send flags with their evidence to the queue reviewers already use,
-          and learn from their decisions.
+          <b>Plug into the existing verification queue.</b> Flags and evidence go where reviewers already work, and their decisions
+          become labels.
         </li>
       </ul>
     </>,

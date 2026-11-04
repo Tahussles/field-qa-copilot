@@ -1,6 +1,6 @@
 # Key design decisions
 
-Twelve decisions that shaped Field QA Copilot, each with the reason it was made. The numbers come from `scripts/evaluate.py` and production timing runs. The commit history shows how each one arrived.
+Thirteen decisions that shaped Field QA Copilot, each with the reason it was made. The numbers come from `scripts/evaluate.py` and production timing runs. The commit history shows how each one arrived.
 
 ## 1. Checks are code; a model is an input, not a judge
 
@@ -49,3 +49,15 @@ The keyword rule names a source only from a short list of source words, matched 
 ## 12. A phone's clock is evidence, not a reason to refuse it
 
 The phone reports its own clock when it syncs, and the server stamps its own (`device_synced_at`, `received_at`). They are seconds apart on an honest phone. A gap of more than 5 minutes fires clock_skew, and so does a capture time after the server received it. A late sync never fires it, because offline work is normal. The weight is 1.5, so it corroborates only: an honest phone can have a wrong clock, but a forger who sets the clock back 3 h to make night forms read as evening work is caught. In hard mode that forger hides 6.5 night forms per wave from off_hours, and with clock_skew none are missed. For the same reason a capture time hours in the future is now accepted and flagged (up to a day ahead) instead of being refused.
+
+## 13. Summary first, details on demand
+
+A reviewer works through 138 flags, and every screen used to show everything at once. Each dense block now has a one-line summary that is always visible, with details that open on click.
+
+- **The queue.** A row is the check, its finding with the key number ("Too fast · 2m 28s vs the 3m limit"), how it was decided and its weight. Only the contributor's main signal (`mainSignal`) starts open, and E opens or closes them all.
+- **Section cards.** Content sits in section cards (`<Section>` in `components/ui/Disclosure.tsx`): a 1px border, 12px radius, a tinted header strip holding the title and its controls, 16px padding and 16px gaps. No paragraph floats on its own.
+- **Copy and footnotes.** Where there were three sentences, there is one. A "Decided by…" footnote becomes a small **Rule** or **AI** chip whose tooltip carries the method (the model, its confidence and latency, or the rule in one line).
+- **Disclosure controls.** Every disclosure is a real button with `aria-expanded`, so Enter and Space work, and its chevron turns as it opens. The height animates, except under `prefers-reduced-motion`. Closed details are `inert`: out of the tab order and the accessibility tree.
+- **Remembered choices.** Section cards remember being opened or closed in this browser (`fqc-ui-<key>` in localStorage, try/catch).
+- **Nothing removed.** No information was removed, only moved: answers, transcript, GPS and clocks sit behind "Submission details", the per-check table and hard mode behind collapsed cards, the architecture trade-offs behind a note on their box, and the full brief behind "Show full brief".
+

@@ -6,13 +6,12 @@ import { Suspense, useEffect, useMemo, type ReactNode } from "react";
 
 import { AppDataProvider, useAppData } from "@/components/app/AppData";
 import { DemoProvider, useDemo } from "@/components/app/DemoControls";
-import { Kpis } from "@/components/app/Kpis";
 import { PasscodeProvider } from "@/components/app/Passcode";
 import { ReadOnlyBanner } from "@/components/app/ReadOnlyBanner";
+import { ThemeToggle } from "@/components/app/ThemeToggle";
 import { ToastProvider } from "@/components/app/Toasts";
 import { Glass } from "@/components/ui/Glass";
 import { DEFAULT_TZ, fmtDateTime, fmtMonthDay } from "@/lib/format";
-import { setTheme, THEMES, useTheme } from "@/lib/theme";
 
 export const SECTIONS = [
   { href: "/app", label: "Overview", key: "1", icon: IconGrid },
@@ -30,7 +29,8 @@ export function isTyping(target: EventTarget | null): boolean {
   return Boolean(el && (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName)));
 }
 
-/** Sidebar + sticky topbar app shell, as in design/prototype.html. The KPI strip sits above every section. */
+/** Sidebar + sticky topbar app shell, as in design/prototype.html. The KPI strip is Overview's; other sections get a
+ * one-line summary in the topbar. */
 export function AppShell({ children }: { children: ReactNode }) {
   return (
     <ToastProvider>
@@ -49,7 +49,6 @@ export function AppShell({ children }: { children: ReactNode }) {
                 </Suspense>
                 <main className="flex-1 p-4 pb-24 md:p-5">
                   <ReadOnlyBanner />
-                  <Kpis />
                   {children}
                 </main>
               </div>
@@ -176,33 +175,6 @@ function SidebarFrame({ active }: { active: string | null }) {
   );
 }
 
-const THEME_LABEL = { poket: "Poket", linear: "Linear" } as const;
-
-/** Poket (light, the default) or Linear (dark); remembered in this browser. */
-function ThemeToggle() {
-  const theme = useTheme();
-  return (
-    <div className="flex items-center gap-2" data-testid="theme-toggle">
-      <span id="theme-label" className="text-muted">
-        Theme
-      </span>
-      <div role="radiogroup" aria-labelledby="theme-label" className="ml-auto flex gap-0.5 rounded-full border border-line p-0.5">
-        {THEMES.map((t) => (
-          <button
-            key={t}
-            type="button"
-            role="radio"
-            aria-checked={theme === t}
-            onClick={() => setTheme(t)}
-            className={`rounded-full px-2 py-px text-[11px] ${theme === t ? "bg-overlay/[0.1] text-ink" : "text-muted hover:text-ink"}`}
-          >
-            {THEME_LABEL[t]}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 function LiveStatus({ live, engine }: { live: "connecting" | "live" | "reconnecting" | "offline"; engine?: string }) {
   const tone = live === "live" ? "st-ok" : live === "offline" ? "st-crit" : "st-warn";
@@ -235,13 +207,15 @@ function ReconnectingPill() {
 
 function Topbar() {
   const pathname = usePathname();
-  return <TopbarFrame title={sectionFor(pathname).label} />;
+  const section = sectionFor(pathname);
+  return <TopbarFrame title={section.label} summary={section.href !== "/app"} />;
 }
 
-function TopbarFrame({ title }: { title: string }) {
+function TopbarFrame({ title, summary = false }: { title: string; summary?: boolean }) {
   const { overview } = useAppData();
   const demo = useDemo();
   const decisions = overview ? overview.kpis.flagged - overview.kpis.pending_review : null;
+  const k = overview?.kpis;
   return (
     <header className="frost-topbar sticky top-0 z-20 flex h-12 flex-none items-center justify-between gap-3 px-4 md:px-5">
       <div className="flex min-w-0 items-center gap-2 font-medium">
@@ -250,6 +224,11 @@ function TopbarFrame({ title }: { title: string }) {
         <h1 className="truncate font-sans text-[13.5px] font-medium tracking-normal">{title}</h1>
       </div>
       <span className="flex-none font-mono text-[11.5px] text-muted">
+        {summary && k && (
+          <span className="mr-3 font-sans text-[12.5px] text-ink-2" data-testid="topbar-summary">
+            {k.pending_review} waiting · {k.contributors_to_investigate} to investigate
+          </span>
+        )}
         {overview?.now_is_fixed && (
           <span className="hidden sm:inline" title="The demo project runs on a fixed clock">
             clock {fmtDateTime(overview.now, overview.project.timezone)} ·{" "}

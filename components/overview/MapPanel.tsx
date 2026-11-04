@@ -6,6 +6,7 @@ import type { GeoJSONSource, LngLatBoundsLike, Map as MlMap, MapLayerMouseEvent,
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { useStoredOpen } from "@/components/ui/Disclosure";
 import { Glass } from "@/components/ui/Glass";
 import { LIGHT_STYLE_URL, STYLE_URL, tuneBasemap, tuneLightBasemap } from "@/lib/basemap";
 import { CHECK_LABEL, CHECK_TITLE, COLORS, mainSignal, scoreColor } from "@/lib/checks";
@@ -16,6 +17,7 @@ import type { ContributorRow, Hotspot, MapData, MapPoint } from "@/lib/types";
 const CARD = { w: 236, h: 132 };
 const CHIP = { w: 252, h: 34 };
 const NARROW = 560; // below this map width, chips use short text
+const HELP_SEEN_MS = 10_000; // the "what am I looking at" pill folds to a "?" after this, once
 
 type Rect = { x: number; y: number; w: number; h: number };
 interface PlacedHotspot {
@@ -246,6 +248,7 @@ export function MapPanel({
   const [pulseSpots, setPulseSpots] = useState<Pulse[]>([]);
   const [tip, setTip] = useState<Tip | null>(null);
   const [rendered, setRendered] = useState(0);
+  const [help, setHelp, helpChosen] = useStoredOpen("map-help", true);
 
   const pointsById = useMemo(() => new Map((data?.points ?? []).map((p) => [p.id, p])), [data]);
 
@@ -505,6 +508,19 @@ export function MapPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openFor, ready, placed]);
 
+  // First view: the pill explains the map, then folds to a "?" (remembered); a move folds it at once.
+  useEffect(() => {
+    if (!ready || helpChosen) return;
+    const timer = window.setTimeout(() => setHelp(false), HELP_SEEN_MS);
+    return () => window.clearTimeout(timer);
+  }, [ready, helpChosen, setHelp]);
+  useEffect(() => {
+    if (moved && !helpChosen) setHelp(false);
+  }, [moved, helpChosen, setHelp]);
+  useEffect(() => {
+    layout();
+  }, [help, layout]);
+
   const showReset = moved || Boolean(focus) || Boolean(expanded);
   const caption = focus
     ? `${focus} ${contributors[focus]?.display_name ?? ""} · click the row again to clear`
@@ -615,19 +631,36 @@ export function MapPanel({
                   <span className="font-mono">{item.hotspot.contributor_code}</span>
                 </span>
                 {item.compact ? `${item.hotspot.count} in one spot` : `${item.hotspot.count} interviews in one spot`}
-                {!item.compact && <span className="ml-auto text-faint">Zoom</span>}
+                {!item.compact && <IconZoom className="ml-auto h-3.5 w-3.5 flex-none text-muted" />}
               </Glass>
             ),
           )}
         </div>
 
-        {/* What am I looking at. */}
+        {/* What am I looking at: open on the first view, then a "?". */}
         <Glass
           ref={pill}
-          className="absolute top-3 left-3 z-[3] max-w-[calc(100%-24px)] rounded-[10px] px-[11px] py-[7px] text-[11.5px] leading-[1.45] text-body lg:max-w-[min(300px,55%)]"
+          className={`absolute top-3 left-3 z-[3] flex max-w-[calc(100%-24px)] items-start gap-2 text-[11.5px] leading-[1.45] text-body lg:max-w-[min(320px,55%)] ${
+            help ? "rounded-[10px] py-[7px] pr-[11px] pl-[7px]" : "rounded-full p-[3px]"
+          }`}
         >
-          <b className="font-medium text-glass-strong">Each dot is one submission</b> at the GPS spot it was recorded. Homes are spread
-          out, so a tight orange pile means forms filled in at one place.
+          <button
+            type="button"
+            onClick={() => setHelp(!help)}
+            aria-expanded={help}
+            aria-controls="map-help"
+            aria-label={help ? "Hide what the map shows" : "What the map shows"}
+            className="grid h-[22px] w-[22px] flex-none place-items-center rounded-full border border-line-strong font-medium text-glass-strong hover:bg-overlay/[0.1]"
+            data-testid="map-help"
+          >
+            ?
+          </button>
+          {help && (
+            <p id="map-help">
+              <b className="font-medium text-glass-strong">Each dot is one submission</b> at its GPS spot. Homes are spread out, so a
+              tight orange pile means forms filled in at one place.
+            </p>
+          )}
         </Glass>
 
         {/* Controls. */}
@@ -727,5 +760,14 @@ function MainSignalLine({ checks }: { checks: ContributorRow["checks_fired"] | u
     <div className="text-muted">
       Main signal <span className="text-ink-2">{CHECK_LABEL[signal]}</span>
     </div>
+  );
+}
+
+function IconZoom({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" className={className} aria-hidden fill="none" stroke="currentColor" strokeWidth={1.6}>
+      <circle cx="7" cy="7" r="4.5" />
+      <path d="M10.5 10.5 14 14M7 5v4M5 7h4" />
+    </svg>
   );
 }

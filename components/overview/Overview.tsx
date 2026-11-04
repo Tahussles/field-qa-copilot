@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
 
 import { useAppData } from "@/components/app/AppData";
+import { Kpis } from "@/components/app/Kpis";
 import { Brief } from "@/components/overview/Brief";
 import { ContributorsTable } from "@/components/overview/ContributorsTable";
 import { beatFromUrl, onBeat, type Beat } from "@/lib/beats";
@@ -59,6 +60,7 @@ export function Overview() {
 
   return (
     <div className="flex flex-col gap-5">
+      <Kpis />
       {error && (
         <p role="alert" className="panel border-crit/40 px-4 py-3 text-sm text-crit">
           Couldn&apos;t load data: {error}

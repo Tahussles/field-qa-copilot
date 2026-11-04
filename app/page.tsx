@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { OpenOnEnter } from "@/components/landing/OpenOnEnter";
+import { CheckList } from "@/components/landing/CheckList";
 import { Stage } from "@/components/landing/Stage";
 import { Glass } from "@/components/ui/Glass";
 
@@ -31,8 +32,8 @@ export default function Home() {
           </span>
           <h1>Catch fabricated field data before it reaches the analysis.</h1>
           <p>
-            When people are rewarded per submission, some submissions get invented. The copilot checks every interview as it
-            arrives, explains what looks wrong, and hands reviewers a short list instead of a spreadsheet.
+            Rewards per submission invite invented ones. The copilot checks every interview as it arrives and hands reviewers a
+            short, explained list.
           </p>
           <div className="cta">
             <Link href="/app" className="btn btn-primary">
@@ -50,10 +51,8 @@ export default function Home() {
           <div>
             <span className="n">01 · Check</span>
             <h2>Ten checks on every interview</h2>
-            <p>
-              Too fast, same spot, copied answers, straight-lining, voice note vs form, off-hours, shared device, bursts,
-              outside the area and a phone clock that is off. Cheap, explainable, run the moment data syncs.
-            </p>
+            <p>Cheap, explainable rules, run the moment data syncs.</p>
+            <CheckList />
           </div>
           <div>
             <span className="n">02 · Explain</span>
