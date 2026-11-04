@@ -8,12 +8,14 @@ import { useAppData } from "@/components/app/AppData";
 import { isTyping } from "@/components/app/AppShell";
 import { useWithPasscode } from "@/components/app/Passcode";
 import { useToast } from "@/components/app/Toasts";
-import { EvidenceCard } from "@/components/queue/EvidenceCards";
+import { EvidenceRow } from "@/components/queue/EvidenceCards";
+import { Section } from "@/components/ui/Disclosure";
 import { Glass } from "@/components/ui/Glass";
+import { useTip } from "@/components/ui/Tip";
 import { api } from "@/lib/api";
-import { CHECK_ORDER, CHECK_TITLE, SOURCE_LABEL, scoreClass } from "@/lib/checks";
+import { CHECK_ORDER, CHECK_TITLE, SOURCE_LABEL, scoreClass, submissionMainSignal } from "@/lib/checks";
 import { DEFAULT_TZ, fmtDateTime, fmtDuration, fmtScore, fmtStamp, shortId } from "@/lib/format";
-import type { Decision, QueueItem, SubmissionDetail } from "@/lib/types";
+import type { CheckKey, ContributorRow, Decision, QueueItem, SubmissionDetail } from "@/lib/types";
 
 // Decision wording and colours follow the prototype.
 const DECISION_LABEL: Record<Decision, string> = {
@@ -51,6 +53,9 @@ export function QueueView() {
   // The decision U undoes once auto-advance has moved on to the next item.
   const [lastDecision, setLastDecision] = useState<{ submissionId: string; reviewId: string } | null>(null);
   const listRef = useRef<HTMLUListElement>(null);
+  const barRef = useRef<HTMLDivElement>(null);
+  // Which evidence rows are open, for one submission; a new selection starts from its main signal.
+  const [openRows, setOpenRows] = useState<{ id: string | null; keys: CheckKey[] }>({ id: null, keys: [] });
 
   const href = useCallback((id: string) => `/app/queue/${id}${query ? `?${query}` : ""}`, [query]);
 
@@ -162,6 +167,26 @@ export function QueueView() {
     }
   }, [current, busy, lastDecision, withPasscode, toast, router, href]);
 
+  const people = useMemo(
+    () => [...(overview?.contributors ?? [])].sort((a, b) => a.code.localeCompare(b.code)),
+    [overview],
+  );
+  const byCode = useMemo(() => new Map((overview?.contributors ?? []).map((c) => [c.code, c])), [overview]);
+  const fired = useMemo(
+    () => (current ? CHECK_ORDER.map((key) => current.checks.find((c) => c.key === key && c.fired)).filter((c) => c != null) : []),
+    [current],
+  );
+  const firedKeys = useMemo(() => fired.map((c) => c.key), [fired]);
+  const lead = current ? submissionMainSignal(firedKeys, byCode.get(current.contributor.code)?.checks_fired) : null;
+  const openKeys = current && openRows.id === current.submission.id ? openRows.keys : lead ? [lead] : [];
+  const allOpen = firedKeys.length > 0 && firedKeys.every((k) => openKeys.includes(k));
+  const toggleRow = (key: CheckKey) =>
+    current && setOpenRows({ id: current.submission.id, keys: openKeys.includes(key) ? openKeys.filter((k) => k !== key) : [...openKeys, key] });
+  const toggleAll = useCallback(() => {
+    if (current) setOpenRows({ id: current.submission.id, keys: allOpen ? [] : firedKeys });
+  }, [current, allOpen, firedKeys]);
+  const canUndo = Boolean(activeReview || lastDecision);
+
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       if (event.metaKey || event.ctrlKey || event.altKey || isTyping(event.target)) return;
@@ -172,6 +197,7 @@ export function QueueView() {
         : key === "b" ? void decide("backcheck")
         : key === "r" ? void decide("reject")
         : key === "u" ? void undo()
+        : key === "e" ? toggleAll()
         : key === "j" || key === "arrowdown" ? move(1)
         : key === "k" || key === "arrowup" ? move(-1)
         : "skip";
@@ -179,14 +205,20 @@ export function QueueView() {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [decide, undo, move]);
+  }, [decide, undo, move, toggleAll]);
 
-  const people = useMemo(
-    () => [...(overview?.contributors ?? [])].sort((a, b) => a.code.localeCompare(b.code)),
-    [overview],
-  );
-  const fired = current ? CHECK_ORDER.map((key) => current.checks.find((c) => c.key === key && c.fired)).filter(Boolean) : [];
-  const canUndo = Boolean(activeReview || lastDecision);
+  // The action bar floats over the evidence; keep focused and scrolled-to content clear of it.
+  useEffect(() => {
+    const bar = barRef.current;
+    if (!bar) return;
+    const root = document.documentElement;
+    const observer = new ResizeObserver(() => root.style.setProperty("--action-bar-h", `${bar.offsetHeight}px`));
+    observer.observe(bar);
+    return () => {
+      observer.disconnect();
+      root.style.removeProperty("--action-bar-h");
+    };
+  }, []);
 
   return (
     <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,360px)_minmax(0,1fr)]">
@@ -233,109 +265,74 @@ export function QueueView() {
           role="listbox"
           aria-label="Submissions"
         >
-          {items.map((item) => {
-            const selected = item.submission_id === selectedId;
-            const review = item.review && !item.review.revoked_at ? item.review : null;
-            return (
-              <li key={item.submission_id} role="option" aria-selected={selected}>
-                <Link
-                  href={href(item.submission_id)}
-                  scroll={false}
-                  className={`flex flex-col gap-[5px] rounded-[7px] px-2.5 py-[9px] ${
-                    selected ? "bg-overlay/[0.06] shadow-[inset_2px_0_0_var(--color-accent)]" : "hover:bg-hover"
-                  } ${review && !selected ? "opacity-50" : ""}`}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="min-w-0 truncate">
-                      <span className="font-mono">{shortId(item.submission_id)}</span>{" "}
-                      {item.source === "live" && (
-                        <span className="live-tag" title="Sent from a phone on /collect">Live · phone</span>
-                      )}{" "}
-                      <span className="text-muted">
-                        {item.contributor.code} · {fmtStamp(item.captured_at, tz)}
-                      </span>
-                    </span>
-                    <span className="flex flex-none items-center gap-1.5">
-                      {item.ai_pending && (
-                        <span className="ai-spinner" role="status" aria-label="A model is still checking this one" title="A model is still checking this one" />
-                      )}
-                      <span className={scoreClass(item.score, item.band)}>{fmtScore(item.score)}</span>
-                    </span>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-1">
-                    {item.fired.map((key) => (
-                      <span key={key} className="chip">
-                        {CHECK_TITLE[key]}
-                      </span>
-                    ))}
-                    {review && (
-                      <span className={`st ${DECISION_CLASS[review.decision]}`}>
-                        <span>{DECISION_LABEL[review.decision]}</span>
-                      </span>
-                    )}
-                  </div>
-                </Link>
-              </li>
-            );
-          })}
+          {items.map((item) => (
+            <QueueRow
+              key={item.submission_id}
+              item={item}
+              selected={item.submission_id === selectedId}
+              href={href(item.submission_id)}
+              tz={tz}
+              contributor={byCode.get(item.contributor.code)}
+            />
+          ))}
           {list && !items.length && <li className="px-2.5 py-3 text-muted">Nothing here. Change the filter.</li>}
           {!list && !listError && <li className="px-2.5 py-3 text-muted">Loading…</li>}
         </ul>
       </section>
 
-      {/* Evidence */}
-      <section aria-label="Evidence" className="panel min-w-0">
+      {/* Evidence: the verdict, why it was flagged (one row per check), and the submission itself. */}
+      <section aria-label="Evidence" className="flex min-w-0 flex-col gap-4">
         {!current ? (
-          <div className="px-4 py-3.5 text-muted">{selectedId ? "Loading the evidence…" : "The queue is clear."}</div>
+          <div className="panel px-4 py-3.5 text-muted">{selectedId ? "Loading the evidence…" : "The queue is clear."}</div>
         ) : (
           <>
-            <div className="flex items-start justify-between gap-3 px-[18px] pt-4">
-              <h2 className="font-mono text-[18px] font-medium tracking-normal">{shortId(current.submission.id)}</h2>
-              <span className="flex items-center gap-2">
-                {current.submission.source === "live" && (
-                  <span className="st st-info">
-                    <span>Live</span>
-                  </span>
-                )}
-                Score{" "}
-                {current.score && (
-                  <span className={scoreClass(current.score.score, current.score.band)}>{fmtScore(current.score.score)}</span>
-                )}
-              </span>
-            </div>
-            <div className="flex flex-wrap gap-x-[18px] gap-y-1.5 border-b border-line px-[18px] pt-1.5 pb-4 text-[12px] text-muted">
-              <span>
-                {current.contributor.kind === "enumerator" ? "Enumerator" : "Participant"}{" "}
-                <b className="font-medium text-ink">
-                  {current.contributor.code} {current.contributor.display_name}
-                </b>
-              </span>
-              <span>
-                Area <b className="font-medium text-ink">{current.contributor.area}</b>
-              </span>
-              <span>
-                Captured <b className="font-medium text-ink">{fmtStamp(current.submission.captured_at, tz)}</b>
-              </span>
-              <span>
-                Duration <b className="font-medium text-ink">{fmtDuration(current.submission.duration_sec)}</b>
-              </span>
-            </div>
-
-            <div className="border-b border-line px-[18px] py-4">
-              <h3 className="mb-2.5 font-sans text-[12px] font-medium tracking-normal text-faint">Why it was flagged</h3>
-              <div className="grid gap-2.5">
-                {fired.length === 0 && <p className="text-muted">No checks fired on this submission.</p>}
-                {fired.map((check) => (
-                  <EvidenceCard key={check!.key} check={check!} detail={current} map={map} tz={tz} />
-                ))}
-              </div>
-            </div>
-
-            <RawSubmission detail={current} tz={tz} />
+            <Verdict detail={current} tz={tz} review={activeReview} />
+            <Section
+              title="Why it was flagged"
+              aria-label="Why it was flagged"
+              summary={fired.length ? `${fired.length} ${fired.length === 1 ? "check" : "checks"} fired` : null}
+              actions={
+                fired.length > 1 && (
+                  <button type="button" onClick={toggleAll} className="btn btn-sm" aria-keyshortcuts="E" data-testid="expand-all">
+                    {allOpen ? "Collapse all" : "Expand all"} <kbd className="kbd">E</kbd>
+                  </button>
+                )
+              }
+              bodyClassName="grid gap-2 p-4"
+            >
+              {fired.length === 0 && <p className="text-muted">No checks fired on this submission.</p>}
+              {fired.map((check) => (
+                <EvidenceRow
+                  key={check.key}
+                  check={check}
+                  detail={current}
+                  map={map}
+                  tz={tz}
+                  open={openKeys.includes(check.key)}
+                  onToggle={() => toggleRow(check.key)}
+                />
+              ))}
+            </Section>
+            <Section
+              title="Submission details"
+              aria-label="Submission details"
+              summary="Answers, transcript, GPS and clocks"
+              collapsible
+              defaultOpen={false}
+              storeKey="queue-details"
+              data-testid="submission-details"
+            >
+              <RawSubmission detail={current} tz={tz} />
+            </Section>
           </>
         )}
 
-        <Glass className="sticky bottom-3 z-[3] mx-3 mb-3 flex flex-wrap items-center gap-2 rounded-xl px-[18px] py-3.5">
+        {/* Above the phone's bottom nav on small screens. */}
+        <Glass
+          ref={barRef}
+          className="sticky bottom-[84px] z-[3] flex flex-wrap items-center gap-2 rounded-xl px-[18px] py-3 md:bottom-3"
+          data-testid="action-bar"
+        >
           {activeReview ? (
             <span className={`st ${DECISION_CLASS[activeReview.decision]}`}>
               <span>{DECISION_LABEL[activeReview.decision]}</span>
@@ -369,42 +366,164 @@ export function QueueView() {
   );
 }
 
+/** One queue row: id, contributor, local time and score, then the lead check and "+N"; all checks in a tooltip. */
+function QueueRow({ item, selected, href, tz, contributor }: {
+  item: QueueItem;
+  selected: boolean;
+  href: string;
+  tz: string;
+  contributor?: ContributorRow;
+}) {
+  const review = item.review && !item.review.revoked_at ? item.review : null;
+  const lead = submissionMainSignal(item.fired, contributor?.checks_fired);
+  const rest = item.fired.length - (lead ? 1 : 0);
+  const { triggerProps, tip } = useTip(
+    item.fired.length ? (
+      <>
+        <b className="font-medium text-ink">Checks that fired:</b> {item.fired.map((k) => CHECK_TITLE[k]).join(" · ")}
+      </>
+    ) : (
+      "No checks fired"
+    ),
+    { delay: 450 },
+  );
+  return (
+    <li role="option" aria-selected={selected}>
+      <Link
+        href={href}
+        scroll={false}
+        {...triggerProps}
+        className={`flex flex-col gap-[5px] rounded-[7px] px-2.5 py-2 ${
+          selected ? "bg-overlay/[0.06] shadow-[inset_2px_0_0_var(--color-accent)]" : "hover:bg-hover"
+        } ${review && !selected ? "opacity-50" : ""}`}
+      >
+        <div className="flex items-center justify-between gap-2">
+          <span className="min-w-0 truncate">
+            <span className="font-mono">{shortId(item.submission_id)}</span>{" "}
+            {item.source === "live" && (
+              <span className="live-tag" title="Sent from a phone on /collect">Live · phone</span>
+            )}{" "}
+            <span className="text-muted">
+              {item.contributor.code} · {fmtStamp(item.captured_at, tz)}
+            </span>
+          </span>
+          <span className="flex flex-none items-center gap-1.5">
+            {item.ai_pending && (
+              <span className="ai-spinner" role="status" aria-label="A model is still checking this one" title="A model is still checking this one" />
+            )}
+            <span className={scoreClass(item.score, item.band)}>{fmtScore(item.score)}</span>
+          </span>
+        </div>
+        <div className="flex flex-wrap items-center gap-1" data-testid="row-checks">
+          {lead && <span className="chip">{CHECK_TITLE[lead]}</span>}
+          {rest > 0 && <span className="chip" aria-label={`and ${rest} more`}>+{rest}</span>}
+          {review && (
+            <span className={`st ${DECISION_CLASS[review.decision]}`}>
+              <span>{DECISION_LABEL[review.decision]}</span>
+            </span>
+          )}
+        </div>
+      </Link>
+      {tip}
+    </li>
+  );
+}
+
+/** The verdict card: who, where, when, how long, the score and its band, and the decision so far. */
+function Verdict({ detail, tz, review }: { detail: SubmissionDetail; tz: string; review: SubmissionDetail["review"] }) {
+  const s = detail.submission;
+  const score = detail.score;
+  const band = score?.band === "flagged" ? "Flagged" : score?.band === "watch" ? "Watch band" : "Passed";
+  const facts: [string, React.ReactNode][] = [
+    [detail.contributor.kind === "enumerator" ? "Enumerator" : "Participant", `${detail.contributor.code} ${detail.contributor.display_name ?? ""}`],
+    ["Area", detail.contributor.area],
+    ["Captured", fmtStamp(s.captured_at, tz)],
+    ["Duration", fmtDuration(s.duration_sec)],
+  ];
+  return (
+    <Section
+      title="Verdict"
+      aria-label="Verdict"
+      actions={
+        review ? (
+          <span className={`st ${DECISION_CLASS[review.decision]}`} data-testid="decision-state">
+            <span>{DECISION_LABEL[review.decision]}</span>
+          </span>
+        ) : (
+          <span className="st st-warn" data-testid="decision-state">
+            <span>Waiting for review</span>
+          </span>
+        )
+      }
+    >
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <h2 className="font-mono text-[18px] font-medium tracking-normal">{shortId(s.id)}</h2>
+        {s.source === "live" && <span className="live-tag">Live · phone</span>}
+        {score && (
+          <span className="ml-auto flex items-center gap-2" data-testid="verdict-score">
+            Score <span className={scoreClass(score.score, score.band)}>{fmtScore(score.score)}</span>
+            <span className={`st ${score.band === "flagged" ? (score.score >= 5 ? "st-crit" : "st-warn") : score.band === "watch" ? "st-warn" : "st-ok"}`}>
+              <span>{band}</span>
+            </span>
+          </span>
+        )}
+      </div>
+      <dl className="mt-3 grid grid-cols-2 gap-x-5 gap-y-2 text-[12.5px] sm:grid-cols-4">
+        {facts.map(([label, value]) => (
+          <div key={label} className="min-w-0">
+            <dt className="text-[11.5px] text-faint">{label}</dt>
+            <dd className="truncate font-medium text-ink">{value}</dd>
+          </div>
+        ))}
+      </dl>
+    </Section>
+  );
+}
+
 function RawSubmission({ detail, tz }: { detail: SubmissionDetail; tz: string }) {
   const s = detail.submission;
   const delay = (new Date(s.synced_at).getTime() - new Date(s.captured_at).getTime()) / 1000;
+  const phoneTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
   return (
-    <div className="px-[18px] py-4" aria-label="Raw submission">
-      <h3 className="mb-2.5 font-sans text-[12px] font-medium tracking-normal text-faint">Submission</h3>
-      <dl className="grid grid-cols-1 gap-x-4 gap-y-2 text-[12.5px] sm:grid-cols-[150px_1fr] [&_dd]:text-ink-2 [&_dt]:text-faint">
-        <dt>Water source</dt>
-        <dd>{SOURCE_LABEL[s.answers.water_source ?? ""] ?? s.answers.water_source}</dd>
-        <dt>Voice note</dt>
-        <dd>{s.voice_transcript ? `"${s.voice_transcript}"` : "—"}</dd>
-        <dt>Biggest challenge</dt>
-        <dd>{s.answers.open_text}</dd>
-        <dt>Satisfaction (1 to 5)</dt>
-        <dd>
-          <div className="likert">
-            {(s.answers.satisfaction ?? []).map((v, i) => (
-              <span key={i}>{v}</span>
-            ))}
-          </div>
-        </dd>
-        <dt>Captured</dt>
-        <dd>{fmtDateTime(s.captured_at, tz)}</dd>
-        <dt>Synced</dt>
-        <dd>
-          {fmtDateTime(s.synced_at, tz)} <span className="text-faint">({fmtDuration(Math.max(0, delay))} later)</span>
-        </dd>
-        <dt>GPS</dt>
-        <dd className="font-mono text-[12px]">
-          {s.lat?.toFixed(5)}, {s.lng?.toFixed(5)} <span className="text-faint">± {s.gps_accuracy_m ?? "?"} m</span>
-        </dd>
-        <dt>Device</dt>
-        <dd className="font-mono text-[12px]">{s.device_id}</dd>
-        <dt>Source</dt>
-        <dd>{s.source}</dd>
-      </dl>
-    </div>
+    <dl className="grid grid-cols-1 gap-x-4 gap-y-2 text-[12.5px] sm:grid-cols-[150px_1fr] [&_dd]:text-ink-2 [&_dt]:text-faint" aria-label="Raw submission">
+      <dt>Water source</dt>
+      <dd>{SOURCE_LABEL[s.answers.water_source ?? ""] ?? s.answers.water_source}</dd>
+      <dt>Biggest challenge</dt>
+      <dd>{s.answers.open_text}</dd>
+      <dt>Satisfaction (1 to 5)</dt>
+      <dd>
+        <div className="likert">
+          {(s.answers.satisfaction ?? []).map((v, i) => (
+            <span key={i}>{v}</span>
+          ))}
+        </div>
+      </dd>
+      <dt>Voice note</dt>
+      <dd>{s.voice_transcript ? `"${s.voice_transcript}"` : "—"}</dd>
+      <dt>GPS</dt>
+      <dd className="font-mono text-[12px]">
+        {s.lat?.toFixed(5)}, {s.lng?.toFixed(5)} <span className="text-faint">± {s.gps_accuracy_m ?? "?"} m</span>
+      </dd>
+      <dt>Captured (field)</dt>
+      <dd>{fmtDateTime(s.captured_at, tz)}</dd>
+      <dt>Synced (field)</dt>
+      <dd>
+        {fmtDateTime(s.synced_at, tz)} <span className="text-faint">({fmtDuration(Math.max(0, delay))} later)</span>
+      </dd>
+      {s.device_captured_at && (
+        <>
+          <dt>Phone clock</dt>
+          <dd>
+            captured {fmtDateTime(s.device_captured_at, phoneTz)}
+            {s.device_synced_at && <> · sent {fmtDateTime(s.device_synced_at, phoneTz)}</>}
+            {s.received_at && <span className="text-faint"> · server received {fmtDateTime(s.received_at, phoneTz)}</span>}
+          </dd>
+        </>
+      )}
+      <dt>Device</dt>
+      <dd className="font-mono text-[12px]">{s.device_id}</dd>
+      <dt>Source</dt>
+      <dd>{s.source}</dd>
+    </dl>
   );
 }

@@ -143,6 +143,16 @@ export function mainSignal(checks: Partial<Record<CheckKey, number>>): CheckKey 
   return rankChecks(checks)[0]?.[0] ?? null;
 }
 
+/**
+ * The check to lead with for one submission: its contributor's main signal when that fired on it, else the
+ * fired check that ranks first (TIE_ORDER). The queue's list chip and its opened evidence row use this.
+ */
+export function submissionMainSignal(fired: CheckKey[], contributorChecks?: Partial<Record<CheckKey, number>>): CheckKey | null {
+  const main = contributorChecks ? mainSignal(contributorChecks) : null;
+  if (main && fired.includes(main)) return main;
+  return rankChecks(Object.fromEntries(fired.map((k) => [k, 1]))).at(0)?.[0] ?? null;
+}
+
 /** Each contributor's largest hotspot (some contributors have more than one pile). */
 export function biggestHotspots(hotspots: Hotspot[]): Map<string, Hotspot> {
   const out = new Map<string, Hotspot>();

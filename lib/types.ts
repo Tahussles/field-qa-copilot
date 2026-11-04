@@ -167,6 +167,11 @@ export interface SubmissionRow {
   device_id: string | null;
   captured_at: string;
   synced_at: string;
+  /** The phone's own clock (live phones only; captured_at and synced_at are on the field clock during a demo). */
+  device_captured_at?: string | null;
+  device_synced_at?: string | null;
+  /** When the server received it. */
+  received_at?: string | null;
   duration_sec: number | null;
   lat: number | null;
   lng: number | null;
