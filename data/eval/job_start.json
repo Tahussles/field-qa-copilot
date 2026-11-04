@@ -1,0 +1,36 @@
+{
+ "measured_at": "2026-11-04T05:39:45+00:00",
+ "base": "https://field-qa-copilot.vercel.app",
+ "submissions": 30,
+ "jobs": 60,
+ "not_started": 0,
+ "statuses": {
+  "done": 60
+ },
+ "wait": {
+  "all": {
+   "n": 60,
+   "p50_s": 0.07,
+   "p95_s": 0.17,
+   "max_s": 0.19
+  },
+  "transcribe": {
+   "n": 30,
+   "p50_s": 0.05,
+   "p95_s": 0.11,
+   "max_s": 0.11
+  },
+  "consistency": {
+   "n": 30,
+   "p50_s": 0.14,
+   "p95_s": 0.19,
+   "max_s": 0.19
+  }
+ },
+ "ingest_round_trip": {
+  "n": 30,
+  "p50_s": 0.33,
+  "p95_s": 0.49,
+  "max_s": 0.55
+ }
+}

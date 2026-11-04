@@ -62,5 +62,6 @@ __pycache__/
 # the held-out headline and the production measurements the story pages show
 !/data/eval/headline.json
 !/data/eval/measurements.json
+!/data/eval/job_start.json
 # recorded model verdicts (CI scores rules + AI from them) and test fixtures are committed
 !/data/fixtures/

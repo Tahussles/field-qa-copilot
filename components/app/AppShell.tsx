@@ -237,11 +237,14 @@ function TopbarFrame({ title }: { title: string }) {
   const demo = useDemo();
   return (
     <header className="frost-topbar sticky top-0 z-20 flex h-12 flex-none items-center justify-between gap-3 px-4 md:px-5">
-      <h1 className="truncate font-sans text-[13.5px] font-medium tracking-normal">{title}</h1>
+      <h1 className="min-w-0 truncate font-sans text-[13.5px] font-medium tracking-normal">{title}</h1>
       <span className="flex flex-none items-center gap-2">
         {overview?.now_is_fixed && (
           <Tip content="The demo runs on a fixed field clock" className="chip cursor-default font-mono" >
-            <span data-testid="field-time">Field time · {fieldTime(overview.now, overview.project.timezone)}</span>
+            <span data-testid="field-time">
+              <span className="hidden sm:inline">Field time · </span>
+              {fieldTime(overview.now, overview.project.timezone)}
+            </span>
           </Tip>
         )}
         <button type="button" onClick={demo.toggle} aria-expanded={demo.open} className="btn btn-sm font-sans md:hidden">

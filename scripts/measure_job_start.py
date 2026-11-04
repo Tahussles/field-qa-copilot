@@ -46,7 +46,7 @@ def main() -> int:
     pf = Preflight(args.base, env)
     db = Supabase(env["NEXT_PUBLIC_SUPABASE_URL"], env["SUPABASE_SERVICE_ROLE_KEY"], timeout=30)
 
-    ids = []
+    ids, ingest = [], []
     for i in range(args.n):
         client_id = f"jobstart-{uuid.uuid4()}"
         device = f"phone-jobstart{uuid.uuid4().hex[:8]}"
@@ -55,7 +55,9 @@ def main() -> int:
         pf.http.put(signed["upload_url"], content=VOICE_NOTE.read_bytes(),
                     headers={"content-type": "audio/wav", "x-upsert": "true"}).raise_for_status()
         body = pf.live_body(client_id, device, voice_note_path=signed["path"])
+        sent = time.perf_counter()
         stored = pf.http.post(f"{pf.api}/submissions", json=body, headers=pf.auth).raise_for_status().json()
+        ingest.append(time.perf_counter() - sent)  # the phone's wait: starting the jobs must not add to it
         ids.append(stored["id"])
         print(f"  {i + 1:2}/{args.n} {stored['id'][:8]} queued {[j['kind'] for j in stored.get('ai_jobs', [])]}", flush=True)
         time.sleep(args.gap)
@@ -87,9 +89,10 @@ def main() -> int:
         "not_started": sum(1 for r in rows if not r.get("started_at")),
         "statuses": {s: sum(1 for r in rows if r["status"] == s) for s in sorted({r["status"] for r in rows})},
         "wait": {"all": stats(everything), **{k: stats(v) for k, v in waits.items()}},
+        "ingest_round_trip": stats(ingest),
     }
     args.out.write_text(json.dumps(report, indent=1) + "\n")
-    for name, s in report["wait"].items():
+    for name, s in {**report["wait"], "ingest": report["ingest_round_trip"]}.items():
         if s["n"]:
             print(f"{name:12} n={s['n']:3}  p50 {s['p50_s']:.2f} s  p95 {s['p95_s']:.2f} s  max {s['max_s']:.2f} s")
     print(f"statuses {report['statuses']} · not started {report['not_started']} · {args.out}")
