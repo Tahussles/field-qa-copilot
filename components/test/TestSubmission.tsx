@@ -7,6 +7,7 @@ import { useAppData } from "@/components/app/AppData";
 import { useWithPasscode } from "@/components/app/Passcode";
 import { useToast } from "@/components/app/Toasts";
 import { Chevron, Reveal, Section } from "@/components/ui/Disclosure";
+import { Tip } from "@/components/ui/Tip";
 import { api } from "@/lib/api";
 import { CHECK_TITLE, SOURCE_LABEL } from "@/lib/checks";
 import { fmtScore, shortId } from "@/lib/format";
@@ -30,7 +31,7 @@ interface Form {
 
 const PRESETS: { name: string; note: string; apply: (f: Form) => Form }[] = [
   {
-    name: "Typical interview",
+    name: "Typical",
     note: "Should pass",
     apply: (f) => ({ ...f, minutes: 27, source: "public_tap", satisfaction: [...VARIED],
       openText: "The queue at the kiosk is long in the evenings, so my daughter fetches water before school.",
@@ -48,7 +49,7 @@ const PRESETS: { name: string; note: string; apply: (f: Form) => Form }[] = [
       transcript: "We don't have a tap, so we buy from the vendor with the handcart.", nearLast: false }),
   },
   {
-    name: "Same spot again",
+    name: "Same spot",
     note: "at their last location",
     apply: (f) => ({ ...f, minutes: 10, nearLast: true }),
   },
@@ -129,16 +130,22 @@ export function TestSubmission() {
 
   return (
     <div className="flex flex-col gap-4">
-    <Section title="Send a test submission" aria-label="Test submission" summary="The same checks as the real data" bodyClassName="">
-      <p className="max-w-[76ch] px-4 pt-4 text-muted">
-        A demo backup: it posts what a phone would (source <span className="font-mono">live</span>) and shows on the map and in the
-        queue within a second.
-      </p>
-      <div className="flex flex-wrap items-center gap-2 px-4 pt-3.5">
-        <span className="text-[12px] font-medium text-muted">Presets</span>
+    <Section
+      title={
+        <Tip content="A demo backup: it posts what a phone would (source live), runs the same checks as the real data, and shows on the map and in the queue within a second."
+          className="cursor-help underline decoration-dotted underline-offset-4">
+          Test submission
+        </Tip>
+      }
+      aria-label="Test submission"
+      bodyClassName=""
+    >
+      <div className="flex flex-wrap items-center gap-2 px-4 pt-4">
         {PRESETS.map((p) => (
           <button key={p.name} type="button" onClick={() => setForm((f) => p.apply(f))} className="btn btn-sm">
-            {p.name} <span className="text-faint">· {p.note}</span>
+            <Tip content={p.note} className="contents">
+              {p.name}
+            </Tip>
           </button>
         ))}
       </div>
@@ -148,21 +155,21 @@ export function TestSubmission() {
             {(enumerators.length ? enumerators : [form.code]).map((c) => <option key={c}>{c}</option>)}
           </select>
         </Field>
-        <Field label="Duration (minutes)">
+        <Field label="Minutes">
           <input type="number" min={1} max={180} value={form.minutes} onChange={(e) => set("minutes", Number(e.target.value))} className="input" />
         </Field>
-        <Field label={`Captured at (today, ${today ?? "…"})`}>
+        <Field label="Time">
           <input type="time" value={form.time} onChange={(e) => set("time", e.target.value)} className="input" />
         </Field>
-        <Field label="Main water source (form)">
+        <Field label="Source">
           <select value={form.source} onChange={(e) => set("source", e.target.value)} className="input">
             {SOURCES.map((s) => <option key={s} value={s}>{SOURCE_LABEL[s]}</option>)}
           </select>
         </Field>
-        <Field label="Voice note transcript" full>
+        <Field label="Voice note" full>
           <input type="text" value={form.transcript} onChange={(e) => set("transcript", e.target.value)} className="input" />
         </Field>
-        <Field label="Biggest challenge getting water (open-ended)" full>
+        <Field label="Challenge" full>
           <textarea rows={3} value={form.openText} onChange={(e) => set("openText", e.target.value)} className="input min-h-16 resize-y" />
         </Field>
         <label className="col-span-full flex items-center gap-2 text-ink">
@@ -171,7 +178,7 @@ export function TestSubmission() {
             checked={sameAll}
             onChange={(e) => set("satisfaction", e.target.checked ? Array(8).fill(3) : [...VARIED])}
           />
-          Answer all 8 satisfaction questions with the same score
+          Same answer ×8
         </label>
         <div className="col-span-full -mt-1.5 text-[12px] text-muted">
           <button type="button" className="disclosure hover:text-ink" aria-expanded={adjust} aria-controls="adjust-answers" onClick={() => setAdjust(!adjust)}>
@@ -192,11 +199,11 @@ export function TestSubmission() {
         </div>
         <label className="col-span-full flex items-center gap-2 text-ink">
           <input type="checkbox" checked={form.nearLast} onChange={(e) => set("nearLast", e.target.checked)} />
-          Place it at {form.code}&apos;s last interview spot {last ? "" : "(no previous location)"}
+          At last spot{last ? "" : " (none yet)"}
         </label>
         <div className="col-span-full flex flex-wrap gap-2">
           <button type="submit" disabled={sending || !last || !today} className="btn btn-primary">
-            {sending ? "Scoring…" : "Send submission"}
+            {sending ? "Scoring…" : "Send"}
           </button>
         </div>
       </form>

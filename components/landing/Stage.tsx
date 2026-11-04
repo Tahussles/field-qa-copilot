@@ -14,7 +14,7 @@ import type { CheckKey, LandingData, SubmissionDetail } from "@/lib/types";
 
 const ADD_MS = 90; // one replayed arrival per tick
 const FEED_MS = 1100;
-const FEED_ROWS = 9;
+const FEED_ROWS = 6;
 const SEED_SHARE = 0.5; // replay starts with half the day already on the map, as full as the prototype's stage
 const LIVE_IDLE_MS = 30_000; // no real arrival for this long: back to the replay
 const DETAIL_CONCURRENCY = 4;
@@ -177,7 +177,7 @@ export function Stage() {
     if (reducedMotion()) {
       // A static frame: the whole day on the map, a fixed feed, no loop.
       dots.current = order.map((d) => ({ ...d, born: -1e6 }));
-      queueMicrotask(() => setRows(seedFeed(order, 5, 4)));
+      queueMicrotask(() => setRows(seedFeed(order, 3, 3)));
       draw.current(performance.now());
       return;
     }
@@ -185,7 +185,7 @@ export function Stage() {
     const t0 = performance.now();
     let cursor = Math.floor(order.length * SEED_SHARE);
     dots.current = order.slice(0, cursor).map((d) => ({ ...d, born: t0 - 5000 }));
-    queueMicrotask(() => setRows(seedFeed(order.slice(0, cursor), 4, 4)));
+    queueMicrotask(() => setRows(seedFeed(order.slice(0, cursor), 3, 3)));
     let lastAdd = t0;
     let lastFeed = t0;
     let sinceFeed: Dot[] = [];
@@ -305,10 +305,10 @@ export function Stage() {
   const c = data?.counters;
   const pct = (v: number | null | undefined) => (v == null ? "—" : `${Math.round(v * 100)}%`);
   const counters = [
-    { id: "checked", value: c ? c.submissions.toLocaleString("en-US") : "—", label: "interviews checked" },
-    { id: "fakes", value: c ? String(c.fabricated) : "—", label: "fakes planted" },
-    { id: "caught", value: pct(c?.recall), label: "of fakes caught" },
-    { id: "correct", value: pct(c?.precision), label: "of flags correct" },
+    { id: "checked", value: c ? c.submissions.toLocaleString("en-US") : "—", label: "checked", tip: "Interviews checked" },
+    { id: "fakes", value: c ? String(c.fabricated) : "—", label: "planted", tip: "Fakes planted on purpose" },
+    { id: "caught", value: pct(c?.recall), label: "caught", tip: "Of the planted fakes, flagged (recall)" },
+    { id: "correct", value: pct(c?.precision), label: "correct", tip: "Of the flags, fakes (precision)" },
   ];
 
   return (
@@ -319,8 +319,8 @@ export function Stage() {
           <i />
           <i />
         </span>
-        <span className="min-w-0 truncate">
-          {data?.project.name ?? "Household Water Access Survey"} · {data?.project.region.split(",")[0] ?? "Kisumu"}, wave 2
+        <span className="min-w-0 truncate" title={data?.project.name ?? "Household Water Access Survey"}>
+          {data?.project.region.split(",")[0] ?? "Kisumu"} · wave 2
         </span>
         <span data-testid="stage-mode" className={`stage-mode ${mode === "live" ? "is-live" : ""}`}>
           {mode === "live" ? "Live" : data ? `Replay · ${fmtMonthDay(`${data.date}T12:00:00Z`, "UTC")}` : "Replay"}
@@ -337,8 +337,13 @@ export function Stage() {
             className="object-cover"
           />
           <canvas ref={canvas} aria-hidden />
-          <Glass as="span" className="stage-pill glass-tint">
-            Each dot is an interview arriving · orange means flagged
+          <Glass as="span" className="stage-pill glass-tint flex items-center gap-3" aria-label="Each dot is an interview arriving">
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block h-2 w-2 rounded-full bg-pass" aria-hidden /> Passed
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block h-2 w-2 rounded-full bg-warn" aria-hidden /> Flagged
+            </span>
           </Glass>
           <span className="stage-attrib">
             {CREDITS.map((credit, i) => (
@@ -357,8 +362,8 @@ export function Stage() {
               <span className="id">
                 {shortId(r.id)} · {r.code}
               </span>
-              <span className={`what ${r.fired.length ? "" : "text-muted"}`}>
-                {r.fired.length ? r.fired.map((k) => CHECK_TITLE[k]).join(" · ") : "All checks passed"}
+              <span className={`what ${r.fired.length ? "" : "text-muted"}`} aria-label={r.fired.length ? undefined : "All checks passed"}>
+                {r.fired.length ? r.fired.map((k) => CHECK_TITLE[k]).join(" · ") : "—"}
               </span>
               {r.flagged ? (
                 <span className={`st ${r.score >= 5 ? "st-crit" : "st-warn"}`}>
@@ -375,7 +380,7 @@ export function Stage() {
       </div>
       <div className="counters">
         {counters.map((k) => (
-          <div key={k.id}>
+          <div key={k.id} title={k.tip}>
             <b data-testid={`counter-${k.id}`}>{k.value}</b>
             <span>{k.label}</span>
           </div>

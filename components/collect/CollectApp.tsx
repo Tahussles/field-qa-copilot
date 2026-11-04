@@ -172,7 +172,7 @@ export function CollectApp() {
               <p className="truncate text-[13.5px] font-semibold">
                 <span className="font-mono">{contributor.code}</span> {contributor.display_name}
               </p>
-              <p className="truncate text-[12px] text-muted">{contributor.area} · {contributor.kind}</p>
+              <p className="truncate text-[12px] text-muted" title={contributor.kind}>{contributor.area}</p>
             </>
           ) : (
             <p className="text-[13.5px] font-semibold">Field QA · Collect</p>
@@ -203,15 +203,18 @@ export function CollectApp() {
           />
           <div className="flex items-center justify-between text-[12px] text-muted">
             <span className="font-mono">{device}</span>
-            <button type="button" onClick={() => setPicking(true)} className="btn btn-sm btn-ghost" data-testid="switch-contributor">
-              Switch contributor
+            <button type="button" onClick={() => setPicking(true)} className="btn btn-sm btn-ghost" data-testid="switch-contributor"
+              aria-label="Switch contributor">
+              Switch
             </button>
           </div>
           {items.length > 0 && <History items={items} tz={tz} onOpen={setViewing} />}
         </>
       )}
       {session.expires_at && (
-        <p className="text-center text-[11.5px] text-faint">QR access until {fmtTime(new Date(session.expires_at * 1000).toISOString(), tz)} (Kisumu time)</p>
+        <p className="text-center font-mono text-[11.5px] text-faint" title="QR access ends (Kisumu time)">
+          until {fmtTime(new Date(session.expires_at * 1000).toISOString(), tz)}
+        </p>
       )}
     </div>
   );
@@ -371,7 +374,7 @@ function CollectForm({ contributor, session, device, onSaved }: {
 
   return (
     <form onSubmit={submit} className="flex flex-col gap-4" aria-label="Interview">
-      <Section title="Main water source">
+      <Section title="Water source">
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           {Object.entries(SOURCE_LABEL).map(([key, label]) => (
             <button key={key} type="button" onClick={() => setSource(key)} aria-pressed={source === key} data-testid={`source-${key}`}
@@ -382,7 +385,16 @@ function CollectForm({ contributor, session, device, onSaved }: {
         </div>
       </Section>
 
-      <Section title="Satisfaction" summary="1 very dissatisfied · 5 very satisfied">
+      <Section title="Satisfaction">
+        {/* The scale once, as column headings (1 very dissatisfied, 5 very satisfied); each answer is a dot. */}
+        <div className="flex items-center gap-2 pb-1" aria-hidden>
+          <span className="w-[108px] flex-none" />
+          <div className="grid flex-1 grid-cols-5 gap-1.5 text-center font-mono text-[12px] text-muted">
+            {[1, 2, 3, 4, 5].map((v) => (
+              <span key={v} title={v === 1 ? "very dissatisfied" : v === 5 ? "very satisfied" : undefined}>{v}</span>
+            ))}
+          </div>
+        </div>
         <div className="flex flex-col gap-2">
           {ITEMS.map((item, i) => (
             <div key={item} className="flex items-center gap-2">
@@ -391,8 +403,8 @@ function CollectForm({ contributor, session, device, onSaved }: {
                 {[1, 2, 3, 4, 5].map((v) => (
                   <button key={v} type="button" role="radio" aria-checked={satisfaction[i] === v} aria-label={`${item} ${v}`}
                     onClick={() => setSatisfaction((s) => s.map((x, j) => (j === i ? v : x)))}
-                    className={`h-10 rounded-lg border font-mono text-[14px] ${satisfaction[i] === v ? "border-accent bg-accent-soft text-ink" : "border-line text-muted"}`}>
-                    {v}
+                    className={`grid h-10 place-items-center rounded-lg border ${satisfaction[i] === v ? "border-accent bg-accent-soft" : "border-line hover:bg-hover"}`}>
+                    <span className={`block h-2.5 w-2.5 rounded-full ${satisfaction[i] === v ? "bg-accent" : "border border-line-strong"}`} aria-hidden />
                   </button>
                 ))}
               </div>
@@ -401,7 +413,7 @@ function CollectForm({ contributor, session, device, onSaved }: {
         </div>
       </Section>
 
-      <Section title="Biggest challenge getting water">
+      <Section title="Biggest challenge">
         <textarea rows={3} value={openText} onChange={(e) => setOpenText(e.target.value)} className="input min-h-20"
           placeholder="In the respondent's words" aria-label="Biggest challenge getting water" />
       </Section>
@@ -410,10 +422,10 @@ function CollectForm({ contributor, session, device, onSaved }: {
         <Recorder note={note} onChange={setNote} />
       </Section>
 
-      <Section title="Location" summary={useGps ? "Real GPS: outside Kisumu, outside area fires" : "Simulated: you're not in Kisumu"}>
+      <Section title="Location" summary={useGps ? "Real GPS" : "Simulated"}>
         {!useGps && (
           <div className="grid grid-cols-2 gap-1.5" role="radiogroup" aria-label="Simulated location">
-            {([["new", "A new household in my area"], ["same", "Same spot as my last interview"]] as const).map(([key, label]) => (
+            {([["new", "New household"], ["same", "Last spot"]] as const).map(([key, label]) => (
               <button key={key} type="button" role="radio" aria-checked={place === key} onClick={() => setPlace(key)}
                 disabled={key === "same" && !contributor.last_point}
                 className={`rounded-lg border px-3 py-2.5 text-left text-[13px] ${place === key ? "border-accent bg-accent-soft text-ink" : "border-line text-ink-2"}`}>
@@ -423,7 +435,7 @@ function CollectForm({ contributor, session, device, onSaved }: {
           </div>
         )}
         <label className={`${useGps ? "" : "mt-3"} flex items-center gap-2 text-[13px]`}>
-          <input type="checkbox" checked={useGps} onChange={(e) => setUseGps(e.target.checked)} data-testid="real-gps" /> Use my real GPS
+          <input type="checkbox" checked={useGps} onChange={(e) => setUseGps(e.target.checked)} data-testid="real-gps" /> Real GPS
         </label>
       </Section>
 
@@ -468,7 +480,7 @@ function DemoControls({ children }: { children: React.ReactNode }) {
   }, []);
   return (
     <Section title="Demo controls" collapsible defaultOpen={false} storeKey="collect-demo"
-      summary={off ? "phone clock 3 h behind" : "interview length, phone clock"} data-testid="demo-controls" bodyClassName="flex flex-col gap-4 p-4">
+      summary={off ? "clock −3 h" : null} data-testid="demo-controls" bodyClassName="flex flex-col gap-4 p-4">
       {children}
       <div>
       <label className="flex items-center gap-2 text-[13px]">

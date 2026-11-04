@@ -84,9 +84,15 @@ export function Detectors() {
     <div className="flex flex-col gap-5">
       {error && <p className="panel px-4 py-3 text-[13px] text-crit">{error}</p>}
       <Section
-        title="Tune the detectors"
+        title={
+          <Tip
+            content={`Scored against the planted fakes in the synthetic wave (${result ? `${result.combined.fabricated} among ${result.combined.submissions.toLocaleString("en-US")}` : "…"}); these numbers are scored against planted fraud, and nothing here changes the live queue.`}
+            className="cursor-help underline decoration-dotted underline-offset-4"
+          >
+            Tune
+          </Tip>
+        }
         aria-label="Tune the detectors"
-        summary={result ? `${result.combined.fabricated} planted fakes among ${result.combined.submissions.toLocaleString("en-US")} submissions` : "Scoring…"}
         actions={
           <button type="button" disabled={!changed} onClick={() => setKnobs(DEFAULTS)} className="btn btn-sm btn-ghost">
             Reset
@@ -94,19 +100,17 @@ export function Detectors() {
         }
         bodyClassName="flex flex-col gap-4 p-4"
       >
-        <p className="max-w-[76ch] text-muted" aria-busy={pending}>
-          Drag a check stricter or looser: these numbers are scored against planted fraud in the synthetic wave. Nothing here changes
-          the live queue.
-        </p>
         <div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-4">
           {SLIDERS.map((s) => (
             <div key={s.key}>
-              <label htmlFor={`slider-${s.key}`} className="mb-1.5 flex justify-between text-[13px] font-medium">
-                {s.label}
+              <div className="mb-1.5 flex justify-between text-[13px] font-medium">
+                <label htmlFor={`slider-${s.key}`} title={s.help}>
+                  {s.label}
+                </label>
                 <span className="font-mono text-accent-ink" data-testid={`value-${s.key}`}>
                   {s.format(knobs[s.key])}
                 </span>
-              </label>
+              </div>
               <input
                 id={`slider-${s.key}`}
                 type="range"
@@ -116,8 +120,11 @@ export function Detectors() {
                 value={knobs[s.key]}
                 onChange={(e) => setKnobs((k) => ({ ...k, [s.key]: Number(e.target.value) }))}
                 className="w-full accent-accent"
+                aria-describedby={`help-${s.key}`}
               />
-              <small className="text-[11.5px] text-faint">{s.help}</small>
+              <span id={`help-${s.key}`} hidden>
+                {s.help}
+              </span>
             </div>
           ))}
         </div>
@@ -127,7 +134,7 @@ export function Detectors() {
           data-testid="combined"
         >
           {[
-            { label: `flagged at score ≥ ${knobs.threshold}`, value: <span data-testid="combined-flagged">{result?.combined.flagged ?? "—"}</span> },
+            { label: "flagged", value: <span data-testid="combined-flagged">{result?.combined.flagged ?? "—"}</span> },
             {
               label: (
                 <Tip content="How often a flag is a planted fake." className="cursor-help underline decoration-dotted underline-offset-2">
@@ -154,7 +161,7 @@ export function Detectors() {
       </Section>
 
       <Section
-        title="Precision and recall by review threshold"
+        title="By threshold"
         aria-label="Precision and recall by threshold"
         actions={
           <span className="flex items-center gap-4 text-[12px] text-muted">
@@ -173,7 +180,7 @@ export function Detectors() {
       <Section
         title="Per-check breakdown"
         aria-label="Per-check breakdown"
-        summary={result ? `${CHECK_ORDER.filter((k) => (result.per_check[k]?.fires_on ?? 0) > 0).length} of ${CHECK_ORDER.length} checks fire on this wave` : null}
+        summary={result ? `${CHECK_ORDER.filter((k) => (result.per_check[k]?.fires_on ?? 0) > 0).length}/${CHECK_ORDER.length} fire` : null}
         collapsible
         defaultOpen={false}
         storeKey="detectors-breakdown"
@@ -257,13 +264,9 @@ function HardMode() {
   const types = data ? Object.keys(data.planted_per_wave) : [];
   return (
     <Section
-      title="Hard mode: rules vs rules + AI"
+      title="Hard mode"
       aria-label="Hard mode"
-      summary={
-        data
-          ? `recall ${fmtPct(data.rules.combined.recall)} → ${fmtPct(data.rules_ai.combined.recall)} with AI · seeds ${data.seeds.join(", ")}`
-          : "Loading…"
-      }
+      summary={data ? `recall ${fmtPct(data.rules.combined.recall)} → ${fmtPct(data.rules_ai.combined.recall)}` : "…"}
       collapsible
       defaultOpen={false}
       storeKey="detectors-hard"

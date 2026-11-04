@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { Glass } from "@/components/ui/Glass";
-import { MethodChip } from "@/components/ui/Tip";
+import { MethodChip, Tip } from "@/components/ui/Tip";
 import { api } from "@/lib/api";
 import { CHECK_TITLE, scoreClass } from "@/lib/checks";
 import type { OutboxItem } from "@/lib/collect/outbox";
@@ -102,25 +102,26 @@ export function ResultScreen({ item, tz, onNew }: { item: OutboxItem; tz: string
     return () => window.clearInterval(timer);
   }, [pending]);
 
+  const fired = (detail?.checks ?? []).filter((c) => c.fired);
   return (
     <div className="flex flex-col gap-3" data-testid="result">
-      <Glass className="glass-tint rounded-xl p-4">
-        <p className="text-[12px] text-muted" data-testid="clocks">
-          {shortId(item.client_submission_id.replace(/^phone-/, ""))} · phone{" "}
-          <span className="font-mono text-ink-2">{fmtStamp(item.saved_at, PHONE_TZ)}</span> {place(PHONE_TZ)}
-          {rules ? (
-            <>
-              {" "}
-              · field <span className="font-mono text-ink-2" data-testid="field-time">{fmtStamp(rules.captured_at, tz)}</span> Kisumu
-            </>
-          ) : null}
+      <Glass className="glass-tint rounded-xl px-4 py-3">
+        <div className="flex items-center gap-2 text-[13px]">
+          <span className="font-mono">{shortId(item.client_submission_id.replace(/^phone-/, ""))}</span>
           {item.synced_at ? (
-            <>
-              {" "}
-              · synced <span className="font-mono text-ink-2" data-testid="synced-at">{fmtTime(item.synced_at, PHONE_TZ)}</span>
-            </>
+            <Tip
+              className="ml-auto cursor-default text-muted"
+              content={
+                <span data-testid="clocks">
+                  phone {fmtStamp(item.saved_at, PHONE_TZ)} {place(PHONE_TZ)}
+                  {rules && <> · field <span data-testid="field-time">{fmtStamp(rules.captured_at, tz)}</span> Kisumu</>}
+                </span>
+              }
+            >
+              Synced <span className="font-mono text-ink-2" data-testid="synced-at">{fmtTime(item.synced_at, PHONE_TZ)}</span>
+            </Tip>
           ) : null}
-        </p>
+        </div>
         {reconnecting && (
           <p className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-line px-2.5 py-0.5 text-[11.5px] text-muted" role="status" data-testid="reconnecting">
             <span className="ai-spinner" aria-hidden /> Reconnecting… updating every 3 s
@@ -135,74 +136,78 @@ export function ResultScreen({ item, tz, onNew }: { item: OutboxItem; tz: string
       </Glass>
 
       {rules && (
-        <Stage n={1} title="Rules result" done>
-          <p className="flex items-center gap-2">
-            Score <span className={scoreClass(rules.score ?? 0, rules.band ?? "clear")}>{fmtScore(rules.score)}</span>
+        <Glass as="ol" className="rounded-xl p-2" aria-label="Checks">
+          <Step label="Rules result" word="Rules" done>
+            <span className={scoreClass(rules.score ?? 0, rules.band ?? "clear")}>{fmtScore(rules.score)}</span>
             <BandTag band={rules.band} />
-          </p>
-          <p className="mt-1 text-[12.5px] text-muted">
-            {rules.fired.length ? rules.fired.map(firedLabel).join(" · ") : "No check fired on arrival"}
-          </p>
-        </Stage>
-      )}
-
-      {rules && item.audio && (
-        <Stage n={2} title="Voice note" done={Boolean(transcript)} busy={!transcript && !noTranscript}>
-          {transcript ? (
-            <p data-testid="transcript">
-              <span className="text-[12px] text-muted">
-                {LANGUAGE[detail?.submission.transcript_lang ?? ""] ?? detail?.submission.transcript_lang ?? "language unknown"}
-                {transcribe?.latency_ms ? ` · ${transcribe.model} · ${transcribe.latency_ms} ms` : ""}
+            {rules.fired.map((f) => (
+              <span key={f.key} className="chip">
+                {firedLabel(f)}
               </span>
-              <br />“{transcript}”
-            </p>
-          ) : noTranscript ? (
-            <p className="text-muted" data-testid="ai-unavailable">Checked by rules (AI unavailable): no transcript, the rules&apos; result stands.</p>
-          ) : (
-            <p className="text-muted" data-testid="transcribing">Transcribing…</p>
+            ))}
+          </Step>
+
+          {item.audio && (
+            <Step label="Voice note" word="Voice" done={Boolean(transcript)} busy={!transcript && !noTranscript}>
+              {transcript ? (
+                <span data-testid="transcript" className="min-w-0 basis-full text-[12.5px] text-ink-2">
+                  <span className="chip mr-1.5">
+                    {LANGUAGE[detail?.submission.transcript_lang ?? ""] ?? detail?.submission.transcript_lang ?? "?"}
+                  </span>
+                  “{transcript}”
+                </span>
+              ) : noTranscript ? (
+                <span className="text-[12.5px] text-muted" data-testid="ai-unavailable">Checked by rules (AI unavailable)</span>
+              ) : (
+                <span className="text-[12.5px] text-muted" data-testid="transcribing">Transcribing</span>
+              )}
+            </Step>
           )}
-        </Stage>
-      )}
 
-      {rules && item.audio && !transcript && (
-        <Stage n={3} title="Voice against the form">
-          <p className="text-muted">{noTranscript ? "Checked by rules (AI unavailable)." : "Waits for the transcript."}</p>
-        </Stage>
-      )}
-
-      {rules && transcript && (
-        <Stage n={3} title="Voice against the form" done={!busy(consistency) && (Boolean(consistency) || noCheck)} busy={busy(consistency) || (!consistency && !noCheck)}>
-          {decidedByAi && vff ? (
-            <Verdict transcript={transcript} evidence={vff.evidence} fired={vff.fired} />
-          ) : noCheck ? (
-            <p className="text-muted" data-testid="ai-unavailable">
-              Checked by rules (AI unavailable): the keyword rule found {vff?.fired ? "a contradiction" : "no contradiction"}.
-            </p>
-          ) : busy(consistency) || !consistency ? (
-            <p className="text-muted" data-testid="checking">Checking voice against the form…</p>
-          ) : (
-            <p className="text-muted">Decided by the keyword rule ({vff?.fired ? "contradiction" : "no contradiction"}).</p>
+          {item.audio && (
+            <Step
+              label="Voice against the form"
+              word="Check"
+              done={Boolean(transcript) && !busy(consistency) && (Boolean(consistency) || noCheck)}
+              busy={Boolean(transcript) && (busy(consistency) || (!consistency && !noCheck))}
+            >
+              {!transcript ? (
+                <span className="text-[12.5px] text-muted">{noTranscript ? "Checked by rules (AI unavailable)" : "Waiting"}</span>
+              ) : decidedByAi && vff ? (
+                <Verdict transcript={transcript} evidence={vff.evidence} fired={vff.fired} />
+              ) : noCheck ? (
+                <span className="text-[12.5px] text-muted" data-testid="ai-unavailable">
+                  Checked by rules (AI unavailable): {vff?.fired ? "contradiction" : "no contradiction"}
+                </span>
+              ) : busy(consistency) || !consistency ? (
+                <span className="text-[12.5px] text-muted" data-testid="checking">Checking</span>
+              ) : (
+                <span className="chip">{vff?.fired ? "Contradiction" : "Consistent"} · rule</span>
+              )}
+            </Step>
           )}
-        </Stage>
-      )}
 
-      {rules && current && (
-        <Stage n={item.audio ? 4 : 2} title={pending ? "Score so far" : "Final score"} done={!pending}>
-          <p className="flex items-center gap-2" data-testid="final">
-            Score <span className={scoreClass(current.score, current.band)}>{fmtScore(current.score)}</span>
-            <BandTag band={current.band} />
-            {rules.score !== current.score && <span className="text-[12px] text-muted">(was {fmtScore(rules.score)} on arrival)</span>}
-          </p>
-          <p className="mt-1 text-[12.5px] text-muted">
-            {(detail?.checks ?? []).filter((c) => c.fired).map((c) => CHECK_TITLE[c.key]).join(" · ") || "No check fired"}
-          </p>
-        </Stage>
+          {current && (
+            <Step label={pending ? "Score so far" : "Final score"} word="Score" done={!pending}>
+              <span data-testid="final" className="flex flex-wrap items-center gap-1.5">
+                <span className={scoreClass(current.score, current.band)}>{fmtScore(current.score)}</span>
+                <BandTag band={current.band} />
+                {rules.score !== current.score && <span className="text-[12px] text-muted">was {fmtScore(rules.score)}</span>}
+                {fired.map((c) => (
+                  <span key={c.key} className="chip">
+                    {CHECK_TITLE[c.key]}
+                  </span>
+                ))}
+              </span>
+            </Step>
+          )}
+        </Glass>
       )}
 
       <div className="flex flex-wrap gap-2">
         {id && (
-          <Link href={`/app/queue/${id}?status=all`} className="btn" target="_blank">
-            Open in the review queue
+          <Link href={`/app/queue/${id}?status=all`} className="btn" target="_blank" aria-label="Open in the review queue">
+            Review
           </Link>
         )}
         <button type="button" onClick={onNew} className="btn btn-primary">
@@ -216,32 +221,35 @@ export function ResultScreen({ item, tz, onNew }: { item: OutboxItem; tz: string
 // The one check whose evidence a field worker can act on at once: how far out they are.
 function firedLabel(f: { key: string; evidence: Record<string, unknown> }) {
   const title = CHECK_TITLE[f.key as keyof typeof CHECK_TITLE];
-  if (f.key === "outside_area" && f.evidence.distance) return `${title} (${f.evidence.distance} from ${f.evidence.area})`;
+  if (f.key === "outside_area" && f.evidence.distance) return `${title} · ${f.evidence.distance}`;
   if (f.key === "clock_skew") {
     const minutes = Math.abs(Number(f.evidence.skew_minutes));
-    return `${title} (${minutes >= 90 ? `${(minutes / 60).toFixed(1)} h` : `${Math.round(minutes)} min`} ${f.evidence.direction})`;
+    return `${title} · ${minutes >= 90 ? `${(minutes / 60).toFixed(1)} h` : `${Math.round(minutes)} min`} ${f.evidence.direction}`;
   }
   return title;
 }
 
-function Stage({ n, title, done, busy, children }: { n: number; title: string; done?: boolean; busy?: boolean; children: React.ReactNode }) {
+/** One step of the vertical stepper: a mark, one word, then the key numbers and chips. */
+function Step({ label, word, done, busy, children }: { label: string; word: string; done?: boolean; busy?: boolean; children: React.ReactNode }) {
   return (
-    <Glass as="section" className="rounded-xl p-4" aria-label={title} aria-busy={busy}>
-      <h2 className="mb-1.5 flex items-center gap-2 text-[13px] font-semibold">
-        <span className={`flex h-5 w-5 items-center justify-center rounded-full font-mono text-[11px] ${done ? "bg-ok/20 text-ok" : "bg-contrast/10 text-muted"}`}>
-          {done ? "✓" : n}
+    <li className="relative pl-7 [&:not(:last-child)]:pb-3 [&:not(:last-child)]:before:absolute [&:not(:last-child)]:before:top-6 [&:not(:last-child)]:before:bottom-0 [&:not(:last-child)]:before:left-[11px] [&:not(:last-child)]:before:w-px [&:not(:last-child)]:before:bg-line-strong">
+      <section aria-label={label} aria-busy={busy} className="flex flex-wrap items-center gap-x-2 gap-y-1.5 px-1 py-1">
+        <span
+          className={`absolute top-1 left-0 flex h-[22px] w-[22px] items-center justify-center rounded-full font-mono text-[11px] ${done ? "bg-ok/20 text-ok" : "bg-contrast/10 text-muted"}`}
+          aria-hidden
+        >
+          {busy ? <span className="ai-spinner" /> : done ? "✓" : "·"}
         </span>
-        {title}
-        {busy && <span className="ai-spinner ml-auto" aria-hidden />}
-      </h2>
-      <div className="text-[13.5px] text-ink-2">{children}</div>
-    </Glass>
+        <h2 className="w-14 flex-none text-[13px] font-semibold">{word}</h2>
+        {children}
+      </section>
+    </li>
   );
 }
 
 function BandTag({ band }: { band: string | null | undefined }) {
   const cls = band === "flagged" ? "st-crit" : band === "watch" ? "st-warn" : "st-ok";
-  const label = band === "flagged" ? "Flagged for review" : band === "watch" ? "Watch" : "Passed";
+  const label = band === "flagged" ? "Flagged" : band === "watch" ? "Watch" : "Passed";
   return (
     <span className={`st ${cls}`} data-testid="band">
       <span>{label}</span>
@@ -253,20 +261,19 @@ function Verdict({ transcript, evidence, fired }: { transcript: string; evidence
   const quote = String(evidence.quote ?? "");
   const at = quote ? transcript.indexOf(quote) : -1;
   return (
-    <div data-testid="verdict">
-      <p className="flex flex-wrap items-center gap-x-1.5">
-        <MethodChip ai tip={`Decided by ${String(evidence.model ?? "the model")}${evidence.latency_ms ? ` in ${evidence.latency_ms} ms` : ""}; the quote is an exact span of the transcript.`} />
-        {fired ? <b className="text-crit">Contradiction</b> : <b className="text-ok">No contradiction</b>} · confidence{" "}
-        {Math.round(Number(evidence.confidence) * 100)}%
+    <div data-testid="verdict" className="flex min-w-0 basis-full flex-col gap-1.5 pl-16">
+      <p className="flex flex-wrap items-center gap-1.5">
+        <MethodChip ai tip={`Decided by ${String(evidence.model ?? "the model")}${evidence.latency_ms ? ` in ${evidence.latency_ms} ms` : ""}. ${String(evidence.explanation ?? "")}`} />
+        {fired ? <b className="text-crit">Contradiction</b> : <b className="text-ok">Consistent</b>}
+        <span className="font-mono text-[12px] text-muted">{Math.round(Number(evidence.confidence) * 100)}%</span>
       </p>
       {at >= 0 && (
-        <p className="mt-1.5 text-[13px]">
+        <p className="text-[12.5px] text-ink-2">
           {transcript.slice(0, at)}
           <mark data-testid="quote">{transcript.slice(at, at + quote.length)}</mark>
           {transcript.slice(at + quote.length)}
         </p>
       )}
-      <p className="mt-1.5 text-[12.5px] text-muted">{String(evidence.explanation ?? "")}</p>
     </div>
   );
 }
