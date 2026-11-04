@@ -146,7 +146,7 @@ await phone.getByTestId("transcript").waitFor({ timeout: 60000 });
 console.log(`        transcript ${((Date.now() - submitted) / 1000).toFixed(1)} s after submit`);
 await phone.getByTestId("verdict").waitFor({ timeout: 60000 });
 console.log(`        verdict    ${((Date.now() - submitted) / 1000).toFixed(1)} s after submit`);
-await phone.getByRole("region", { name: "Final score" }).getByTestId("band").filter({ hasText: "Flagged for review" }).waitFor({ timeout: 30000 });
+await phone.getByRole("region", { name: "Final score" }).getByTestId("band").filter({ hasText: "Flagged" }).waitFor({ timeout: 30000 });
 await pause(18);
 
 // 7. How it works.
