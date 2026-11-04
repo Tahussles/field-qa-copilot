@@ -112,7 +112,7 @@ export function NeedsAttention({ overview, focus, onFocus }: {
   return (
     <Section
       id="brief"
-      className="scroll-mt-4"
+      className="min-w-0 scroll-mt-4"
       title="Needs attention"
       aria-label="Needs attention"
       bodyClassName=""
@@ -221,7 +221,7 @@ function AttentionRow({ row, selected, onFocus }: { row: Row; selected: boolean;
   const { triggerProps, tip } = useTip(row.finding, { delay: 350 });
   return (
     <li className={`border-b border-line px-4 py-2.5 last:border-b-0 ${selected ? "bg-accent-soft" : ""}`} data-code={c.code}>
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
         <button type="button" onClick={() => onFocus(selected ? null : c.code)} aria-pressed={selected}
           className="min-w-0 truncate text-left hover:text-accent-ink" title="Show on the map">
           <b className="font-semibold text-ink">{c.display_name}</b> <span className="font-mono text-muted">{c.code}</span>
