@@ -62,7 +62,30 @@ const STATES = [
     path: "/app/queue?contributor=E07",
     ready: (p) => p.getByRole("button", { name: "Approve as genuine" }).and(p.locator(":enabled")).waitFor({ timeout: 30_000 }),
   },
+  {
+    name: "/app/queue (E07, all open)",
+    device: DESKTOP,
+    path: "/app/queue?contributor=E07",
+    ready: async (p) => {
+      await p.getByRole("button", { name: "Approve as genuine" }).and(p.locator(":enabled")).waitFor({ timeout: 30_000 });
+      await p.locator("body").press("e");
+      const details = p.getByRole("button", { name: "Submission details" });
+      if ((await details.getAttribute("aria-expanded")) === "false") await details.click();
+    },
+  },
   { name: "/app/detectors", device: DESKTOP, path: "/app/detectors", ready: (p) => p.getByRole("region", { name: "Tune the detectors" }).waitFor() },
+  {
+    name: "/app/detectors (all open)",
+    device: DESKTOP,
+    path: "/app/detectors",
+    ready: async (p) => {
+      await p.getByTestId("hard-recall-ai").waitFor({ state: "attached", timeout: 30_000 });
+      for (const name of ["Per-check breakdown", "Hard mode: rules vs rules + AI"]) {
+        const b = p.getByRole("button", { name });
+        if ((await b.getAttribute("aria-expanded")) === "false") await b.click();
+      }
+    },
+  },
   { name: "/architecture", device: DESKTOP, path: "/architecture", ready: (p) => p.getByTestId("architecture").filter({ hasNotText: "…" }).waitFor() },
   { name: "/pitch (slide 4)", device: DESKTOP, path: "/pitch#4", ready: (p) => p.getByTestId("proof").filter({ hasNotText: "…" }).waitFor() },
   { name: "/collect (contributors)", device: PHONE, path: mint, ready: (p) => p.getByRole("button", { name: /^E03 / }).waitFor({ timeout: 30_000 }) },
@@ -213,6 +236,7 @@ for (const state of STATES) {
       localStorage.setItem("fqc-demo-passcode", code);
       localStorage.setItem("fqc-theme", theme);
       localStorage.removeItem("fqc-demo-script");
+      for (const k of Object.keys(localStorage)) if (k.startsWith("fqc-ui-")) localStorage.removeItem(k);
     },
     { code: passcode, theme: values.theme },
   );
