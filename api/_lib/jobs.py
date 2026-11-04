@@ -184,8 +184,16 @@ def run_transcribe(repo, provider: Provider, job):
 
 def run_brief(repo, provider: Provider, job):
     facts, for_date, version = job["input"]["facts"], job["input"]["for_date"], job["input"]["data_version"]
+    answers = {"n": 0}
+
+    def check(written: BriefOut) -> str | None:
+        # The first answer must fit the card; a regeneration that is still long is trimmed instead (fit).
+        answers["n"] += 1
+        return briefs.check(written, facts, lengths=answers["n"] == 1)
+
     try:
-        written, usage = provider.write_brief(facts, lambda b: briefs.check(b, facts))
+        written, usage = provider.write_brief(facts, check)
+        written = briefs.fit(written)
     except AIUnavailable as error:
         saved = repo.save_brief({"for_date": for_date, "data_version": version, "status": "template",
                                  "stats": facts, "items": None, "content_md": None, "model": None,
@@ -248,6 +256,27 @@ def run_job(repo: Repository, provider: Provider, job_id: str | None = None, job
             "wall_ms": round((time.perf_counter() - started) * 1000), **{k: values.get(k) for k in ("model", "cost_usd")}}
 
 
+# Follow-ups an arrival's jobs can queue (transcribe queues consistency); more rounds than this is a bug.
+START_ROUNDS = 3
+
+
+def start_now(repo: Repository, provider: Provider, submission_id: str, job_ids: list[str]) -> list[dict]:
+    """Run an arrival's jobs in this process, right after its response is sent, then the jobs they queue
+    for it (a transcript queues the voice check). Claimed once, so the database hook's copy of each POST
+    finds nothing to do. Never raises: a failure here only means the hook or the sweep runs the job."""
+    ran: list[dict] = []
+    try:
+        pending = list(job_ids)
+        for _ in range(START_ROUNDS):
+            if not pending:
+                break
+            ran += [run_job(repo, provider, job_id=job_id) for job_id in pending]
+            pending = [j["id"] for j in repo.jobs_for(submission_id) if j["status"] == "queued" and j.get("id")]
+    except Exception:  # noqa: BLE001
+        log.exception("could not start the jobs for %s", submission_id)
+    return ran
+
+
 def drain(repo: Repository, provider: Provider, limit: int = 10) -> list[dict]:
     """Run whatever is queued (or abandoned), oldest first: the safety net behind the database hook."""
     return [run_job(repo, provider, job=job) for job in repo.claim_jobs(limit)]
@@ -290,6 +319,8 @@ def brief_state(repo: Repository, provider: Provider | None = None, queue: bool 
     if not rows and not writing and queue:
         writing = queue_brief(repo) is not None or writing
     latest = rows[0] if rows else None
+    if latest and latest.get("status") == "ai" and latest.get("items"):  # one written before the card's limits fits too
+        latest = {**latest, "items": briefs.fit(BriefOut.model_validate(latest["items"])).model_dump()}
     return {
         "for_date": for_date,
         "data_version": version,

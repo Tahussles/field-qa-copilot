@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from fastapi import APIRouter, Body, Depends, FastAPI, Header, HTTPException, Query, Response  # noqa: E402
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, FastAPI, Header, HTTPException, Query, Response  # noqa: E402
 
 import engine  # noqa: E402
 from api._lib import collect, demo, jobs, service  # noqa: E402
@@ -65,6 +65,10 @@ def get_provider() -> Provider:
 
 def writes_value() -> bool:
     return get_settings().writes_enabled
+
+
+def start_jobs_value() -> bool:
+    return get_settings().start_jobs
 
 
 READ_ONLY = "this deployment is a read-only preview: writes, demo controls and AI jobs run on production only"
@@ -128,8 +132,9 @@ def health(writes: bool = Depends(writes_value)) -> dict:
 
 
 @router.post("/submissions", status_code=201)
-def post_submission(payload: SubmissionIn, response: Response, repo: Repository = Depends(get_repo),
-                    writer: dict = Depends(require_phone)) -> dict:
+def post_submission(payload: SubmissionIn, response: Response, background: BackgroundTasks,
+                    repo: Repository = Depends(get_repo), writer: dict = Depends(require_phone),
+                    start: bool = Depends(start_jobs_value), provider: Provider = Depends(get_provider)) -> dict:
     """Store a phone's submission and score it, plus every earlier submission it affects.
 
     Idempotent on client_submission_id: a retry returns the stored record with 200,
@@ -154,6 +159,9 @@ def post_submission(payload: SubmissionIn, response: Response, repo: Repository 
         raise HTTPException(503, "stored, but scoring did not finish; retry with the same client_submission_id",
                             headers={"Retry-After": "1"})
     response.status_code = status
+    # The model work starts here, after the response is sent, instead of waiting for the database hook.
+    if start and body.get("ai_jobs"):
+        background.add_task(jobs.start_now, repo, provider, body["id"], [j["id"] for j in body["ai_jobs"]])
     return body
 
 

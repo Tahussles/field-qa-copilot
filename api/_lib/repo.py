@@ -91,7 +91,7 @@ class Repository(Protocol):
     def finish_job(self, job_id: str, values: dict) -> None: ...
     def requeue_job(self, job_id: str) -> dict | None: ...  # a forced rerun
     def pending_jobs(self) -> list[dict]: ...  # queued or running: id, submission_id, kind, status
-    def jobs_for(self, submission_id: str) -> list[dict]: ...  # kind, status, created_at of one submission's jobs
+    def jobs_for(self, submission_id: str) -> list[dict]: ...  # id, kind, status, created_at of one submission's jobs
     def ai_spend(self, run_id: str | None) -> dict: ...  # all_time_usd, all_time_jobs, run_usd, run_jobs
     def signed_upload(self, bucket: str, path: str) -> str: ...  # absolute URL a phone can PUT the file to
     def briefs(self, for_date: str) -> list[dict]: ...  # newest first
@@ -442,7 +442,7 @@ class InMemoryRepo:
                 for j in self._jobs.values() if j["status"] in ("queued", "running")]
 
     def jobs_for(self, submission_id):
-        return [{k: j.get(k) for k in ("kind", "status", "created_at")}
+        return [{k: j.get(k) for k in ("id", "kind", "status", "created_at")}
                 for j in self._jobs.values() if j.get("submission_id") == submission_id]
 
     def ai_spend(self, run_id):
@@ -766,7 +766,7 @@ class SupabaseRepo:
                                project_id=f"eq.{self._pid}")
 
     def jobs_for(self, submission_id):
-        return self._db.select("ai_jobs", "kind,status,created_at", submission_id=f"eq.{submission_id}",
+        return self._db.select("ai_jobs", "id,kind,status,created_at", submission_id=f"eq.{submission_id}",
                                order="created_at")
 
     def ai_spend(self, run_id):

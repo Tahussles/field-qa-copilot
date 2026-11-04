@@ -25,6 +25,10 @@ class Settings:
     # so a preview deployment is a read-only view of the same database; off Vercel (local dev, tests) on.
     writes_enabled: bool
     commit: str | None  # the deployed git commit (Vercel sets it), for the post-deploy check
+    # Start an arrival's model jobs in this process once its response is sent (on Vercel; START_JOBS=false turns
+    # it off). The database hook still fires and the cron sweep still re-sends; a job is claimed once, so the
+    # copies are no-ops. Off Vercel the hook runs them on production, as before.
+    start_jobs: bool
 
 
 @lru_cache(maxsize=1)
@@ -36,6 +40,7 @@ def get_settings() -> Settings:
         return os.environ.get(key) or file_env.get(key) or None
 
     writes = value("WRITES_ENABLED")
+    start = value("START_JOBS")
     return Settings(
         supabase_url=value("NEXT_PUBLIC_SUPABASE_URL"),
         service_key=value("SUPABASE_SERVICE_ROLE_KEY"),
@@ -46,4 +51,5 @@ def get_settings() -> Settings:
         elevenlabs_key=value("ELEVENLABS_API_KEY"),
         writes_enabled=writes.lower() == "true" if writes else not os.environ.get("VERCEL"),
         commit=os.environ.get("VERCEL_GIT_COMMIT_SHA") or None,
+        start_jobs=start.lower() == "true" if start else bool(os.environ.get("VERCEL")),
     )

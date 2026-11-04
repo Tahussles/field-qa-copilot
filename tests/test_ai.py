@@ -19,7 +19,7 @@ from api._lib.ai import AIUnavailable, BriefItem, BriefOut, ConsistencyVerdict, 
 from api._lib.repo import InMemoryRepo
 from api._lib.schemas import SubmissionIn
 from api._lib.settings import get_settings
-from api.index import app, get_provider, get_repo, jobs_secret_value, passcode_value
+from api.index import app, get_provider, get_repo, jobs_secret_value, passcode_value, start_jobs_value
 from engine import Contributor, Params, Submission, Verdict, score_all
 from tests.test_api import AUTH, CONTRIBUTORS, DAY, PASSCODE, make_repo, payload
 
@@ -536,3 +536,73 @@ def test_story_serves_the_generated_numbers(repo):
         app.dependency_overrides.clear()
     assert story["headline"]["held_out"]["recall"] > 0.9 and story["hard"]["rules_ai"]["combined"]["precision"]
     assert story["measured"]["ingest"]["p50_ms"] > 0 and story["spend_now"]["all_time_jobs"] == 0
+
+
+# Round 13: the brief fits the card, and an arrival's jobs start in the API ---------------------------------
+
+def test_the_brief_fits_the_card_or_is_regenerated_once_then_trimmed():
+    facts = {"yesterday": {"received": 283}, "contributors_to_investigate": [{"code": "E07", "flagged": 18}],
+             "watch_list": [], "review_queue_waiting": 143}
+    long_headline = "Yesterday brought 283 submissions and the queue keeps growing while several contributors " \
+                    "need a careful look from the field team today before more arrive."
+    item = BriefItem(contributor_code="E07", finding="Forms piled up at one spot.", action="Back-check three homes.")
+    ok = BriefOut(summary="E07 needs a back-check today.", items=[item], closing="")
+    assert brief.check(ok, facts) is None
+    long = ok.model_copy(update={"summary": long_headline})
+    assert brief.check(long, facts) == "headline over 20 words"
+    assert brief.check(long, facts, lengths=False) is None  # a regeneration is trimmed, not rejected
+    counted = ok.model_copy(update={"items": [item.model_copy(update={"action": "Back-check 18 forms."})]})
+    assert "restate numbers" in brief.check(counted, facts)
+    wordy = ok.model_copy(update={"items": [item.model_copy(update={"action": "Ask the supervisor to visit and "
+                                                                             "back-check every one of those homes soon."})]})
+    assert "actions over 10 words" in brief.check(wordy, facts)
+    fitted = brief.fit(wordy.model_copy(update={"summary": long_headline}))
+    assert len(fitted.summary.split()) == 20 and fitted.summary.endswith("…")
+    assert len(fitted.items[0].action.split()) == 10 and fitted.items[0].action.endswith("…")
+
+
+def test_an_over_long_brief_is_regenerated_once_and_the_second_answer_trimmed(repo):
+    for i in range(6):
+        ingest(repo, hour=9 + i * 0.1, north_m=3 * i, duration=600)
+    client = client_for(repo, FakeProvider())
+    facts = client.get("/api/py/brief").json()["facts"]
+    queued = next(j for j in repo._jobs.values() if j["kind"] == "brief")
+    received = facts["today_so_far"]["received"]
+    words = " ".join(["word"] * 30)
+    answer = {"summary": f"Today {received} arrived and {words}.", "items": [], "closing": ""}
+    provider, messages = live_with([answer, answer])
+    jobs.run_job(repo, provider, job_id=queued["id"])
+    assert len(messages.requests) == 2  # rejected for length once, then accepted and trimmed
+    saved = client.get("/api/py/brief").json()["brief"]
+    assert saved["status"] == "ai" and len(saved["items"]["summary"].split()) == 20
+
+
+def test_an_arrivals_jobs_start_in_the_api_and_the_hooks_copy_finds_nothing(repo):
+    repo.upload("voice-notes", "e01/note.webm", b"audio", "audio/webm")
+    body = payload()
+    body.update(voice_transcript=None, voice_note_path="e01/note.webm")
+    provider = FakeProvider()
+    client = client_for(repo, provider)
+    app.dependency_overrides[start_jobs_value] = lambda: True
+    created = client.post("/api/py/submissions", json=body, headers=AUTH).json()
+    # The background task ran after the response: the transcript, then the voice check it queued.
+    statuses = {j["kind"]: j["status"] for j in repo._jobs.values() if j["submission_id"] == created["id"]}
+    assert statuses == {"transcribe": "done", "consistency": "done"} and provider.calls == ["transcribe", "consistency"]
+    # The database hook's POST for the same job is a no-op.
+    again = client.post("/api/py/jobs/run", json={"job_id": created["ai_jobs"][0]["id"]}, headers={"X-Jobs-Secret": "hook-secret"})
+    assert again.json()["status"] == "skipped" and provider.calls == ["transcribe", "consistency"]
+
+
+def test_without_the_flag_jobs_wait_for_the_hook(repo):
+    repo.upload("voice-notes", "e01/note.webm", b"audio", "audio/webm")
+    body = payload()
+    body.update(voice_transcript=None, voice_note_path="e01/note.webm")
+    client = client_for(repo, FakeProvider())
+    app.dependency_overrides[start_jobs_value] = lambda: False
+    created = client.post("/api/py/submissions", json=body, headers=AUTH).json()
+    assert [j["status"] for j in repo._jobs.values() if j["submission_id"] == created["id"]] == ["queued"]
+
+
+def test_start_now_never_raises(repo, monkeypatch):
+    monkeypatch.setattr(repo, "jobs_for", lambda _: (_ for _ in ()).throw(RuntimeError("database down")))
+    assert jobs.start_now(repo, FakeProvider(), "missing", []) == []

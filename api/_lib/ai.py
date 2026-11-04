@@ -223,11 +223,11 @@ Rules:
 - Every number you write must appear in the facts exactly as written there. Do not add, subtract, round or \
 compute new numbers or percentages; when a percentage is needed, use the *_pct field as given.
 - Refer to contributors by their code only (for example E07). Never invent names.
-- items: the contributors that need attention, most urgent first, at most 4. finding is one or two sentences on \
-what the checks found, with numbers from the facts. action is one sentence on what the field supervisor should \
-do next.
-- summary: two sentences on yesterday and on today so far. closing: one sentence on the review queue and the \
-watch list.
+- summary is the headline: one sentence of at most 20 words on what matters most today.
+- items: the contributors that need attention, most urgent first, at most 6. The screen already shows each \
+one's flagged count, area and main check next to the item. finding: one short sentence on why they need \
+attention. action: what the field supervisor should do next, at most 10 words, with no numbers.
+- closing: one short sentence on the review queue and the watch list.
 - Plain, direct language for a busy researcher."""
 
 

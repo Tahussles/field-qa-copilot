@@ -97,8 +97,19 @@ def unknown_numbers(brief: BriefOut, facts_: dict) -> list[str]:
     return sorted({n for text in texts for n in _numbers(text) if n not in allowed})
 
 
-def check(brief: BriefOut, facts_: dict) -> str | None:
-    """Why a brief is unusable, or None."""
+# The "Needs attention" card: one headline sentence, then one row per contributor whose action fits on a line.
+# The row already shows the flagged count, so an action never restates a number.
+HEADLINE_WORDS = 20
+ACTION_WORDS = 10
+
+
+def _words(text: str) -> int:
+    return len(text.split())
+
+
+def check(brief: BriefOut, facts_: dict, lengths: bool = True) -> str | None:
+    """Why a brief is unusable, or None. Numbers and contributors are always strict; lengths only when asked
+    (the first answer: an over-long one is regenerated once, and the regeneration is trimmed by fit)."""
     missing = unknown_numbers(brief, facts_)
     if missing:
         return f"numbers not in the input: {', '.join(missing[:6])}"
@@ -106,7 +117,30 @@ def check(brief: BriefOut, facts_: dict) -> str | None:
     strangers = [i.contributor_code for i in brief.items if i.contributor_code not in known]
     if strangers:
         return f"contributors not in the input: {', '.join(strangers)}"
+    if lengths:
+        if _words(brief.summary) > HEADLINE_WORDS:
+            return f"headline over {HEADLINE_WORDS} words"
+        long = [i.contributor_code for i in brief.items if _words(i.action) > ACTION_WORDS]
+        if long:
+            return f"actions over {ACTION_WORDS} words: {', '.join(long)}"
+        counted = [i.contributor_code for i in brief.items if re.search(r"\d", i.action)]
+        if counted:
+            return f"actions restate numbers the row shows: {', '.join(counted)}"
     return None
+
+
+def _cut(text: str, limit: int) -> str:
+    words = text.split()
+    return text if len(words) <= limit else " ".join(words[:limit]).rstrip(",;:.") + "…"
+
+
+def fit(brief: BriefOut) -> BriefOut:
+    """The headline and actions cut at a word boundary to the card's limits (a regenerated brief that is still
+    long, or one written before the limits)."""
+    return brief.model_copy(update={
+        "summary": _cut(brief.summary, HEADLINE_WORDS),
+        "items": [i.model_copy(update={"action": _cut(i.action, ACTION_WORDS)}) for i in brief.items],
+    })
 
 
 def markdown(brief: BriefOut) -> str:
