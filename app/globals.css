@@ -124,8 +124,9 @@ html[data-theme="linear"] {
   --color-ink: #f1f2f4;
   --color-ink-2: #d4d6da;
   --color-body: #cfd2d6;
-  --color-muted: #8a8f98;
-  --color-faint: #5b6069;
+  /* muted, faint and crit lifted in round 12 so every text run passes WCAG AA (scripts/contrast.mjs). */
+  --color-muted: #9298a1;
+  --color-faint: #80868f;
   --color-line: rgb(255 255 255 / 0.07);
   --color-line-strong: rgb(255 255 255 / 0.13);
   --color-accent: #7c84f8;
@@ -133,7 +134,7 @@ html[data-theme="linear"] {
   --color-accent-soft: rgb(124 132 248 / 0.14);
   --color-ok: #4cb782;
   --color-warn: #f0a23b;
-  --color-crit: #eb5a57;
+  --color-crit: #ef6663;
   --color-pass: #8a8f98;
   --color-overlay: #ffffff;
   --color-contrast: #ffffff;
@@ -145,7 +146,7 @@ html[data-theme="linear"] {
   --font-display: var(--font-inter-tight), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-jetbrains), ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  --radius-panel: 10px;
+  --radius-panel: 12px;
 
   --ambient:
     radial-gradient(40% 35% at 12% 0%, rgb(124 132 248 / 0.16), transparent 70%),
@@ -209,6 +210,11 @@ html,
 body {
   background: var(--color-bg);
   color: var(--color-ink);
+}
+
+/* Focused or scrolled-to content stays clear of the queue's floating action bar (QueueView sets the height). */
+html {
+  scroll-padding-bottom: calc(var(--action-bar-h, 0px) + 24px);
 }
 
 body {
@@ -332,9 +338,11 @@ mark {
     box-shadow: 0 0 0 1px rgb(255 255 255 / 0.15) inset;
   }
 
+  /* Section cards (docs/decisions.md): 1px border, 12px radius, a tinted header strip with the
+     title and its controls, 16px padding; <Section> in components/ui/Disclosure.tsx. */
   .panel {
     background: var(--color-panel);
-    border: 1px solid var(--color-line);
+    border: 1px solid var(--color-line-strong);
     border-radius: var(--radius-panel);
   }
   /* Panel header: title left, caption or action right, hairline below. */
@@ -343,7 +351,10 @@ mark {
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    padding: 12px 16px;
+    min-height: 44px;
+    padding: 10px 16px;
+    background: color-mix(in srgb, var(--color-contrast) 2.5%, transparent);
+    border-radius: calc(var(--radius-panel) - 1px) calc(var(--radius-panel) - 1px) 0 0;
     border-bottom: 1px solid var(--color-line);
   }
   .ph h2 {
@@ -353,6 +364,147 @@ mark {
   .ph-caption {
     font-size: 12px;
     color: var(--color-muted);
+  }
+  .section[data-open="false"] > .ph {
+    border-bottom-color: transparent;
+    border-radius: calc(var(--radius-panel) - 1px);
+  }
+
+  /* Disclosure: a real button, a chevron that turns, details whose height animates (reduced motion
+     turns the animation off, below). */
+  .disclosure {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    max-width: 100%;
+    padding: 0;
+    font: inherit;
+    color: inherit;
+    text-align: left;
+    background: none;
+    border: 0;
+    cursor: pointer;
+  }
+  .chev {
+    color: var(--color-muted);
+    transition: transform 0.2s ease;
+  }
+  .disclosure:hover .chev {
+    color: var(--color-ink);
+  }
+  [aria-expanded="true"] > .chev {
+    transform: rotate(90deg);
+  }
+  .reveal {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 0.22s ease;
+  }
+  .reveal[data-open="true"] {
+    grid-template-rows: 1fr;
+  }
+  .reveal-inner {
+    min-height: 0;
+    overflow: hidden;
+  }
+  .reveal[data-open="true"] > .reveal-inner {
+    overflow: clip;
+    overflow-clip-margin: 6px;
+  }
+
+  /* How a finding was decided: Rule or AI, the method in a tooltip. */
+  .method-chip {
+    display: inline-flex;
+    align-items: center;
+    flex: none;
+    padding: 0 6px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 500;
+    line-height: 16px;
+    letter-spacing: 0.04em;
+    color: var(--color-muted);
+    border: 1px solid var(--color-line-strong);
+    border-radius: 4px;
+    cursor: help;
+    white-space: nowrap;
+  }
+  .method-ai {
+    color: var(--color-accent-ink);
+    border-color: color-mix(in srgb, var(--color-accent) 45%, transparent);
+  }
+  .tooltip {
+    max-width: min(300px, calc(100vw - 16px));
+    padding: 8px 10px;
+    border-radius: 10px;
+    font-family: var(--font-sans);
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 1.45;
+    letter-spacing: normal;
+    text-transform: none;
+    color: var(--color-ink-2);
+  }
+
+  /* One fired check in the review queue: a one-line finding that opens to its evidence. */
+  .ev-row {
+    position: relative;
+    border: 1px solid var(--color-line);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--color-contrast) 1.5%, transparent);
+  }
+  .ev-row::before {
+    content: "";
+    position: absolute;
+    left: -1px;
+    top: 10px;
+    bottom: 10px;
+    width: 2px;
+    border-radius: 2px;
+    background: var(--color-warn);
+  }
+  .ev-row.ev-crit::before {
+    background: var(--color-crit);
+  }
+  .ev-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 12px;
+  }
+  .ev-head > h3 {
+    flex: 1;
+    min-width: 0;
+    font-size: 13px;
+    font-weight: 400;
+  }
+  .ev-head .disclosure {
+    width: 100%;
+  }
+  .ev-title {
+    flex: none;
+    font-weight: 600;
+    color: var(--color-ink);
+  }
+  .ev-finding {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--color-ink-2);
+  }
+  .ev-weight {
+    flex: none;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--color-faint);
+  }
+  .ev-body {
+    padding: 0 14px 12px 34px;
+  }
+  .ev-body p {
+    margin: 0 0 6px;
+    color: var(--color-body);
   }
 
   .btn {
