@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 
 import { Recorder, type VoiceNote } from "@/components/collect/Recorder";
 import { ResultScreen } from "@/components/collect/ResultScreen";
+import { Section } from "@/components/ui/Disclosure";
 import { Glass } from "@/components/ui/Glass";
 import { passcodeStore } from "@/lib/api";
 import { SOURCE_LABEL } from "@/lib/checks";
@@ -270,14 +271,11 @@ function ContributorPicker({ session, current, onChoose, onCancel }: {
     { title: "Participants", people: session.contributors.filter((c) => c.kind === "participant") },
   ];
   return (
-    <section className="panel" aria-label="Who is collecting">
-      <div className="ph">
-        <h2>Who is collecting on this phone?</h2>
-        {onCancel && <button type="button" onClick={onCancel} className="btn btn-sm btn-ghost">Cancel</button>}
-      </div>
+    <Section title="Who is collecting on this phone?" aria-label="Who is collecting" bodyClassName=""
+      actions={onCancel && <button type="button" onClick={onCancel} className="btn btn-sm btn-ghost">Cancel</button>}>
       {current && (
         <p className="px-4 pt-3 text-[12.5px] text-warn">
-          Switching contributor on the same phone is a real signal: the shared-device check will see two accounts on this phone.
+          Switching contributor on this phone is a real signal: shared device will see two accounts.
         </p>
       )}
       {groups.map((g) => (
@@ -294,7 +292,7 @@ function ContributorPicker({ session, current, onChoose, onCancel }: {
           </div>
         </div>
       ))}
-    </section>
+    </Section>
   );
 }
 
@@ -373,8 +371,7 @@ function CollectForm({ contributor, session, device, onSaved }: {
 
   return (
     <form onSubmit={submit} className="flex flex-col gap-4" aria-label="Interview">
-      <section className="panel p-4">
-        <h2 className="mb-2.5 text-[14px] font-semibold">Main water source</h2>
+      <Section title="Main water source">
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           {Object.entries(SOURCE_LABEL).map(([key, label]) => (
             <button key={key} type="button" onClick={() => setSource(key)} aria-pressed={source === key} data-testid={`source-${key}`}
@@ -383,11 +380,9 @@ function CollectForm({ contributor, session, device, onSaved }: {
             </button>
           ))}
         </div>
-      </section>
+      </Section>
 
-      <section className="panel p-4">
-        <h2 className="mb-1 text-[14px] font-semibold">Satisfaction</h2>
-        <p className="mb-2.5 text-[12px] text-muted">1 very dissatisfied · 5 very satisfied</p>
+      <Section title="Satisfaction" summary="1 very dissatisfied · 5 very satisfied">
         <div className="flex flex-col gap-2">
           {ITEMS.map((item, i) => (
             <div key={item} className="flex items-center gap-2">
@@ -404,25 +399,18 @@ function CollectForm({ contributor, session, device, onSaved }: {
             </div>
           ))}
         </div>
-      </section>
+      </Section>
 
-      <section className="panel p-4">
-        <label className="flex flex-col gap-1.5">
-          <span className="text-[14px] font-semibold">Biggest challenge getting water</span>
-          <textarea rows={3} value={openText} onChange={(e) => setOpenText(e.target.value)} className="input min-h-20" placeholder="In the respondent's words" />
-        </label>
-      </section>
+      <Section title="Biggest challenge getting water">
+        <textarea rows={3} value={openText} onChange={(e) => setOpenText(e.target.value)} className="input min-h-20"
+          placeholder="In the respondent's words" aria-label="Biggest challenge getting water" />
+      </Section>
 
-      <section className="panel p-4">
-        <h2 className="mb-2.5 text-[14px] font-semibold">Voice note</h2>
+      <Section title="Voice note">
         <Recorder note={note} onChange={setNote} />
-      </section>
+      </Section>
 
-      <section className="panel p-4">
-        <h2 className="mb-1 text-[14px] font-semibold">Location</h2>
-        <p className="mb-2.5 text-[12px] text-muted">
-          {useGps ? "Your phone's real GPS and its accuracy. Outside Kisumu, the outside-area check will fire." : "Simulated location (you're not in Kisumu)."}
-        </p>
+      <Section title="Location" summary={useGps ? "Real GPS: outside Kisumu, outside area fires" : "Simulated: you're not in Kisumu"}>
         {!useGps && (
           <div className="grid grid-cols-2 gap-1.5" role="radiogroup" aria-label="Simulated location">
             {([["new", "A new household in my area"], ["same", "Same spot as my last interview"]] as const).map(([key, label]) => (
@@ -434,25 +422,25 @@ function CollectForm({ contributor, session, device, onSaved }: {
             ))}
           </div>
         )}
-        <label className="mt-3 flex items-center gap-2 text-[13px]">
+        <label className={`${useGps ? "" : "mt-3"} flex items-center gap-2 text-[13px]`}>
           <input type="checkbox" checked={useGps} onChange={(e) => setUseGps(e.target.checked)} data-testid="real-gps" /> Use my real GPS
         </label>
-      </section>
+      </Section>
 
-      <section className="panel p-4">
-        <h2 className="mb-1 text-[14px] font-semibold">Interview length</h2>
-        <p className="mb-2.5 text-[12px] text-muted">A demo control: real interviews take ~25 minutes, a demo takes one.</p>
-        <div className="flex items-center gap-3">
-          <input type="number" min={1} max={180} value={minutes} onChange={(e) => setMinutes(Number(e.target.value))} disabled={realTime}
-            className="input w-24 font-mono" aria-label="Interview length in minutes" />
-          <span className="text-[13px] text-muted">minutes</span>
+      <DemoControls>
+        <div>
+          <p className="text-[13px] font-medium text-ink">Interview length</p>
+          <p className="mb-2 text-[12px] text-muted">Real interviews take about 25 minutes; a demo takes one.</p>
+          <div className="flex items-center gap-3">
+            <input type="number" min={1} max={180} value={minutes} onChange={(e) => setMinutes(Number(e.target.value))} disabled={realTime}
+              className="input w-24 font-mono" aria-label="Interview length in minutes" />
+            <span className="text-[13px] text-muted">minutes</span>
+          </div>
+          <label className="mt-2 flex items-center gap-2 text-[13px]">
+            <input type="checkbox" checked={realTime} onChange={(e) => setRealTime(e.target.checked)} /> Use real elapsed time (since this form opened)
+          </label>
         </div>
-        <label className="mt-3 flex items-center gap-2 text-[13px]">
-          <input type="checkbox" checked={realTime} onChange={(e) => setRealTime(e.target.checked)} /> Use real elapsed time (since this form opened)
-        </label>
-      </section>
-
-      <DemoClock />
+      </DemoControls>
 
       {error && <p className="text-[13px] text-crit" role="alert">{error}</p>}
       <button type="submit" disabled={saving} className="btn btn-primary min-h-12 justify-center text-[15px]" data-testid="submit">
@@ -462,8 +450,11 @@ function CollectForm({ contributor, session, device, onSaved }: {
   );
 }
 
-/** Hidden demo controls: the phone's clock, set back 3 h as a fabricator might (clock_skew fires on the next sync). */
-function DemoClock() {
+/**
+ * Demo controls, closed unless the clock is off: the interview length (a demo takes a minute, not 25), and the
+ * phone's clock set back 3 h as a fabricator might (clock_skew fires on the next sync).
+ */
+function DemoControls({ children }: { children: React.ReactNode }) {
   const [off, setOff] = useState(false);
   const [shown, setShown] = useState("");
   useEffect(() => {
@@ -476,9 +467,11 @@ function DemoClock() {
     return () => window.clearInterval(timer);
   }, []);
   return (
-    <details className="panel p-4" open={off} data-testid="demo-controls">
-      <summary className="cursor-pointer text-[14px] font-semibold">Demo controls</summary>
-      <label className="mt-3 flex items-center gap-2 text-[13px]">
+    <Section title="Demo controls" collapsible defaultOpen={false} storeKey="collect-demo"
+      summary={off ? "phone clock 3 h behind" : "interview length, phone clock"} data-testid="demo-controls" bodyClassName="flex flex-col gap-4 p-4">
+      {children}
+      <div>
+      <label className="flex items-center gap-2 text-[13px]">
         <input
           type="checkbox"
           checked={off}
@@ -495,16 +488,14 @@ function DemoClock() {
         The phone&apos;s clock reads <span className="font-mono text-ink-2">{shown}</span>
         {off ? ", 3 hours behind: interviews and syncs report that time, and the clock-skew check fires." : "."}
       </p>
-    </details>
+      </div>
+    </Section>
   );
 }
 
 function History({ items, tz, onOpen }: { items: OutboxItem[]; tz: string; onOpen: (id: string) => void }) {
   return (
-    <section className="panel" aria-label="This phone's interviews">
-      <div className="ph">
-        <h2>This phone&apos;s interviews</h2>
-      </div>
+    <Section title="This phone's interviews" aria-label="This phone's interviews" bodyClassName="">
       <ul>
         {[...items].reverse().slice(0, 8).map((i) => (
           <li key={i.client_submission_id}>
@@ -517,6 +508,6 @@ function History({ items, tz, onOpen }: { items: OutboxItem[]; tz: string; onOpe
           </li>
         ))}
       </ul>
-    </section>
+    </Section>
   );
 }

@@ -6,6 +6,7 @@ import { useMemo, useState, type FormEvent } from "react";
 import { useAppData } from "@/components/app/AppData";
 import { useWithPasscode } from "@/components/app/Passcode";
 import { useToast } from "@/components/app/Toasts";
+import { Chevron, Reveal, Section } from "@/components/ui/Disclosure";
 import { api } from "@/lib/api";
 import { CHECK_TITLE, SOURCE_LABEL } from "@/lib/checks";
 import { fmtScore, shortId } from "@/lib/format";
@@ -124,18 +125,17 @@ export function TestSubmission() {
   // Checked whenever all 8 match, so the Speeder preset shows up here too.
   const sameAll = form.satisfaction.every((v) => v === form.satisfaction[0]);
   const set = <K extends keyof Form>(key: K, value: Form[K]) => setForm((f) => ({ ...f, [key]: value }));
+  const [adjust, setAdjust] = useState(false);
 
   return (
-    <section className="panel" aria-label="Test submission">
-      <div className="ph">
-        <h2>Send a test submission</h2>
-        <span className="ph-caption">Runs through the same checks as the real data</span>
-      </div>
-      <p className="max-w-[76ch] px-4 pt-3.5 text-muted">
-        A backup for the demo: this posts exactly what a phone would (source <span className="font-mono">live</span>), scores it with
-        the engine, and shows up on the map and in the queue within a second. Try a preset, or fake one yourself.
+    <div className="flex flex-col gap-4">
+    <Section title="Send a test submission" aria-label="Test submission" summary="The same checks as the real data" bodyClassName="">
+      <p className="max-w-[76ch] px-4 pt-4 text-muted">
+        A demo backup: it posts what a phone would (source <span className="font-mono">live</span>) and shows on the map and in the
+        queue within a second.
       </p>
-      <div className="flex flex-wrap gap-2 px-4 pt-3.5">
+      <div className="flex flex-wrap items-center gap-2 px-4 pt-3.5">
+        <span className="text-[12px] font-medium text-muted">Presets</span>
         {PRESETS.map((p) => (
           <button key={p.name} type="button" onClick={() => setForm((f) => p.apply(f))} className="btn btn-sm">
             {p.name} <span className="text-faint">· {p.note}</span>
@@ -173,8 +173,12 @@ export function TestSubmission() {
           />
           Answer all 8 satisfaction questions with the same score
         </label>
-        <details className="col-span-full -mt-1.5 text-[12px] text-muted">
-          <summary className="w-max cursor-pointer select-none hover:text-ink">Adjust answers</summary>
+        <div className="col-span-full -mt-1.5 text-[12px] text-muted">
+          <button type="button" className="disclosure hover:text-ink" aria-expanded={adjust} aria-controls="adjust-answers" onClick={() => setAdjust(!adjust)}>
+            <Chevron />
+            Adjust answers
+          </button>
+          <Reveal open={adjust} id="adjust-answers">
           <div className="mt-2 grid grid-cols-4 gap-2 sm:grid-cols-8">
             {form.satisfaction.map((v, i) => (
               <label key={i} className="flex flex-col gap-1 text-[11px] font-normal text-faint">
@@ -184,7 +188,8 @@ export function TestSubmission() {
               </label>
             ))}
           </div>
-        </details>
+          </Reveal>
+        </div>
         <label className="col-span-full flex items-center gap-2 text-ink">
           <input type="checkbox" checked={form.nearLast} onChange={(e) => set("nearLast", e.target.checked)} />
           Place it at {form.code}&apos;s last interview spot {last ? "" : "(no previous location)"}
@@ -196,12 +201,16 @@ export function TestSubmission() {
         </div>
       </form>
 
-      <div className="px-4 pb-4" aria-live="polite">
+    </Section>
+
+      <div aria-live="polite">
         {result && (
-          <div className={`card ${result.flagged ? "card-crit" : ""}`}>
-            <h3>
-              {shortId(result.id)} · score {fmtScore(result.score)} · {result.flagged ? "sent to the review queue" : "passed"}
-            </h3>
+          <Section
+            title={`Result · ${shortId(result.id)}`}
+            aria-label="Result"
+            summary={`score ${fmtScore(result.score)} · ${result.flagged ? "sent to the review queue" : "passed"}`}
+            bodyClassName="flex flex-col items-start gap-3 p-4"
+          >
             <p>
               {result.fired.length
                 ? `Checks that fired: ${result.fired.map((f) => `${CHECK_TITLE[f.key]} (+${f.weight})`).join(", ")}.`
@@ -213,10 +222,10 @@ export function TestSubmission() {
             <Link href={`/app/queue/${result.id}?status=all`} className="btn btn-sm">
               Open it in the queue
             </Link>
-          </div>
+          </Section>
         )}
       </div>
-    </section>
+    </div>
   );
 }
 

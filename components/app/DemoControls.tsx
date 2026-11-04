@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 
 import { DemoScript } from "@/components/app/DemoScript";
+import { ThemeToggle } from "@/components/app/ThemeToggle";
 import { useWithPasscode } from "@/components/app/Passcode";
 import { useToast } from "@/components/app/Toasts";
 import { Glass } from "@/components/ui/Glass";
@@ -291,7 +292,8 @@ function DemoRunner({ open, onClose }: { open: boolean; onClose: () => void }) {
           ×
         </button>
       </div>
-      <div className="mt-2.5 inline-flex rounded-md border border-line p-0.5" role="tablist" aria-label="Demo panel">
+      <div className="mt-2.5 flex items-center gap-3">
+      <div className="inline-flex rounded-md border border-line p-0.5" role="tablist" aria-label="Demo panel">
         {(["controls", "script"] as const).map((t) => (
           <button
             key={t}
@@ -304,6 +306,11 @@ function DemoRunner({ open, onClose }: { open: boolean; onClose: () => void }) {
             {t === "controls" ? "Controls" : "Script"}
           </button>
         ))}
+      </div>
+        {/* Phones have no sidebar, so the theme toggle is here too. */}
+        <div className="ml-auto">
+          <ThemeToggle testId="theme-toggle-panel" />
+        </div>
       </div>
 
       {tab === "script" ? (

@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { Section } from "@/components/ui/Disclosure";
+import { Tip } from "@/components/ui/Tip";
 import { api } from "@/lib/api";
 import { CHECK_DESCRIPTION, CHECK_ORDER, CHECK_TITLE, COLORS } from "@/lib/checks";
 import { fmtPct } from "@/lib/format";
@@ -29,7 +31,7 @@ function PctBar({ value, good, testId }: { value: number | null | undefined; goo
   const color = value == null ? undefined : v >= good ? COLORS.ok : v >= good / 2 ? COLORS.warn : COLORS.crit;
   return (
     <div className="flex items-center gap-2">
-      <span className="w-10 font-mono tabular-nums" data-testid={testId}>
+      <span className="min-w-10 font-mono tabular-nums" data-testid={testId}>
         {value == null ? "—" : `${Math.round(v * 100)}%`}
       </span>
       <div className="bar max-w-[96px]" aria-hidden>
@@ -81,24 +83,22 @@ export function Detectors() {
   return (
     <div className="flex flex-col gap-5">
       {error && <p className="panel px-4 py-3 text-[13px] text-crit">{error}</p>}
-      <section aria-label="Tune the detectors" className="panel overflow-hidden" aria-busy={pending}>
-        <div className="ph">
-          <h2>Tune the detectors</h2>
-          <span className="flex items-center gap-3">
-            <span className="ph-caption">
-              {result ? `${result.combined.fabricated} planted fakes among ${result.combined.submissions} submissions` : "Scoring…"}
-            </span>
-            <button type="button" disabled={!changed} onClick={() => setKnobs(DEFAULTS)} className="btn btn-sm btn-ghost">
-              Reset
-            </button>
-          </span>
-        </div>
-        <p className="max-w-[76ch] px-4 pt-3.5 text-muted">
-          Every synthetic submission is labelled genuine or fabricated, because the fraud was planted on purpose. That lets each check
-          be scored. A stricter check catches more fakes but spends more reviewer time on genuine interviews. Nothing here changes the
-          live queue.
+      <Section
+        title="Tune the detectors"
+        aria-label="Tune the detectors"
+        summary={result ? `${result.combined.fabricated} planted fakes among ${result.combined.submissions.toLocaleString("en-US")} submissions` : "Scoring…"}
+        actions={
+          <button type="button" disabled={!changed} onClick={() => setKnobs(DEFAULTS)} className="btn btn-sm btn-ghost">
+            Reset
+          </button>
+        }
+        bodyClassName="flex flex-col gap-4 p-4"
+      >
+        <p className="max-w-[76ch] text-muted" aria-busy={pending}>
+          Drag a check stricter or looser: these numbers are scored against planted fraud in the synthetic wave. Nothing here changes
+          the live queue.
         </p>
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-[18px] p-4">
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-4">
           {SLIDERS.map((s) => (
             <div key={s.key}>
               <label htmlFor={`slider-${s.key}`} className="mb-1.5 flex justify-between text-[13px] font-medium">
@@ -121,7 +121,66 @@ export function Detectors() {
             </div>
           ))}
         </div>
-        <div className="overflow-x-auto border-t border-line">
+        {/* The combined result: what reaches the review queue at this threshold. */}
+        <div
+          className={`grid grid-cols-3 gap-px overflow-hidden rounded-[10px] border border-line-strong bg-line-strong ${pending ? "opacity-60 transition-opacity" : ""}`}
+          data-testid="combined"
+        >
+          {[
+            { label: `flagged at score ≥ ${knobs.threshold}`, value: <span data-testid="combined-flagged">{result?.combined.flagged ?? "—"}</span> },
+            {
+              label: (
+                <Tip content="How often a flag is a planted fake." className="cursor-help underline decoration-dotted underline-offset-2">
+                  precision
+                </Tip>
+              ),
+              value: <PctBar value={result?.combined.precision} good={0.8} testId="combined-precision" />,
+            },
+            {
+              label: (
+                <Tip content="How many planted fakes are flagged. Single checks have low recall on purpose: each targets one kind of fraud, and the combined score fills the queue." className="cursor-help underline decoration-dotted underline-offset-2">
+                  recall
+                </Tip>
+              ),
+              value: <PctBar value={result?.combined.recall} good={0.6} testId="combined-recall" />,
+            },
+          ].map((c, i) => (
+            <div key={i} className="bg-panel px-4 py-3">
+              <div className="font-mono text-[20px] font-medium tabular-nums">{c.value}</div>
+              <div className="text-[12px] text-muted">{c.label}</div>
+            </div>
+          ))}
+        </div>
+      </Section>
+
+      <Section
+        title="Precision and recall by review threshold"
+        aria-label="Precision and recall by threshold"
+        actions={
+          <span className="flex items-center gap-4 text-[12px] text-muted">
+            <span className="flex items-center gap-1.5">
+              <span className="h-0.5 w-4 rounded" style={{ background: COLORS.accent }} /> precision
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="h-0.5 w-4 rounded" style={{ background: COLORS.ok }} /> recall
+            </span>
+          </span>
+        }
+      >
+        <SweepChart sweep={result?.sweep ?? []} threshold={knobs.threshold} />
+      </Section>
+
+      <Section
+        title="Per-check breakdown"
+        aria-label="Per-check breakdown"
+        summary={result ? `${CHECK_ORDER.filter((k) => (result.per_check[k]?.fires_on ?? 0) > 0).length} of ${CHECK_ORDER.length} checks fire on this wave` : null}
+        collapsible
+        defaultOpen={false}
+        storeKey="detectors-breakdown"
+        bodyClassName=""
+        data-testid="per-check"
+      >
+        <div className="overflow-x-auto">
           <table className="table min-w-[720px]" data-testid="detector-table">
             <thead>
               <tr>
@@ -151,47 +210,14 @@ export function Detectors() {
                   </tr>
                 );
               })}
-              <tr className="bg-accent/[0.07] font-medium">
-                <td>Combined score ≥ {knobs.threshold}</td>
-                <td className="text-muted">What reaches the review queue</td>
-                <td className="font-mono tabular-nums" data-testid="combined-flagged">
-                  {result?.combined.flagged ?? "—"}
-                </td>
-                <td>
-                  <PctBar value={result?.combined.precision} good={0.8} testId="combined-precision" />
-                </td>
-                <td>
-                  <PctBar value={result?.combined.recall} good={0.6} />
-                </td>
-                <td />
-              </tr>
             </tbody>
           </table>
         </div>
-        <p className="px-4 py-3.5 text-[12px] text-faint">
-          Precision: how often a flag is right. Recall: how many planted fakes it catches. Single checks have low recall on purpose,
-          since each targets one kind of fraud; the combined score fills the queue. Ground truth exists because the data is synthetic;
-          these numbers are scored against planted fraud. Outside area never fires here: every synthetic interview is inside its
-          area, so it has no precision to show; it is for live phones.
+        <p className="border-t border-line px-4 py-3 text-[12px] text-faint">
+          Outside area and clock skew never fire here: synthetic interviews stay inside their areas and carry no phone clock; they are
+          for live phones.
         </p>
-      </section>
-
-      <section aria-label="Precision and recall by threshold" className="panel">
-        <div className="ph">
-          <h2>Precision and recall by review threshold</h2>
-          <span className="flex items-center gap-4 text-[12px] text-muted">
-            <span className="flex items-center gap-1.5">
-              <span className="h-0.5 w-4 rounded" style={{ background: COLORS.accent }} /> precision
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="h-0.5 w-4 rounded" style={{ background: COLORS.ok }} /> recall
-            </span>
-          </span>
-        </div>
-        <div className="px-4 py-3.5">
-          <SweepChart sweep={result?.sweep ?? []} threshold={knobs.threshold} />
-        </div>
-      </section>
+      </Section>
 
       <HardMode />
     </div>
@@ -230,17 +256,23 @@ function HardMode() {
     : [];
   const types = data ? Object.keys(data.planted_per_wave) : [];
   return (
-    <section aria-label="Hard mode" className="panel overflow-hidden" data-testid="hard-mode">
-      <div className="ph">
-        <h2>Hard mode: rules only vs rules + AI</h2>
-        <span className="ph-caption">
-          {data ? `seeds ${data.seeds.join(", ")} · ${data.model} · ${data.calls.total.toLocaleString("en-US")} model calls` : "Loading…"}
-        </span>
-      </div>
+    <Section
+      title="Hard mode: rules vs rules + AI"
+      aria-label="Hard mode"
+      summary={
+        data
+          ? `recall ${fmtPct(data.rules.combined.recall)} → ${fmtPct(data.rules_ai.combined.recall)} with AI · seeds ${data.seeds.join(", ")}`
+          : "Loading…"
+      }
+      collapsible
+      defaultOpen={false}
+      storeKey="detectors-hard"
+      bodyClassName=""
+      data-testid="hard-mode"
+    >
       <p className="max-w-[80ch] px-4 pt-3.5 text-muted">
-        Fraud written to dodge the rules: reworded copies, contradictions that mention the home pipe first, and a curbstoner who
-        spreads fakes 60 to 120 m apart with 20+ minute gaps. Same checks, scored once with the rules alone and once with the
-        model&apos;s verdicts as inputs. Separate seeds, never the demo wave.
+        Fraud written to dodge the rules (reworded copies, subtle contradictions, a careful curbstoner), scored with the rules alone and
+        with the model&apos;s verdicts as inputs, on separate seeds.
       </p>
       {data && (
         <div className="grid gap-x-6 gap-y-4 p-4 lg:grid-cols-2">
@@ -303,13 +335,12 @@ function HardMode() {
           <p className="text-faint">
             {data.rules_only_run
               ? "Rules-only run: no model verdicts yet, so both columns match."
-              : `${data.calls.verdicts.toLocaleString("en-US")} verdicts, ${data.calls.failed} failed calls, median ${data.calls.median_latency_ms} ms per call; model cost $${data.cost_usd.all_cached_calls.toFixed(2)}.`}{" "}
+              : `${data.calls.verdicts.toLocaleString("en-US")} verdicts from ${data.model}, ${data.calls.failed} failed calls, median ${data.calls.median_latency_ms} ms per call; model cost $${data.cost_usd.all_cached_calls.toFixed(2)}.`}{" "}
             A check&apos;s target fraud: contradictions for voice vs form; copies, bursts and the device ring for copied text.
-            Scored against planted labels, aggregates only.
           </p>
         </div>
       )}
-    </section>
+    </Section>
   );
 }
 
@@ -326,7 +357,7 @@ function SweepChart({ sweep, threshold }: { sweep: NonNullable<EvaluateResult["s
       .join(" ");
   const at = useMemo(() => sweep.find((s) => Math.abs(s.threshold - threshold) < 1e-6), [sweep, threshold]);
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" role="img"
+    <svg viewBox={`0 0 ${W} ${H}`} className="mx-auto h-auto w-full max-w-[860px]" role="img"
       aria-label={at ? `At threshold ${threshold}: precision ${fmtPct(at.precision)}, recall ${fmtPct(at.recall)}` : "Precision and recall chart"}>
       {[0, 0.25, 0.5, 0.75, 1].map((v) => (
         <g key={v}>

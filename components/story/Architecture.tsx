@@ -1,30 +1,34 @@
 "use client";
 
 import Link from "next/link";
+import { useId, useState } from "react";
 
+import { Chevron, Reveal } from "@/components/ui/Disclosure";
 import { Glass } from "@/components/ui/Glass";
 import { msec, pct, secs, useStory, type Story } from "@/lib/story";
 
-type Box = { title: string; body: string; num: string; label: string };
+type Note = { title: string; body: string };
+type Box = { title: string; body: string; num: string; label: string; notes?: Note[] };
 
 function flow(s: Story | null): { title: string; boxes: Box[] }[] {
   const m = s?.measured;
   const h = s?.headline?.held_out;
+  const [rulesFirst, aiInput, corroboration, twoCall] = callouts(s);
   return [
     {
       title: "Ingest: the rules' result before the phone screen changes",
       boxes: [
         { title: "Phone · /collect", body: "Offline-first: every interview goes to an IndexedDB outbox first; a retry reuses its client id.", num: secs(m?.phone.rules_s), label: "rules result after submit" },
         { title: "FastAPI on Vercel", body: "One Python 3.12 function in Montréal (yul1), next to the database.", num: msec(m?.ingest.p50_ms), label: `ingest p50 · p95 ${msec(m?.ingest.p95_ms)}` },
-        { title: "Supabase Postgres", body: "ingest_begin leases every affected contributor and device and inserts idempotently; ingest_commit writes fenced.", num: msec(m?.ingest.api_p50_ms), label: "inside the API, p50" },
-        { title: "Python engine", body: "Ten deterministic checks; every result carries evidence and the engine version.", num: pct(h?.recall), label: "held-out recall" },
+        { title: "Supabase Postgres", body: "Two calls: a leased, idempotent insert, then a fenced commit.", num: msec(m?.ingest.api_p50_ms), label: "inside the API, p50", notes: [twoCall] },
+        { title: "Python engine", body: "Ten deterministic checks, each with its evidence and the engine version.", num: pct(h?.recall), label: "held-out recall", notes: [rulesFirst, corroboration] },
       ],
     },
     {
       title: "Model work: queued after the commit, never awaited",
       boxes: [
         { title: "ai_jobs", body: "The database posts each new job to the API (pg_net); a cron sweep re-sends a lost one after 30 s.", num: String(s?.spend_now?.all_time_jobs ?? m?.spend.jobs ?? "…"), label: "jobs logged with their cost" },
-        { title: "ElevenLabs · Claude", body: "Scribe transcribes, a Haiku-class model judges meaning, a Sonnet-class model writes the brief.", num: secs(m?.phone.verdict_s), label: `verdict after submit · transcript ${secs(m?.phone.transcript_s)}` },
+        { title: "ElevenLabs · Claude", body: "Scribe transcribes, a Haiku-class model judges meaning, a Sonnet-class model writes the brief.", num: secs(m?.phone.verdict_s), label: `verdict after submit · transcript ${secs(m?.phone.transcript_s)}`, notes: [aiInput] },
         { title: "Realtime", body: "A verdict lands as an input; the submission is rescored on the same leased path.", num: msec(m?.realtime?.p50_ms), label: "insert to screen, p50" },
         { title: "Dashboard", body: "Refreshes on events; polls every 3 s only while the socket is down.", num: pct(h?.precision), label: "of flags are fabricated" },
       ],
@@ -32,7 +36,7 @@ function flow(s: Story | null): { title: string; boxes: Box[] }[] {
   ];
 }
 
-function callouts(s: Story | null) {
+function callouts(s: Story | null): Note[] {
   const r = s?.hard?.rules.combined;
   const ra = s?.hard?.rules_ai.combined;
   return [
@@ -52,7 +56,36 @@ function callouts(s: Story | null) {
   ];
 }
 
-/** /architecture: the system on one screen, each box with one measured number, and the four trade-offs. */
+/** One box: what it does in a line, its measured number, and its trade-offs behind a note. */
+function BoxCard({ box }: { box: Box }) {
+  return (
+    <div className="panel flex flex-col p-4">
+      <h3 className="text-[14px] font-semibold">{box.title}</h3>
+      <p className="mt-1.5 flex-1 text-[12.5px] leading-snug text-muted">{box.body}</p>
+      <p className="mt-3 font-mono text-[22px] text-ink">{box.num}</p>
+      <p className="text-[11.5px] text-faint">{box.label}</p>
+      {box.notes?.map((note) => <BoxNote key={note.title} note={note} />)}
+    </div>
+  );
+}
+
+function BoxNote({ note }: { note: Note }) {
+  const id = useId();
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mt-2.5 border-t border-line pt-2">
+      <button type="button" className="disclosure text-[12px] text-accent-ink" aria-expanded={open} aria-controls={id} onClick={() => setOpen(!open)}>
+        <Chevron />
+        Trade-off: {note.title}
+      </button>
+      <Reveal open={open} id={id}>
+        <p className="pt-1.5 pl-[22px] text-[12px] leading-snug text-ink-2">{note.body}</p>
+      </Reveal>
+    </div>
+  );
+}
+
+/** /architecture: the system on one screen, each box with one measured number and its trade-offs as notes. */
 export function Architecture() {
   const { story, error } = useStory();
   const m = story?.measured;
@@ -74,8 +107,8 @@ export function Architecture() {
         <section className="mt-10">
           <h1 className="text-[30px] font-semibold tracking-tight">How it works</h1>
           <p className="mt-2 max-w-[70ch] text-muted">
-            A phone syncs an interview; the rules score it at once; model work follows without holding anything up; every screen
-            updates as it lands.
+            The rules score an interview the moment it syncs; model work follows without holding anything up. Open a box&apos;s note
+            for its trade-off.
           </p>
         </section>
 
@@ -88,12 +121,7 @@ export function Architecture() {
               <div className="grid items-stretch gap-2 md:grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr]">
                 {row.boxes.map((box, i) => (
                   <div key={box.title} className="contents">
-                    <div className="panel flex flex-col p-4">
-                      <h3 className="text-[14px] font-semibold">{box.title}</h3>
-                      <p className="mt-1.5 flex-1 text-[12.5px] leading-snug text-muted">{box.body}</p>
-                      <p className="mt-3 font-mono text-[22px] text-ink">{box.num}</p>
-                      <p className="text-[11.5px] text-faint">{box.label}</p>
-                    </div>
+                    <BoxCard box={box} />
                     {i < row.boxes.length - 1 && (
                       <span className="hidden self-center text-[18px] text-faint md:block" aria-hidden>→</span>
                     )}
@@ -103,16 +131,6 @@ export function Architecture() {
             </section>
           ))}
         </div>
-
-        <section className="how mt-9 lg:grid-cols-4" aria-label="Trade-offs">
-          {callouts(story).map((c, i) => (
-            <div key={c.title}>
-              <span className="n">0{i + 1} · Trade-off</span>
-              <h2>{c.title}</h2>
-              <p>{c.body}</p>
-            </div>
-          ))}
-        </section>
 
         <footer className="foot">
           Numbers from the repository, never typed: held-out seeds {story?.headline?.held_out_seeds.at(0)}–

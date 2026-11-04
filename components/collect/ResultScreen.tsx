@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { Glass } from "@/components/ui/Glass";
+import { MethodChip } from "@/components/ui/Tip";
 import { api } from "@/lib/api";
 import { CHECK_TITLE, scoreClass } from "@/lib/checks";
 import type { OutboxItem } from "@/lib/collect/outbox";
@@ -253,8 +254,8 @@ function Verdict({ transcript, evidence, fired }: { transcript: string; evidence
   const at = quote ? transcript.indexOf(quote) : -1;
   return (
     <div data-testid="verdict">
-      <p>
-        <span className="ai-tag ml-0 mr-1.5">AI</span>
+      <p className="flex flex-wrap items-center gap-x-1.5">
+        <MethodChip ai tip={`Decided by ${String(evidence.model ?? "the model")}${evidence.latency_ms ? ` in ${evidence.latency_ms} ms` : ""}; the quote is an exact span of the transcript.`} />
         {fired ? <b className="text-crit">Contradiction</b> : <b className="text-ok">No contradiction</b>} · confidence{" "}
         {Math.round(Number(evidence.confidence) * 100)}%
       </p>
@@ -266,10 +267,6 @@ function Verdict({ transcript, evidence, fired }: { transcript: string; evidence
         </p>
       )}
       <p className="mt-1.5 text-[12.5px] text-muted">{String(evidence.explanation ?? "")}</p>
-      <p className="mt-1 text-[11.5px] text-faint">
-        {String(evidence.model ?? "")}
-        {evidence.latency_ms ? ` · ${evidence.latency_ms} ms` : ""}
-      </p>
     </div>
   );
 }
