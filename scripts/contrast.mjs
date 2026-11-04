@@ -80,7 +80,7 @@ const STATES = [
     path: "/app/detectors",
     ready: async (p) => {
       await p.getByTestId("hard-recall-ai").waitFor({ state: "attached", timeout: 30_000 });
-      for (const name of ["Per-check breakdown", "Hard mode: rules vs rules + AI"]) {
+      for (const name of ["Per-check breakdown", "Hard mode"]) {
         const b = p.getByRole("button", { name });
         if ((await b.getAttribute("aria-expanded")) === "false") await b.click();
       }
@@ -166,9 +166,14 @@ function collectText() {
       .map((r) => clip(r, el))
       .filter(Boolean)
       .filter((r) => {
-        // Skip text covered by another element (pointer events are forced on during this pass).
-        const hit = document.elementFromPoint((r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2);
-        return hit && (hit === el || el.contains(hit) || hit.contains(el));
+        // Skip text covered by another element, even in part (pointer events are forced on during this pass).
+        const inset = 1.5;
+        const points = [[(r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2], [r.x0 + inset, r.y0 + inset], [r.x1 - inset, r.y0 + inset],
+          [r.x0 + inset, r.y1 - inset], [r.x1 - inset, r.y1 - inset]];
+        return points.every(([x, y]) => {
+          const hit = document.elementFromPoint(x, y);
+          return hit && (hit === el || el.contains(hit) || hit.contains(el) || hit.parentElement === el.parentElement);
+        });
       });
     if (!rects.length) continue;
     const size = parseFloat(s.fontSize);

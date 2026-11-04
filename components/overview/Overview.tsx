@@ -5,8 +5,8 @@ import { useEffect, useMemo, useState } from "react";
 
 import { useAppData } from "@/components/app/AppData";
 import { Kpis } from "@/components/app/Kpis";
-import { Brief } from "@/components/overview/Brief";
 import { ContributorsTable } from "@/components/overview/ContributorsTable";
+import { NeedsAttention } from "@/components/overview/NeedsAttention";
 import { beatFromUrl, onBeat, type Beat } from "@/lib/beats";
 import { useTheme } from "@/lib/theme";
 
@@ -20,7 +20,7 @@ function MapSkeleton() {
   return (
     <section aria-label="Map of submissions" aria-busy className="panel overflow-hidden">
       <div className="ph">
-        <h2>Where interviews are piling up</h2>
+        <h2>Hotspots</h2>
       </div>
       <div className="relative aspect-[4/3] bg-map lg:aspect-[3/2]">
         <div className="map-skeleton absolute inset-0" aria-hidden />
@@ -70,11 +70,9 @@ export function Overview() {
         {/* A new map per theme: its basemap style and point colours come from the theme. */}
         <MapPanel key={theme} data={map} contributors={contributors} focus={focus} onFocus={setFocus} pulses={pulses}
           openFor={openFor} onOpened={() => setOpenFor(null)} />
-        <div className="flex min-w-0 flex-col gap-5">
-          <Brief overview={overview} />
-          <ContributorsTable rows={overview?.contributors ?? []} focus={focus} onFocus={setFocus} />
-        </div>
+        <NeedsAttention overview={overview} focus={focus} onFocus={setFocus} />
       </div>
+      <ContributorsTable rows={overview?.contributors ?? []} focus={focus} onFocus={setFocus} />
     </div>
   );
 }

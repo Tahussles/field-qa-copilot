@@ -30,7 +30,7 @@ test("without the Realtime socket the dashboard polls every 3 s, and stops once 
 
   allow = true; // supabase-js retries on its own; the next attempt reaches the server
   await expect(page.getByTestId("reconnecting")).toBeHidden({ timeout: 60_000 });
-  await expect(page.getByText("Live updates on")).toBeVisible();
+  await expect(page.getByTestId("live-status")).toHaveText("Live updates on");
   const settled = polls.length;
   await page.waitForTimeout(7_000);
   expect(polls.length - settled).toBeLessThanOrEqual(1); // no polling while connected (one catch-up load at most)

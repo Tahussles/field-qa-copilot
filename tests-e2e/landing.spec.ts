@@ -26,7 +26,7 @@ test("landing: reduced motion shows a static frame", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/");
   const feed = page.getByTestId("stage-feed").locator(".frow");
-  await expect(feed).toHaveCount(9, { timeout: 60_000 });
+  await expect(feed).toHaveCount(6, { timeout: 60_000 });
   const first = await feed.first().textContent();
   await page.waitForTimeout(2500);
   await expect(feed.first()).toHaveText(first!);

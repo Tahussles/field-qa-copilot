@@ -76,7 +76,9 @@ test("detectors: moving a slider changes the numbers", async ({ page }) => {
   await slider.focus();
   for (let i = 0; i < 4; i++) await page.keyboard.press("ArrowRight");
   await expect(flagged).not.toHaveText(before, { timeout: 15_000 });
-  await expect(page.getByText("these numbers are scored against planted fraud")).toBeVisible();
+  // The page's explanation is a tooltip on its title now.
+  await page.getByRole("heading", { name: "Tune" }).locator("[tabindex]").hover();
+  await expect(page.locator("[role=tooltip]")).toContainText("these numbers are scored against planted fraud");
 });
 
 test("theme: the sidebar toggle switches the theme and the browser remembers it", async ({ page }) => {
@@ -88,6 +90,9 @@ test("theme: the sidebar toggle switches the theme and the browser remembers it"
   const html = page.locator("html");
   await expect(html).toHaveAttribute("data-theme", start);
   await expect(page.locator('[data-map-ready="true"]')).toBeVisible({ timeout: 60_000 });
+  // The toggle lives in the sidebar's ⋯ menu.
+  const menu = page.getByTestId("shell-menu").filter({ visible: true });
+  await menu.click();
   const toggle = page.getByTestId("theme-toggle");
   await expect(toggle.getByRole("radio", { name: label[start] })).toHaveAttribute("aria-checked", "true");
 
@@ -99,6 +104,7 @@ test("theme: the sidebar toggle switches the theme and the browser remembers it"
 
   await page.reload();
   await expect(html).toHaveAttribute("data-theme", other);
+  await menu.click();
   await expect(toggle.getByRole("radio", { name: label[other] })).toHaveAttribute("aria-checked", "true");
   await page.goto("/");
   await expect(html).toHaveAttribute("data-theme", other);
@@ -160,38 +166,72 @@ test("queue: the action bar never covers the last element, on desktop and above 
   }
 });
 
-test("overview: the brief, the contributors and the map open their details on demand", async ({ page }) => {
+test("overview: needs attention shows six rows, all contributors and the map help open on demand", async ({ page }) => {
   await page.goto("/app");
-  await expect(page.getByTestId("brief-headline")).toBeVisible({ timeout: 30_000 });
-  const brief = page.getByTestId("brief-toggle");
-  await expect(brief).toHaveAttribute("aria-expanded", "false");
-  await brief.click();
-  await expect(brief).toHaveAttribute("aria-expanded", "true");
-  await expect(brief).toHaveText(/Show less/);
+  await expect(page.getByTestId("brief-headline")).not.toHaveText("…", { timeout: 30_000 });
+  const rows = page.getByTestId("attention-rows").locator("li");
+  await expect(rows).toHaveCount(6);
+  const first = rows.first();
+  const code = await first.getAttribute("data-code");
+  await expect(first.getByRole("link", { name: "Review" })).toHaveAttribute("href", `/app/queue?contributor=${code}`);
+  const more = page.getByTestId("attention-toggle");
+  await expect(more).toHaveText(/Show all \d+/);
+  await more.click();
+  await expect(more).toHaveAttribute("aria-expanded", "true");
 
-  const contributors = page.getByTestId("contributors-toggle");
-  await expect(contributors).toHaveText(/Show all \d+/);
-  const hidden = page.locator("[data-testid=contributors] tbody tr[inert]");
-  expect(await hidden.count()).toBeGreaterThan(50);
-  await contributors.click();
-  await expect(hidden).toHaveCount(0);
+  // All 90 contributors: a closed card under the map.
+  const all = page.getByTestId("all-contributors").getByRole("button", { name: "All contributors" });
+  await expect(all).toHaveAttribute("aria-expanded", "false");
+  await all.click();
+  await expect(all).toHaveAttribute("aria-expanded", "true");
+  expect(await page.getByTestId("contributors").locator("tbody tr").count()).toBeGreaterThan(50);
 
-  // The map's "what am I looking at" folds to a "?" and opens again on click (remembered).
-  const help = page.getByTestId("map-help");
+  // The map labels its three biggest hotspots; the others are numbered rings that open their card.
   await expect(page.locator("[data-map-ready=true]")).toBeVisible({ timeout: 60_000 });
-  await expect(help).toHaveAttribute("aria-expanded", "true");
-  await help.click();
+  await expect(page.getByRole("button", { name: /interviews in one spot/ }).and(page.locator(":not([data-testid=hotspot-badge])"))).toHaveCount(3);
+  await page.getByTestId("hotspot-badge").first().click();
+  await expect(page.getByRole("dialog", { name: /^Hotspot for / })).toBeVisible();
+
+  // The "?" is folded until asked, and remembered.
+  const help = page.getByTestId("map-help");
   await expect(help).toHaveAttribute("aria-expanded", "false");
+  await help.click();
+  await expect(help).toHaveAttribute("aria-expanded", "true");
   await page.reload();
-  await expect(page.getByTestId("map-help")).toHaveAttribute("aria-expanded", "false", { timeout: 30_000 });
+  await expect(page.getByTestId("map-help")).toHaveAttribute("aria-expanded", "true", { timeout: 30_000 });
 });
 
-test("other sections show a one-line summary in the topbar instead of the KPI strip", async ({ page }) => {
+test("overview: a focused contributor is a removable chip on the map", async ({ page }) => {
+  await page.goto("/app");
+  const first = page.getByTestId("attention-rows").locator("li").first();
+  await expect(first).toBeVisible({ timeout: 30_000 });
+  const code = (await first.getAttribute("data-code"))!;
+  await first.getByRole("button", { name: new RegExp(code) }).click();
+  const chip = page.getByTestId("map-focus");
+  await expect(chip).toContainText(code);
+  await chip.click();
+  await expect(chip).toHaveCount(0);
+});
+
+test("shortcuts: ? shows every key, Esc closes it; the shell menu has the rest", async ({ page }) => {
+  await page.goto("/app");
+  await expect(page.getByTestId("kpi-received")).toHaveText(/^\d+$/, { timeout: 60_000 });
+  await page.keyboard.press("?");
+  const dialog = page.getByRole("dialog", { name: "Keyboard shortcuts" });
+  await expect(dialog).toContainText("Approve");
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await page.getByTestId("shell-menu").filter({ visible: true }).click();
+  await expect(page.getByRole("button", { name: "Shortcuts" })).toBeVisible();
+  await expect(page.getByText("Prototype for Poket · not official")).toBeVisible();
+});
+
+test("other sections have no KPI strip, a field-time chip, and closed detail cards", async ({ page }) => {
   await page.goto("/app/detectors");
-  await expect(page.getByTestId("topbar-summary")).toHaveText(/^\d+ waiting · \d+ to investigate$/, { timeout: 30_000 });
+  await expect(page.getByTestId("field-time")).toHaveText(/^Field time · \w{3} \d{1,2} \w{3} \d{2}:\d{2}$/, { timeout: 30_000 });
   await expect(page.getByTestId("kpi-received")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Per-check breakdown" })).toHaveAttribute("aria-expanded", "false");
-  await expect(page.getByRole("button", { name: "Hard mode: rules vs rules + AI" })).toHaveAttribute("aria-expanded", "false");
+  await expect(page.getByRole("button", { name: "Hard mode" })).toHaveAttribute("aria-expanded", "false");
 });
 
 test("theme: the demo panel has the toggle too (phones have no sidebar)", async ({ page }) => {

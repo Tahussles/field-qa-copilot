@@ -71,6 +71,20 @@ export const CHECK_ACTION: Record<CheckKey, string> = {
   clock_skew: "check the phone's clock with them; its times are off, so night work can look like daytime",
 };
 
+/** The same next steps in at most ten words, for a "Needs attention" row (no numbers: the row shows them). */
+export const CHECK_ACTION_SHORT: Record<CheckKey, string> = {
+  same_spot: "Back-check households in person; compare GPS with the list",
+  too_fast: "Shadow one interview and compare the timings",
+  copied_text: "Compare their open answers; re-interview a sample",
+  straight_lining: "Shadow one interview; answers are not read out",
+  voice_vs_form: "Listen to the voice notes; retrain the source question",
+  off_hours: "Ask about the late entries; back-check night work",
+  shared_device: "Verify each account in person: they share a phone",
+  burst: "Hold their points and confirm the submissions directly",
+  outside_area: "Call them about where these interviews happened",
+  clock_skew: "Check the phone's clock with them",
+};
+
 export const SOURCE_LABEL: Record<string, string> = {
   piped_home: "Piped to home",
   public_tap: "Public tap / kiosk",

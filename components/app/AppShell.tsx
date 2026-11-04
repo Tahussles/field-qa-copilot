@@ -2,23 +2,29 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Suspense, useEffect, useMemo, type ReactNode } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { AppDataProvider, useAppData } from "@/components/app/AppData";
 import { DemoProvider, useDemo } from "@/components/app/DemoControls";
 import { PasscodeProvider } from "@/components/app/Passcode";
 import { ReadOnlyBanner } from "@/components/app/ReadOnlyBanner";
+import { ShortcutsDialog } from "@/components/app/ShortcutsDialog";
 import { ThemeToggle } from "@/components/app/ThemeToggle";
 import { ToastProvider } from "@/components/app/Toasts";
 import { Glass } from "@/components/ui/Glass";
-import { DEFAULT_TZ, fmtDateTime, fmtMonthDay } from "@/lib/format";
+import { Popover, PopoverItem } from "@/components/ui/Popover";
+import { Tip } from "@/components/ui/Tip";
+import { DEFAULT_TZ, fmtMonthDay } from "@/lib/format";
 
 export const SECTIONS = [
   { href: "/app", label: "Overview", key: "1", icon: IconGrid },
   { href: "/app/queue", label: "Review queue", key: "2", icon: IconList },
   { href: "/app/detectors", label: "Detectors", key: "3", icon: IconBars },
-  { href: "/app/test", label: "Test a submission", key: "4", icon: IconPlus },
+  { href: "/app/test", label: "Test", key: "4", icon: IconPlus },
 ] as const;
+
+// The keyboard-shortcut overlay (key ?), opened from the shell's menus too.
+let openShortcuts: () => void = () => {};
 
 function sectionFor(pathname: string) {
   return [...SECTIONS].reverse().find((s) => pathname === s.href || pathname.startsWith(`${s.href}/`)) ?? SECTIONS[0];
@@ -67,10 +73,18 @@ export function AppShell({ children }: { children: ReactNode }) {
 function Shortcuts() {
   const router = useRouter();
   const { toggle } = useDemo();
+  const [help, setHelp] = useState(false);
+  const close = useCallback(() => setHelp(false), []);
   useEffect(() => {
+    openShortcuts = () => setHelp(true);
     function onKey(event: KeyboardEvent) {
       if (event.metaKey || event.ctrlKey || event.altKey || isTyping(event.target)) return;
       if (document.querySelector("[aria-modal='true']")) return;
+      if (event.key === "?") {
+        event.preventDefault();
+        setHelp(true);
+        return;
+      }
       if (event.key === "d" || event.key === "D") {
         event.preventDefault();
         toggle();
@@ -85,7 +99,7 @@ function Shortcuts() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [router, toggle]);
-  return null;
+  return <ShortcutsDialog open={help} onClose={close} />;
 }
 
 function Sidebar() {
@@ -114,7 +128,6 @@ function useFieldworkDates(): string | null {
 
 function SidebarFrame({ active }: { active: string | null }) {
   const { overview, live } = useAppData();
-  const demo = useDemo();
   const dates = useFieldworkDates();
   const pending = overview?.kpis.pending_review;
   return (
@@ -123,10 +136,10 @@ function SidebarFrame({ active }: { active: string | null }) {
         <span className="logo" aria-hidden />
         Field QA
       </div>
-      <div className="mb-1.5 border-b border-line px-2 pt-2 pb-2.5 text-[12px] text-muted">
-        <b className="block text-[12.5px] font-medium text-ink">{overview?.project.name ?? "Household Water Access Survey"}</b>
-        {overview?.project.region.split(",")[0] ?? "Kisumu"}
-        {dates && ` · ${dates}`}
+      <div className="mb-1.5 border-b border-line px-2 pt-2 pb-2.5 text-[12.5px] font-medium text-ink">
+        <Tip content={`${overview?.project.region.split(",")[0] ?? "Kisumu"}${dates ? ` · ${dates}` : ""}`} className="cursor-default">
+          {overview?.project.name ?? "Household Water Access Survey"}
+        </Tip>
       </div>
       <nav className="flex flex-col gap-0.5">
         {SECTIONS.map((s) => {
@@ -137,6 +150,7 @@ function SidebarFrame({ active }: { active: string | null }) {
               key={s.href}
               href={s.href}
               aria-current={current ? "page" : undefined}
+              aria-keyshortcuts={s.key}
               className={`flex items-center gap-[9px] rounded-md px-2 py-1.5 font-medium ${
                 current ? "bg-overlay/[0.06] text-ink" : "text-muted hover:bg-hover hover:text-ink"
               }`}
@@ -144,49 +158,57 @@ function SidebarFrame({ active }: { active: string | null }) {
               <s.icon className="h-[15px] w-[15px] flex-none" />
               {s.label}
               {count != null && <span className="ml-auto font-mono text-[11px] text-muted">{count}</span>}
-              <kbd className={`kbd ${count != null ? "ml-1.5" : "ml-auto"}`}>{s.key}</kbd>
             </Link>
           );
         })}
       </nav>
-      <div className="mt-auto flex flex-col gap-1.5 border-t border-line px-2 pt-2.5 pb-1 text-[11.5px] text-faint">
-        <div>
-          <kbd className="kbd">J</kbd> <kbd className="kbd">K</kbd> move · <kbd className="kbd">A</kbd> approve
-        </div>
-        <div>
-          <kbd className="kbd">B</kbd> back-check · <kbd className="kbd">R</kbd> reject
-        </div>
-        <LiveStatus live={live} engine={overview?.engine_version} />
-        <button
-          type="button"
-          onClick={demo.toggle}
-          aria-expanded={demo.open}
-          className="flex items-center text-left text-muted hover:text-ink"
-        >
-          Demo controls <kbd className="kbd ml-auto">D</kbd>
-        </button>
-        <Link href="/" className="text-muted hover:text-ink">
-          ← Back to intro
-        </Link>
-        <ThemeToggle />
-        <p className="text-[11px] text-faint">Prototype built for Poket · not an official Poket product</p>
+      <div className="mt-auto flex items-center gap-2 border-t border-line px-2 pt-2.5 pb-1">
+        <LiveDot live={live} />
+        <ShellMenu side="top" className="ml-auto" engine={overview?.engine_version} />
       </div>
     </aside>
   );
 }
 
+/** The shell's "⋯": theme, demo controls, shortcuts, the intro, the engine and what this is. */
+function ShellMenu({ side, className, engine }: { side: "top" | "bottom"; className?: string; engine?: string }) {
+  const demo = useDemo();
+  return (
+    <Popover label="Menu" side={side} align={side === "top" ? "right" : "right"} className={className} testId="shell-menu">
+      {(close) => (
+        <>
+          <div className="px-2.5 py-1.5">
+            <ThemeToggle />
+          </div>
+          <PopoverItem kbd="D" onClick={() => (close(), demo.toggle())}>
+            Demo controls
+          </PopoverItem>
+          <PopoverItem kbd="?" onClick={() => (close(), openShortcuts())}>
+            Shortcuts
+          </PopoverItem>
+          <Link href="/" className="rounded-md px-2.5 py-1.5 text-ink hover:bg-overlay/[0.08]">
+            Intro
+          </Link>
+          <p className="mt-1 border-t border-line px-2.5 pt-2 pb-1 text-[11.5px] text-muted">
+            Prototype for Poket · not official
+            {engine && <span className="block font-mono">engine {engine}</span>}
+          </p>
+        </>
+      )}
+    </Popover>
+  );
+}
 
-function LiveStatus({ live, engine }: { live: "connecting" | "live" | "reconnecting" | "offline"; engine?: string }) {
+function LiveDot({ live }: { live: "connecting" | "live" | "reconnecting" | "offline" }) {
   const tone = live === "live" ? "st-ok" : live === "offline" ? "st-crit" : "st-warn";
   const label =
-    live === "live" ? "Live updates on" : live === "connecting" ? "Connecting…" : live === "reconnecting" ? "Reconnecting… (polling)" : "Live updates off";
+    live === "live" ? "Live updates on" : live === "connecting" ? "Connecting" : live === "reconnecting" ? "Reconnecting, polling every 3 s" : "Live updates off";
   return (
-    <span className={`st ${tone} text-[11.5px]`}>
-      <span className="text-muted">
+    <Tip content={label} className={`st ${tone} cursor-default`}>
+      <span className="sr-only" data-testid="live-status">
         {label}
-        {engine && <span className="font-mono text-faint"> · engine {engine}</span>}
       </span>
-    </span>
+    </Tip>
   );
 }
 
@@ -207,40 +229,38 @@ function ReconnectingPill() {
 
 function Topbar() {
   const pathname = usePathname();
-  const section = sectionFor(pathname);
-  return <TopbarFrame title={section.label} summary={section.href !== "/app"} />;
+  return <TopbarFrame title={sectionFor(pathname).label} />;
 }
 
-function TopbarFrame({ title, summary = false }: { title: string; summary?: boolean }) {
+function TopbarFrame({ title }: { title: string }) {
   const { overview } = useAppData();
   const demo = useDemo();
-  const decisions = overview ? overview.kpis.flagged - overview.kpis.pending_review : null;
-  const k = overview?.kpis;
   return (
     <header className="frost-topbar sticky top-0 z-20 flex h-12 flex-none items-center justify-between gap-3 px-4 md:px-5">
-      <div className="flex min-w-0 items-center gap-2 font-medium">
-        <span className="hidden truncate text-muted sm:inline">{overview?.project.name}</span>
-        <span className="hidden text-faint sm:inline">/</span>
-        <h1 className="truncate font-sans text-[13.5px] font-medium tracking-normal">{title}</h1>
-      </div>
-      <span className="flex-none font-mono text-[11.5px] text-muted">
-        {summary && k && (
-          <span className="mr-3 font-sans text-[12.5px] text-ink-2" data-testid="topbar-summary">
-            {k.pending_review} waiting · {k.contributors_to_investigate} to investigate
-          </span>
-        )}
+      <h1 className="truncate font-sans text-[13.5px] font-medium tracking-normal">{title}</h1>
+      <span className="flex flex-none items-center gap-2">
         {overview?.now_is_fixed && (
-          <span className="hidden sm:inline" title="The demo project runs on a fixed clock">
-            clock {fmtDateTime(overview.now, overview.project.timezone)} ·{" "}
-          </span>
+          <Tip content="The demo runs on a fixed field clock" className="chip cursor-default font-mono" >
+            <span data-testid="field-time">Field time · {fieldTime(overview.now, overview.project.timezone)}</span>
+          </Tip>
         )}
-        {decisions != null && `${decisions} ${decisions === 1 ? "decision" : "decisions"}`}
-        <button type="button" onClick={demo.toggle} aria-expanded={demo.open} className="btn btn-sm ml-2 font-sans md:hidden">
+        <button type="button" onClick={demo.toggle} aria-expanded={demo.open} className="btn btn-sm font-sans md:hidden">
           Demo
         </button>
+        <span className="md:hidden">
+          <ShellMenu side="bottom" engine={overview?.engine_version} />
+        </span>
       </span>
     </header>
   );
+}
+
+/** "Sat 31 Oct 08:00" on the project's clock. */
+function fieldTime(iso: string, tz: string): string {
+  const d = new Date(iso);
+  const day = d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: tz }).replace(",", "");
+  const time = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: tz });
+  return `${day} ${time}`;
 }
 
 function MobileNav() {

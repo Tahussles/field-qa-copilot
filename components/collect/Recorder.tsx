@@ -115,7 +115,7 @@ export function Recorder({ note, onChange }: { note: VoiceNote | null; onChange:
           {recording ? (
             <p data-testid="recording">
               <span className="font-mono text-crit">● {String(seconds).padStart(2, "0")}s</span>
-              <span className="text-muted"> / {MAX_SECONDS}s · release, or tap again, to stop</span>
+              <span className="text-muted"> / {MAX_SECONDS}s</span>
             </p>
           ) : state === "starting" ? (
             <p className="text-muted">Asking for the microphone…</p>
@@ -125,7 +125,7 @@ export function Recorder({ note, onChange }: { note: VoiceNote | null; onChange:
               <span className="text-faint">{note.type.split(";")[0]}</span>
             </p>
           ) : (
-            <p className="text-muted">Hold to record, or tap to start and tap to stop. Up to a minute.</p>
+            <p className="text-muted">Up to 1 min</p>
           )}
           {error && <p className="text-crit" role="alert">{error}</p>}
         </div>

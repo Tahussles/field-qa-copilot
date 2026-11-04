@@ -108,19 +108,17 @@ function clockSkew({ check }: CardProps): Explained {
   const e = check.evidence as { skew_minutes: number; direction: string; basis: string; limit_minutes: number };
   const minutes = Math.abs(e.skew_minutes);
   const size = minutes >= 90 ? `${(minutes / 60).toFixed(1)} h` : `${Math.round(minutes)} min`;
-  const way = e.direction === "ahead" ? "ahead of" : "behind";
   return {
     finding: (
       <>
-        phone clock <B>{size}</B> {way} the server&apos;s
+        <B>{size}</B> {e.direction === "ahead" ? "ahead" : "behind"}
       </>
     ),
     ai: false,
     method: `Clock rule: phone and server more than ${e.limit_minutes} minutes apart at sync, or a capture time after the server received it. Corroboration only; a late sync never fires it.`,
     body: (
       <p>
-        {e.basis === "sync" ? "Measured when it synced." : "It recorded a capture time after the server received it."} Every time
-        this phone reports is off by as much, so night work can look like daytime.
+        {e.basis === "sync" ? "Measured at sync." : "Captured after the server received it."} Night work can look like daytime.
       </p>
     ),
   };
@@ -140,9 +138,9 @@ function outsideArea({ check, detail }: CardProps): Explained {
     ai: false,
     method: `Area rule: outside the assigned area by more than the GPS error (±${Math.round(e.tolerance_m)} m).${e.band === "near" ? " Within 1 km it only corroborates other checks." : ""}`,
     body: (
-      <p>
-        {detail.contributor.code}&apos;s assigned area is {e.area}. GPS <span className="font-mono">{s.lat?.toFixed(5)}, {s.lng?.toFixed(5)}</span>
-        {s.gps_accuracy_m != null && <> · accuracy ±{Math.round(s.gps_accuracy_m)} m</>}.
+      <p className="font-mono text-[12px]">
+        {s.lat?.toFixed(5)}, {s.lng?.toFixed(5)}
+        {s.gps_accuracy_m != null && <> ±{Math.round(s.gps_accuracy_m)} m</>}
       </p>
     ),
   };
@@ -169,17 +167,14 @@ function useTooFast({ check, detail, map }: CardProps): Explained {
   return {
     finding: (
       <>
-        <B>{fmtDuration(duration)}</B> vs the {fmtDuration(threshold)} limit
+        <B>{fmtDuration(duration)}</B> vs {fmtDuration(threshold)}
       </>
     ),
     ai: false,
     method: `Duration rule: an ${kind} interview shorter than ${fmtDuration(threshold)} is too fast to be real.`,
     body: (
       <>
-        <p>
-          A typical {kind} takes {fmtDuration(kindMedian)}; {detail.contributor.code}&apos;s median is {fmtDuration(own)}.
-        </p>
-        <div className="relative mt-2 h-7 max-w-[420px]" aria-hidden>
+        <div className="relative mt-1 h-7 max-w-[420px]" aria-hidden>
           <div className="absolute inset-x-0 top-3 h-1 rounded-sm bg-contrast/[0.07]" />
           <div className="absolute top-3 left-0 h-1 rounded-sm bg-crit" style={{ width: `${(duration / max) * 100}%` }} />
           {markers.map((m) =>
@@ -244,15 +239,15 @@ function useSameSpot({ check, detail, map, tz }: CardProps): Explained {
   return {
     finding: (
       <>
-        <B>{e.neighbour_count}</B> more within {Math.round(e.radius_m)} m on {fmtLocalDate(e.local_date)}
+        <B>{e.neighbour_count}</B> within {Math.round(e.radius_m)} m
       </>
     ),
     ai: false,
-    method: `Location rule: 3 or more interviews by one contributor on one day within ${Math.round(e.radius_m)} m.`,
+    method: `Location rule: 3 or more interviews by one contributor on one day within ${Math.round(e.radius_m)} m (${fmtLocalDate(e.local_date)}: ${sameDay.length + 1} that day). Households are usually hundreds of metres apart.`,
     body: (
       <div className="flex flex-col gap-4 sm:flex-row">
         <figure className="flex-none">
-          <svg viewBox={`${-size / 2} ${-size / 2} ${size} ${size}`} className="mt-1.5 h-[220px] w-[220px] rounded-md border border-line bg-bg" role="img"
+          <svg viewBox={`${-size / 2} ${-size / 2} ${size} ${size}`} className="h-[220px] w-[220px] rounded-md border border-line bg-bg" role="img"
             aria-label={`${e.neighbour_count} other interviews within ${e.radius_m} metres on the same day`}>
             <circle r={outer} fill="none" className="stroke-contrast/[0.06]" />
             <circle r={ring} fill={COLORS.crit} fillOpacity="0.1" stroke={COLORS.crit} strokeOpacity="0.7" strokeDasharray="3 3" />
@@ -273,14 +268,10 @@ function useSameSpot({ check, detail, map, tz }: CardProps): Explained {
               {Math.round(extent)} m+
             </text>
           </svg>
-          <figcaption className="mt-1 text-center text-[10.5px] text-faint">square-root scale · hollow = farther away</figcaption>
         </figure>
         <div className="min-w-0 flex-1">
-          <p>
-            {sameDay.length + 1} interviews by {detail.contributor.code} that day; households are usually hundreds of metres apart.
-          </p>
-          <ul className="mt-2 space-y-1 text-[12.5px]">
-            {e.neighbours.slice(0, 8).map((n) => (
+          <ul className="space-y-1 text-[12.5px]">
+            {e.neighbours.slice(0, 4).map((n) => (
               <li key={n.submission_id} className="flex items-center gap-2">
                 <span className="dot bg-crit" aria-hidden />
                 <Link href={`/app/queue/${n.submission_id}`} className="font-mono text-ink hover:text-accent-ink">
@@ -350,11 +341,11 @@ function useCopiedText(props: CardProps): Explained {
     return {
       finding: (
         <>
-          a <B>reworded copy</B> of {shortId(pair.submission_id)} ({relationLabel(pair.relation)})
+          <B>reworded</B> · {shortId(pair.submission_id)}
         </>
       ),
       ai: true,
-      method: `${byModel(pair.model, null, pair.latency_ms)}. Character overlap ${fmtPct(pair.similarity)} is below what the copy rule needs, so the model judged the pair; alone it only corroborates.`,
+      method: `${byModel(pair.model, null, pair.latency_ms)}. A ${relationLabel(pair.relation)} answer with ${fmtPct(pair.similarity)} character overlap, below the copy rule, so the model judged the pair; alone it only corroborates.`,
       body: (
         <>
           <div className="grid gap-2 md:grid-cols-2">
@@ -384,11 +375,11 @@ function useCopiedText(props: CardProps): Explained {
   return {
     finding: (
       <>
-        <B>{fmtPct(best.similarity)}</B> word overlap with {shortId(best.submission_id)} ({relationLabel(best.relation)})
+        <B>{fmtPct(best.similarity)}</B> overlap · {shortId(best.submission_id)}
       </>
     ),
     ai: false,
-    method: "Copy rule: word overlap with another answer from the same contributor or phone at or above the threshold.",
+    method: `Copy rule: word overlap with another answer (${relationLabel(best.relation)}) at or above the threshold.`,
     body: (
       <div className="grid gap-2 md:grid-cols-2">
         {[
@@ -425,18 +416,17 @@ function straightLining({ check }: CardProps): Explained {
   return {
     finding: zigzag ? (
       <>
-        all 8 items zig-zag between <B>{values[0]}</B> and <B>{values[1]}</B>
+        zig-zag <B>{values[0]}</B>/<B>{values[1]}</B>
       </>
     ) : (
       <>
-        all 8 items answered <B>{values[0]}</B>
+        all 8 = <B>{values[0]}</B>
       </>
     ),
     ai: false,
-    method: "Pattern rule: 8 identical satisfaction answers, or a strict two-value zig-zag.",
+    method: "Pattern rule: 8 identical satisfaction answers, or a strict two-value zig-zag. Real respondents almost always vary.",
     body: (
       <>
-        <p>Real respondents almost always vary.</p>
         <div className="likert">
           {values.map((v, i) => (
             <span key={i} title={SATISFACTION_ITEMS[i]}>
@@ -491,7 +481,7 @@ function voiceVsForm({ check, detail }: CardProps): Explained {
     return {
       finding: (
         <>
-          voice says <B>{e.voice_says}</B>; form says {SOURCE_LABEL[e.form_source] ?? e.form_source}
+          voice <B>{e.voice_says}</B> · form {SOURCE_LABEL[e.form_source] ?? e.form_source}
         </>
       ),
       ai: true,
@@ -525,7 +515,7 @@ function voiceVsForm({ check, detail }: CardProps): Explained {
   return {
     finding: (
       <>
-        voice note names <B>{SOURCE_LABEL[e.voice_source] ?? e.voice_source}</B>; form says {SOURCE_LABEL[e.form_source] ?? e.form_source}
+        voice <B>{SOURCE_LABEL[e.voice_source] ?? e.voice_source}</B> · form {SOURCE_LABEL[e.form_source] ?? e.form_source}
       </>
     ),
     ai: false,
@@ -560,15 +550,14 @@ function offHours({ detail, tz }: CardProps): Explained {
   return {
     finding: (
       <>
-        captured at <B>{fmtTime(detail.submission.captured_at, tz)}</B> local time
+        <B>{fmtTime(detail.submission.captured_at, tz)}</B> vs 21:00–06:00
       </>
     ),
     ai: false,
-    method: "Time rule: captured between 21:00 and 06:00 local time.",
+    method: "Time rule: captured between 21:00 and 06:00 local time. Fieldwork runs roughly 08:00 to 19:30.",
     body: (
       <>
-        <p>Fieldwork runs roughly 08:00 to 19:30; the check fires from 21:00 to 06:00.</p>
-        <div className="relative mt-2 h-8 max-w-[520px]" aria-hidden>
+        <div className="relative mt-1 h-8 max-w-[520px]" aria-hidden>
           <div className="absolute inset-x-0 top-2.5 h-3 rounded-full bg-contrast/[0.04]" />
           <div className="absolute top-2.5 h-3 rounded-l-full bg-crit/25" style={{ left: 0, width: pct(6) }} />
           <div className="absolute top-2.5 h-3 rounded-r-full bg-crit/25" style={{ left: pct(21), width: pct(3) }} />
@@ -592,17 +581,14 @@ function sharedDevice({ check }: CardProps): Explained {
   return {
     finding: (
       <>
-        one phone used by <B>{e.accounts.length}</B> accounts
+        <B>{e.accounts.length}</B> accounts · 1 phone
       </>
     ),
     ai: false,
     method: "Device rule: one phone submitting for more than one account.",
     body: (
       <>
-        <p>
-          Phone <span className="font-mono">{e.device_id}</span>.
-        </p>
-        <ul className="divide-y divide-line rounded-md border border-line bg-bg">
+        <ul className="divide-y divide-line rounded-md border border-line bg-bg" aria-label={`Phone ${e.device_id}`}>
           {e.accounts.map((a) => (
             <li key={a.code} className="flex items-center gap-3 px-2.5 py-1.5 text-[12.5px]">
               <span className="font-mono text-ink">{a.code}</span>
@@ -629,17 +615,14 @@ function useBurst({ check, detail, map, tz }: CardProps): Explained {
   return {
     finding: (
       <>
-        <B>{e.max_in_window}</B> submissions in {e.window_minutes} minutes
+        <B>{e.max_in_window}</B> in {e.window_minutes} min
       </>
     ),
     ai: false,
-    method: "Rate rule: many submissions by one contributor inside one hour.",
+    method: `Rate rule: many submissions by one contributor inside one hour. The tall mark is this one.`,
     body: (
       <>
-        <p>
-          {detail.contributor.code}, {fmtTime(e.window_start, tz)} to {fmtTime(e.window_end, tz)}; this one is the tall mark.
-        </p>
-        <div className="relative mt-2 h-10 max-w-[520px]" aria-hidden>
+        <div className="relative h-10 max-w-[520px]" aria-hidden>
           <div className="absolute inset-x-0 top-4 h-px bg-line-strong" />
           {times.map((t) => {
             const left = ((new Date(t.at).getTime() - start) / Math.max(end - start, 1)) * 100;

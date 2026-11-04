@@ -1,6 +1,6 @@
 # Key design decisions
 
-Thirteen decisions that shaped Field QA Copilot, each with the reason it was made. The numbers come from `scripts/evaluate.py` and production timing runs. The commit history shows how each one arrived.
+Fifteen decisions that shaped Field QA Copilot, each with the reason it was made. The numbers come from `scripts/evaluate.py` and production timing runs. The commit history shows how each one arrived.
 
 ## 1. Checks are code; a model is an input, not a judge
 
@@ -60,4 +60,25 @@ A reviewer works through 138 flags, and every screen used to show everything at 
 - **Disclosure controls.** Every disclosure is a real button with `aria-expanded`, so Enter and Space work, and its chevron turns as it opens. The height animates, except under `prefers-reduced-motion`. Closed details are `inert`: out of the tab order and the accessibility tree.
 - **Remembered choices.** Section cards remember being opened or closed in this browser (`fqc-ui-<key>` in localStorage, try/catch).
 - **Nothing removed.** No information was removed, only moved: answers, transcript, GPS and clocks sit behind "Submission details", the per-check table and hard mode behind collapsed cards, the architecture trade-offs behind a note on their box, and the full brief behind "Show full brief".
+
+## 14. Every word costs attention
+
+Round 13 cut each page's visible words by at least half. `scripts/word-count.mjs` counts what a reader sees scrolling a 1440×900 window in the default state; the before and after counts are in the round report. The rules:
+
+- **No instructional microcopy.** Nothing like "click…", "hover…", "press…" or "counted only". Affordances and tooltips do that job. Keyboard shortcuts live in one overlay (the ? key, also in the ⋯ menu).
+- **Short labels, formatted numbers.** Labels are one or two words. Numbers are formatted: 11% rather than "11.3 percent", "Sat 31 Oct" rather than "2026-10-31", "27/33" rather than "27 of 33 submissions".
+- **One idea per line.** A card's body uses at most two font sizes.
+- **Chips and numbers, not sentences.** Status and evidence are shown as chips and numbers. Sentences appear only where a person must decide something: the brief's headline, a contributor's next step, a confirmation.
+- **Move, don't delete.** Explanations go behind the row's disclosure, into a tooltip, or into the ⋯ menu.
+- **The brief's limits are checked in code.** The brief is held to the card: a headline of at most 20 words, and per contributor an action of at most 10 words with no number the row already shows. An answer over a limit is regenerated once, and a second long one is trimmed at a word boundary.
+
+## 15. A job starts three ways
+
+A phone waits on its transcript, so a job must start at once.
+
+1. **The API.** It starts an arrival's jobs itself, in a background task after the ingest response (`jobs.start_now`, on Vercel only), then the voice check the transcript queues.
+2. **The database hook.** It still POSTs every new job (pg_net).
+3. **A cron sweep.** It re-sends a hook still queued after 10 s (migration 0012, which tightened it from 30 s).
+
+A job is claimed once, so the second and third paths are harmless no-ops when the first has run. The hook alone is not enough. pg_net 0.20.4 cannot be told to use HTTP/1.1, and about 2% of its deliveries to Vercel fail with "Error in the HTTP2 framing layer" (5 of 219 in six hours). With the hook alone, measured over 60 jobs, the wait from queued to running was p50 1.7 s and p95 5.0 s. Round 13 re-measures it with `scripts/measure_job_start.py` and commits the result to `data/eval/job_start.json`.
 

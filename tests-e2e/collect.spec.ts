@@ -90,7 +90,7 @@ test.describe("phone collect page", () => {
     timings.push(`verdict ${at()}`);
 
     const final = page.getByRole("region", { name: "Final score" });
-    await expect(final.getByTestId("band")).toHaveText("Flagged for review", { timeout: 30_000 });
+    await expect(final.getByTestId("band")).toHaveText("Flagged", { timeout: 30_000 });
     await expect(final).toContainText("Voice vs form");
     console.log(`${test.info().project.name}: submit → ${timings.join(" → ")}`);
 
@@ -186,7 +186,7 @@ test.describe("phone collect page", () => {
     await page.getByTestId("real-gps").check();
     await page.getByTestId("submit").click();
     await expect(page.getByTestId("synced-at")).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByRole("region", { name: "Rules result" })).toContainText(/Outside area \(\d{1,2},\d{3} km from Kondele\)/);
+    await expect(page.getByRole("region", { name: "Rules result" })).toContainText(/Outside area · \d{1,2},\d{3} km/);
   });
 
   // Last: a demo reset revokes every collect token minted before it.

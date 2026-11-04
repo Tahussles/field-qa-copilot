@@ -17,7 +17,7 @@ import type { ContributorRow, Hotspot, MapData, MapPoint } from "@/lib/types";
 const CARD = { w: 236, h: 132 };
 const CHIP = { w: 252, h: 34 };
 const NARROW = 560; // below this map width, chips use short text
-const HELP_SEEN_MS = 10_000; // the "what am I looking at" pill folds to a "?" after this, once
+const LABELLED = 3; // the biggest hotspots get a label chip; the rest a ring with a number
 
 type Rect = { x: number; y: number; w: number; h: number };
 interface PlacedHotspot {
@@ -26,8 +26,9 @@ interface PlacedHotspot {
   x: number;
   y: number;
   r: number;
-  box: Rect | null; // null: no clear spot for the chip, only the ring shows
+  box: Rect | null; // null: no chip (a smaller hotspot, or no clear spot): the ring and its number show
   compact: boolean;
+  badge: boolean; // not one of the biggest: a numbered badge on the ring opens its card
 }
 interface Pulse {
   id: string;
@@ -248,7 +249,7 @@ export function MapPanel({
   const [pulseSpots, setPulseSpots] = useState<Pulse[]>([]);
   const [tip, setTip] = useState<Tip | null>(null);
   const [rendered, setRendered] = useState(0);
-  const [help, setHelp, helpChosen] = useStoredOpen("map-help", true);
+  const [help, setHelp] = useStoredOpen("map-help", false);
 
   const pointsById = useMemo(() => new Map((data?.points ?? []).map((p) => [p.id, p])), [data]);
 
@@ -294,6 +295,10 @@ export function MapPanel({
       for (const [i, s] of spots.entries()) {
         const key = hotspotKey(s.h);
         const open = viewRef.current.expanded === key;
+        if (!open && i >= LABELLED) {
+          out.push({ key, hotspot: s.h, x: s.x, y: s.y, r: s.r, box: null, compact, badge: true });
+          continue;
+        }
         const size = open ? CARD : compact ? { w: compactWidth(s.h), h: CHIP.h } : CHIP;
         const gap = 12;
         const candidates: Rect[] = [
@@ -325,7 +330,7 @@ export function MapPanel({
               }
             : null);
         if (chosen) chips.push(chosen);
-        out.push({ key, hotspot: s.h, x: s.x, y: s.y, r: s.r, box: chosen, compact });
+        out.push({ key, hotspot: s.h, x: s.x, y: s.y, r: s.r, box: chosen, compact, badge: false });
       }
       setPlaced(out);
       const byId = new Map(current.points.map((p) => [p.id, p]));
@@ -508,31 +513,25 @@ export function MapPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openFor, ready, placed]);
 
-  // First view: the pill explains the map, then folds to a "?" (remembered); a move folds it at once.
-  useEffect(() => {
-    if (!ready || helpChosen) return;
-    const timer = window.setTimeout(() => setHelp(false), HELP_SEEN_MS);
-    return () => window.clearTimeout(timer);
-  }, [ready, helpChosen, setHelp]);
-  useEffect(() => {
-    if (moved && !helpChosen) setHelp(false);
-  }, [moved, helpChosen, setHelp]);
+  // The "?" opens what the map shows (remembered); folded by default.
   useEffect(() => {
     layout();
   }, [help, layout]);
 
   const showReset = moved || Boolean(focus) || Boolean(expanded);
-  const caption = focus
-    ? `${focus} ${contributors[focus]?.display_name ?? ""} · click the row again to clear`
-    : data
-      ? `${data.hotspots.length} hotspots · ${data.points.length} submissions`
-      : "";
 
   return (
     <section aria-label="Map of submissions" className="panel overflow-hidden">
       <div className="ph">
-        <h2>Where interviews are piling up</h2>
-        <span className="ph-caption truncate">{caption}</span>
+        <h2>Hotspots</h2>
+        {focus ? (
+          <button type="button" onClick={() => onFocus(null)} className="chip flex items-center gap-1.5 hover:text-ink" data-testid="map-focus"
+            aria-label={`Clear the focus on ${focus} ${contributors[focus]?.display_name ?? ""}`}>
+            <b className="font-mono">{focus}</b> <span aria-hidden>×</span>
+          </button>
+        ) : (
+          <span className="ph-caption">{data ? data.hotspots.length : ""}</span>
+        )}
       </div>
       <div
         ref={wrap}
@@ -576,7 +575,20 @@ export function MapPanel({
             <span key={`pulse-${p.id}`} className="point-pulse" style={{ left: p.x, top: p.y, color: p.color }} />
           ))}
           {placed.map((item) =>
-            !item.box ? null : expanded === item.key ? (
+            item.badge ? (
+              <Glass
+                key={`badge-${item.key}`}
+                as="button"
+                type="button"
+                onClick={() => openHotspot(item)}
+                aria-label={`${item.hotspot.contributor_code} · ${item.hotspot.count} interviews in one spot`}
+                className="glass-btn pointer-events-auto absolute z-[4] grid h-[22px] min-w-[22px] place-items-center rounded-full px-1 font-mono text-[11px] text-glass-strong"
+                style={{ left: item.x + item.r * 0.7 - 11, top: item.y - item.r * 0.7 - 11 }}
+                data-testid="hotspot-badge"
+              >
+                {item.hotspot.count}
+              </Glass>
+            ) : !item.box ? null : expanded === item.key ? (
               <Glass
                 key={`card-${item.key}`}
                 role="dialog"
@@ -630,7 +642,7 @@ export function MapPanel({
                 <span className="st st-crit">
                   <span className="font-mono">{item.hotspot.contributor_code}</span>
                 </span>
-                {item.compact ? `${item.hotspot.count} in one spot` : `${item.hotspot.count} interviews in one spot`}
+                {item.hotspot.count} in one spot
                 {!item.compact && <IconZoom className="ml-auto h-3.5 w-3.5 flex-none text-muted" />}
               </Glass>
             ),
@@ -708,7 +720,7 @@ export function MapPanel({
           {[
             ["Passed", COLORS.pass],
             ["Flagged", COLORS.warn],
-            ["Score 5+", COLORS.crit],
+            ["Critical", COLORS.crit],
           ].map(([label, color]) => (
             <span key={label} className="flex items-center gap-1.5">
               <span className="inline-block h-2 w-2 rounded-full" style={{ background: color }} />
@@ -717,9 +729,8 @@ export function MapPanel({
           ))}
           <span className="flex items-center gap-1.5">
             <span className="inline-block h-2.5 w-2.5 rounded-full border-2" style={{ borderColor: COLORS.accent }} />
-            Live phone
+            Live
           </span>
-          <span>Hover a dot for details</span>
         </Glass>
 
         {tip && (

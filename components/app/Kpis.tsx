@@ -6,13 +6,14 @@ import { useAppData } from "@/components/app/AppData";
 export function Kpis() {
   const { overview } = useAppData();
   const k = overview?.kpis;
-  const flaggedPct = k && k.received ? `${Math.round((100 * k.flagged) / k.received)}%` : null;
+  // Labels of one or two words; a sublabel only when it adds something (arrivals today).
+  const today = overview?.today.received ?? 0;
   const items = [
-    { id: "received", value: k?.received, small: overview ? `${overview.today.received} today` : null, label: "Submissions received" },
-    { id: "flagged", value: k?.flagged, small: flaggedPct, label: "Flagged by checks" },
-    { id: "watch", value: k?.watch, small: null, label: "Watch band, counted only" },
-    { id: "waiting", value: k?.pending_review, small: null, label: "Waiting for review" },
-    { id: "investigate", value: k?.contributors_to_investigate, small: null, label: "Contributors to investigate" },
+    { id: "received", value: k?.received, small: today > 0 ? `+${today} today` : null, label: "Submissions" },
+    { id: "flagged", value: k?.flagged, small: null, label: "Flagged" },
+    { id: "watch", value: k?.watch, small: null, label: "Watch" },
+    { id: "waiting", value: k?.pending_review, small: null, label: "To review" },
+    { id: "investigate", value: k?.contributors_to_investigate, small: null, label: "To investigate" },
   ];
   return (
     <section

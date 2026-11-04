@@ -11,10 +11,10 @@ import { useToast } from "@/components/app/Toasts";
 import { EvidenceRow } from "@/components/queue/EvidenceCards";
 import { Section } from "@/components/ui/Disclosure";
 import { Glass } from "@/components/ui/Glass";
-import { useTip } from "@/components/ui/Tip";
+import { Tip, useTip } from "@/components/ui/Tip";
 import { api } from "@/lib/api";
 import { CHECK_ORDER, CHECK_TITLE, SOURCE_LABEL, scoreClass, submissionMainSignal } from "@/lib/checks";
-import { DEFAULT_TZ, fmtDateTime, fmtDuration, fmtScore, fmtStamp, shortId } from "@/lib/format";
+import { DEFAULT_TZ, fmtDateTime, fmtDayMonth, fmtDuration, fmtScore, fmtStamp, fmtTime, shortId } from "@/lib/format";
 import type { CheckKey, ContributorRow, Decision, QueueItem, SubmissionDetail } from "@/lib/types";
 
 // Decision wording and colours follow the prototype.
@@ -24,10 +24,10 @@ const DECISION_LABEL: Record<Decision, string> = {
   reject: "Rejected as fabricated",
 };
 const DECISION_CLASS: Record<Decision, string> = { approve: "st-ok", backcheck: "st-info", reject: "st-crit" };
-const ACTIONS: { decision: Decision; label: string; key: string; className: string }[] = [
-  { decision: "approve", label: "Approve as genuine", key: "A", className: "text-ok" },
-  { decision: "backcheck", label: "Send for back-check", key: "B", className: "" },
-  { decision: "reject", label: "Reject as fabricated", key: "R", className: "text-crit" },
+const ACTIONS: { decision: Decision; label: string; short: string; key: string; className: string }[] = [
+  { decision: "approve", label: "Approve as genuine", short: "Approve", key: "A", className: "text-ok" },
+  { decision: "backcheck", label: "Send for back-check", short: "Back-check", key: "B", className: "" },
+  { decision: "reject", label: "Reject as fabricated", short: "Reject", key: "R", className: "text-crit" },
 ];
 
 export function QueueView() {
@@ -258,10 +258,16 @@ export function QueueView() {
             ))}
           </select>
         </div>
+        {overview && (
+          <p className="flex gap-3 border-b border-line px-3 py-1.5 font-mono text-[11.5px] text-muted" data-testid="queue-counts">
+            <span title="In this list">{list?.total ?? "…"}</span>
+            <span>{overview.kpis.flagged - overview.kpis.pending_review} decided</span>
+          </p>
+        )}
         {listError && <p className="p-3 text-[13px] text-crit">{listError}</p>}
         <ul
           ref={listRef}
-          className="scrollbar-thin max-h-[calc(100vh-220px)] min-h-[200px] overflow-y-auto p-1"
+          className="scrollbar-thin max-h-[min(calc(100vh-240px),560px)] min-h-[200px] overflow-y-auto p-1"
           role="listbox"
           aria-label="Submissions"
         >
@@ -273,6 +279,7 @@ export function QueueView() {
               href={href(item.submission_id)}
               tz={tz}
               contributor={byCode.get(item.contributor.code)}
+              showCode={!contributor}
             />
           ))}
           {list && !items.length && <li className="px-2.5 py-3 text-muted">Nothing here. Change the filter.</li>}
@@ -288,14 +295,17 @@ export function QueueView() {
           <>
             <Verdict detail={current} tz={tz} review={activeReview} />
             <Section
-              title="Why it was flagged"
+              title="Why flagged"
               aria-label="Why it was flagged"
-              summary={fired.length ? `${fired.length} ${fired.length === 1 ? "check" : "checks"} fired` : null}
+              summary={fired.length ? String(fired.length) : null}
               actions={
                 fired.length > 1 && (
-                  <button type="button" onClick={toggleAll} className="btn btn-sm" aria-keyshortcuts="E" data-testid="expand-all">
-                    {allOpen ? "Collapse all" : "Expand all"} <kbd className="kbd">E</kbd>
-                  </button>
+                  <Tip content={`${allOpen ? "Close" : "Open"} all · E`} className="inline-flex">
+                    <button type="button" onClick={toggleAll} className="btn btn-sm btn-ghost px-1.5" aria-keyshortcuts="E"
+                      aria-label={allOpen ? "Collapse all" : "Expand all"} data-testid="expand-all">
+                      <IconExpand open={allOpen} />
+                    </button>
+                  </Tip>
                 )
               }
               bodyClassName="grid gap-2 p-4"
@@ -316,7 +326,6 @@ export function QueueView() {
             <Section
               title="Submission details"
               aria-label="Submission details"
-              summary="Answers, transcript, GPS and clocks"
               collapsible
               defaultOpen={false}
               storeKey="queue-details"
@@ -345,8 +354,10 @@ export function QueueView() {
                 disabled={!current || busy}
                 onClick={() => void decide(a.decision)}
                 className="btn"
+                aria-label={a.label}
+                aria-keyshortcuts={a.key}
               >
-                <span className={a.className}>{a.label}</span>
+                <span className={a.className}>{a.short}</span>
                 <kbd className="kbd">{a.key}</kbd>
               </button>
             ))
@@ -356,9 +367,8 @@ export function QueueView() {
               Undo{!activeReview && lastDecision ? ` ${shortId(lastDecision.submissionId)}` : ""} <kbd className="kbd">U</kbd>
             </button>
           )}
-          <span className="ml-auto hidden items-center gap-1.5 text-[11.5px] text-faint sm:flex">
-            <kbd className="kbd">J</kbd>
-            <kbd className="kbd">K</kbd> move · {index >= 0 ? `${index + 1} of ${items.length}` : `${items.length} in list`}
+          <span className="ml-auto font-mono text-[11.5px] text-muted" aria-label={index >= 0 ? `${index + 1} of ${items.length}` : undefined}>
+            {index >= 0 ? `${index + 1}/${items.length}` : items.length}
           </span>
         </Glass>
       </section>
@@ -367,24 +377,22 @@ export function QueueView() {
 }
 
 /** One queue row: id, contributor, local time and score, then the lead check and "+N"; all checks in a tooltip. */
-function QueueRow({ item, selected, href, tz, contributor }: {
+function QueueRow({ item, selected, href, tz, contributor, showCode }: {
   item: QueueItem;
   selected: boolean;
   href: string;
   tz: string;
   contributor?: ContributorRow;
+  showCode: boolean;
 }) {
   const review = item.review && !item.review.revoked_at ? item.review : null;
   const lead = submissionMainSignal(item.fired, contributor?.checks_fired);
   const rest = item.fired.length - (lead ? 1 : 0);
   const { triggerProps, tip } = useTip(
-    item.fired.length ? (
-      <>
-        <b className="font-medium text-ink">Checks that fired:</b> {item.fired.map((k) => CHECK_TITLE[k]).join(" · ")}
-      </>
-    ) : (
-      "No checks fired"
-    ),
+    <>
+      <b className="font-medium text-ink">{fmtStamp(item.captured_at, tz)}</b> ·{" "}
+      {item.fired.length ? item.fired.map((k) => CHECK_TITLE[k]).join(" · ") : "no checks fired"}
+    </>,
     { delay: 450 },
   );
   return (
@@ -401,10 +409,11 @@ function QueueRow({ item, selected, href, tz, contributor }: {
           <span className="min-w-0 truncate">
             <span className="font-mono">{shortId(item.submission_id)}</span>{" "}
             {item.source === "live" && (
-              <span className="live-tag" title="Sent from a phone on /collect">Live · phone</span>
+              <span className="live-tag" title="Sent from a phone on /collect">Live</span>
             )}{" "}
             <span className="text-muted">
-              {item.contributor.code} · {fmtStamp(item.captured_at, tz)}
+              {showCode && `${item.contributor.code} · `}
+              {fmtDayMonth(item.captured_at, tz)}
             </span>
           </span>
           <span className="flex flex-none items-center gap-1.5">
@@ -433,11 +442,11 @@ function QueueRow({ item, selected, href, tz, contributor }: {
 function Verdict({ detail, tz, review }: { detail: SubmissionDetail; tz: string; review: SubmissionDetail["review"] }) {
   const s = detail.submission;
   const score = detail.score;
-  const band = score?.band === "flagged" ? "Flagged" : score?.band === "watch" ? "Watch band" : "Passed";
-  const facts: [string, React.ReactNode][] = [
-    [detail.contributor.kind === "enumerator" ? "Enumerator" : "Participant", `${detail.contributor.code} ${detail.contributor.display_name ?? ""}`],
-    ["Area", detail.contributor.area],
-    ["Captured", fmtStamp(s.captured_at, tz)],
+  const band = score?.band === "flagged" ? "Flagged" : score?.band === "watch" ? "Watch" : "Passed";
+  const facts: [string, string][] = [
+    [detail.contributor.kind === "enumerator" ? "Enumerator" : "Participant", `${detail.contributor.display_name ?? ""} ${detail.contributor.code}`],
+    ["Area", detail.contributor.area ?? ""],
+    ["Captured", `${fmtDayMonth(s.captured_at, tz)} ${fmtTime(s.captured_at, tz)}`],
     ["Duration", fmtDuration(s.duration_sec)],
   ];
   return (
@@ -451,32 +460,41 @@ function Verdict({ detail, tz, review }: { detail: SubmissionDetail; tz: string;
           </span>
         ) : (
           <span className="st st-warn" data-testid="decision-state">
-            <span>Waiting for review</span>
+            <span>To review</span>
           </span>
         )
       }
     >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <h2 className="font-mono text-[18px] font-medium tracking-normal">{shortId(s.id)}</h2>
-        {s.source === "live" && <span className="live-tag">Live · phone</span>}
+        {s.source === "live" && <span className="live-tag">Live</span>}
         {score && (
           <span className="ml-auto flex items-center gap-2" data-testid="verdict-score">
-            Score <span className={scoreClass(score.score, score.band)}>{fmtScore(score.score)}</span>
+            <span className={scoreClass(score.score, score.band)} aria-label={`Score ${fmtScore(score.score)}`}>{fmtScore(score.score)}</span>
             <span className={`st ${score.band === "flagged" ? (score.score >= 5 ? "st-crit" : "st-warn") : score.band === "watch" ? "st-warn" : "st-ok"}`}>
               <span>{band}</span>
             </span>
           </span>
         )}
       </div>
-      <dl className="mt-3 grid grid-cols-2 gap-x-5 gap-y-2 text-[12.5px] sm:grid-cols-4">
+      <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[12.5px] text-ink-2">
         {facts.map(([label, value]) => (
-          <div key={label} className="min-w-0">
-            <dt className="text-[11.5px] text-faint">{label}</dt>
-            <dd className="truncate font-medium text-ink">{value}</dd>
-          </div>
+          <li key={label} aria-label={`${label}: ${value}`}>
+            <Tip content={label} className="cursor-default">
+              {value}
+            </Tip>
+          </li>
         ))}
-      </dl>
+      </ul>
     </Section>
+  );
+}
+
+function IconExpand({ open }: { open: boolean }) {
+  return (
+    <svg viewBox="0 0 16 16" className="h-4 w-4" aria-hidden fill="none" stroke="currentColor" strokeWidth={1.6}>
+      {open ? <path d="M4 7l4-3 4 3M4 12l4-3 4 3" /> : <path d="M4 4l4 3 4-3M4 9l4 3 4-3" />}
+    </svg>
   );
 }
 

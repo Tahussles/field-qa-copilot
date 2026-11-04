@@ -77,6 +77,11 @@ export function fmtStamp(iso: string, tz = DEFAULT_TZ): string {
 }
 
 /** "S-3F9A": a short, readable handle for a submission id. */
+/** "27/10": day and month only, for dense lists (the full stamp goes in a tooltip). */
+export function fmtDayMonth(iso: string, tz = DEFAULT_TZ): string {
+  return new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", timeZone: tz });
+}
+
 export function shortId(id: string): string {
   return `S-${id.replace(/-/g, "").slice(0, 4).toUpperCase()}`;
 }
