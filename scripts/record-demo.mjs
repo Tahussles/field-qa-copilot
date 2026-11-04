@@ -77,7 +77,7 @@ await beat("morning brief", () => script("brief"), () => page.locator("#brief").
 await pause(20);
 
 // 3. E07's hotspot.
-await beat("E07 hotspot", () => script("hotspot"), () => page.getByText(/E07 .* · click the row again to clear/).waitFor({ timeout: 15000 }));
+await beat("E07 hotspot", () => script("hotspot"), () => page.getByRole("dialog", { name: "Hotspot for E07" }).waitFor({ timeout: 15000 }));
 await pause(22);
 
 // 4. The queue, decided with the keyboard.
@@ -152,10 +152,10 @@ await pause(18);
 // 7. How it works.
 await beat("architecture", () => page.goto(base + "/architecture"), () => page.getByTestId("architecture").filter({ hasNotText: "…" }).waitFor({ timeout: 20000 }));
 await pause(10);
-// The trade-offs are notes on their boxes: open two.
-await page.getByRole("button", { name: "Trade-off: Rules first" }).click();
+// What each box does, and its trade-offs, sit behind its Details: open two.
+await page.getByRole("button", { name: "Details: Python engine" }).click();
 await pause(9);
-await page.getByRole("button", { name: "Trade-off: AI as an input, not the judge" }).click();
+await page.getByRole("button", { name: "Details: ElevenLabs · Claude" }).click();
 await pause(14);
 
 const total = Date.now() - t0;

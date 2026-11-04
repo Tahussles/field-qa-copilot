@@ -33,5 +33,6 @@ test("the Script tab's Focus E07 opens E07's hotspot on the map", async ({ page 
   await page.keyboard.press("d");
   await page.getByRole("tab", { name: "Script" }).click();
   await page.getByTestId("jump-hotspot").click();
-  await expect(page.getByText(/E07 .* · click the row again to clear/)).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId("map-focus")).toContainText("E07", { timeout: 15_000 });
+  await expect(page.getByRole("dialog", { name: "Hotspot for E07" })).toBeVisible({ timeout: 15_000 });
 });
