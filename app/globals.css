@@ -124,7 +124,7 @@ html[data-theme="linear"] {
   --color-ink: #f1f2f4;
   --color-ink-2: #d4d6da;
   --color-body: #cfd2d6;
-  /* muted, faint and crit lifted in round 12 so every text run passes WCAG AA (scripts/contrast.mjs). */
+  /* muted, faint, ok and crit lifted in round 12 so every text run passes WCAG AA (scripts/contrast.mjs). */
   --color-muted: #9298a1;
   --color-faint: #80868f;
   --color-line: rgb(255 255 255 / 0.07);
@@ -132,7 +132,7 @@ html[data-theme="linear"] {
   --color-accent: #7c84f8;
   --color-accent-ink: #7c84f8;
   --color-accent-soft: rgb(124 132 248 / 0.14);
-  --color-ok: #4cb782;
+  --color-ok: #56c08c;
   --color-warn: #f0a23b;
   --color-crit: #ef6663;
   --color-pass: #8a8f98;
