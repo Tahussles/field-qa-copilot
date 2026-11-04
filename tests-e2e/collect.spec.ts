@@ -171,7 +171,7 @@ test.describe("phone collect page", () => {
 
     await page.getByRole("button", { name: "New interview" }).click();
     await page.getByTestId("switch-contributor").click();
-    await expect(page.getByText("the shared-device check will see two accounts on this phone")).toBeVisible();
+    await expect(page.getByText("shared device will see two accounts")).toBeVisible();
     await page.getByRole("button", { name: /^E02 / }).click();
     await fill(page, "public_tap");
     await page.getByTestId("submit").click();
