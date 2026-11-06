@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { expect, test, type APIRequestContext } from "@playwright/test";
 
 const PASSCODE = process.env.DEMO_PASSCODE;
@@ -246,4 +248,12 @@ test("theme: the demo panel has the toggle too (phones have no sidebar)", async 
   const toggle = page.getByRole("dialog", { name: "Demo controls" }).getByTestId("theme-toggle-panel");
   await toggle.getByRole("radio", { name: other }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", other.toLowerCase());
+});
+
+test("/prototype serves the approved design unchanged, and asks not to be indexed", async ({ request }) => {
+  const response = await request.get("/prototype");
+  expect(response.status()).toBe(200);
+  expect(response.headers()["content-type"]).toContain("text/html");
+  expect(response.headers()["x-robots-tag"]).toContain("noindex");
+  expect(await response.text()).toBe(readFileSync("design/prototype.html", "utf8"));
 });

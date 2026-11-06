@@ -15,9 +15,9 @@ Field QA Copilot checks every submission as it syncs, flags likely fabrication w
 ## Folder layout
 
 ```
-design/prototype.html     the approved design (static, fake data); the dashboard matches its look
+design/prototype.html     the approved design (static, fake data), served as is at /prototype (noindex)
 app/                      Next.js routes: / landing, /app overview, /app/queue[/id], /app/detectors, /app/test,
-                          /collect (the phone), /architecture and /pitch (the story pages)
+                          /collect (the phone), /architecture and /pitch (the story pages), /prototype
   globals.css             design tokens for both themes (@theme and :root: poket; html[data-theme=linear]: linear),
                           .glass and other component classes (@layer components)
 components/               UI: app/ (shell, data provider, toasts, passcode, demo controls), overview/, queue/,
