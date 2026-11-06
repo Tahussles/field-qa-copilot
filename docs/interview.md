@@ -41,7 +41,7 @@ Target: 9:00. A recorded run, `data/recordings/demo.mp4`, is the backup if the n
 | Ingest, `POST /submissions` from Toronto | p50 **340 ms**, p95 487 ms (276 ms inside the API) | measurements.json |
 | Realtime, insert to screen | p50 402 ms (max 576 ms of 4) | measurements.json |
 | Phone, from Submit | rules 1.0 s · transcript 3.9 s · verdict 6.5 s (medians of 3) | measurements.json |
-| Model latency per call | judge p50 1.36 s (n=3,518), Scribe p50 0.54 s | measurements.json |
+| Model latency per call | judge p50 1.36 s (n=3,521), Scribe p50 0.56 s | measurements.json |
 | Model spend, all time | **$0.74** for 3,800 jobs | measurements.json |
 | Hard-mode verdicts recorded for CI | 6,953 for $1.16, replayed for free | hard.json |
 | Demo wave | 1,676 interviews, 126 planted fakes; 138 flagged on production (rules + stored verdicts) | headline.json, verify_wave.py |
@@ -53,7 +53,7 @@ Target: 9:00. A recorded run, `data/recordings/demo.mp4`, is the backup if the n
 3. **The data is synthetic. Does that mean anything?** It's the only way to know the truth for every row. Real field data has no labels. Synthetic data with planted fraud, plus a hard mode written to dodge the rules, gives an honest upper bound and a test bed. Real deployment needs reviewer decisions fed back as labels.
 4. **What happens offline?** Every interview, audio included, goes to an IndexedDB outbox first and syncs when it can. A retry reuses its client id, so it never double-counts, and one that crashed mid-score is healed.
 5. **What if two phones sync at once for the same contributor?** `ingest_begin` leases every contributor and device the arrival can affect, and `ingest_commit` is fenced. A commit after its lease expired writes nothing, and the retry rescores.
-6. **What does the AI cost?** Per interview, about $0.0004 to transcribe and $0.0002 to judge. All time on production: $0.74. Every call is logged with its tokens, latency and cost, and batch scripts stop above $5 unless told otherwise.
+6. **What does the AI cost?** Per interview, about $0.0003 to transcribe and $0.0002 to judge. All time on production: $0.74. Every call is logged with its tokens, latency and cost, and batch scripts stop above $5 unless told otherwise.
 7. **What about prompt injection in the voice note?** Transcripts go in tags as data, look-alike tags are neutralised, and a verdict's quote must be an exact substring of the transcript or the verdict is rejected. A live test tries an injection.
 8. **How does it scale to a real survey?** Ingest is two database calls and pure-Python scoring of the affected group. Model work is queued and runs in parallel. The leases make it correct under concurrency, not just fast.
 9. **How was it built?** In reviewed rounds with an AI coding agent. Each round had a spec, tests, eval gates and a report, and a person approved every production change. CI fails if detection gets worse or a commit isn't the author's own (`docs/ai-practices.md`).

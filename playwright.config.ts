@@ -46,10 +46,13 @@ export default defineConfig({
     { name: "pixel", testMatch: /collect\.spec\.ts/, use: { ...devices["Pixel 7"], ...phone } },
     { name: "iphone", testMatch: /collect\.spec\.ts/, use: { ...devices["iPhone 13"], browserName: "chromium", ...phone } },
   ],
-  webServer: {
-    command: "pnpm dev",
-    url: "http://localhost:3000/api/py/health",
-    reuseExistingServer: true,
-    timeout: 120_000,
-  },
+  // Only a local run needs the dev server: with SMOKE_BASE_URL the tests run against a deployed app.
+  webServer: process.env.SMOKE_BASE_URL
+    ? undefined
+    : {
+        command: "pnpm dev",
+        url: "http://localhost:3000/api/py/health",
+        reuseExistingServer: true,
+        timeout: 120_000,
+      },
 });
