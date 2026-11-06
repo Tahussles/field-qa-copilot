@@ -52,7 +52,7 @@ flowchart LR
 | Ingest `POST /submissions` on production, as a phone sends it | p50 340 ms, p95 487 ms from Toronto (276 ms inside the API) |
 | Realtime, insert to screen | p50 402 ms |
 | Phone, from tapping Submit | rules result 1.0 s, transcript 3.9 s, model verdict 6.5 s (medians of 3) |
-| Model latency per call (production jobs) | judge p50 1.35 s (Haiku), transcription p50 0.53 s (Scribe), brief p50 7.5 s (Sonnet) |
+| Model latency per call (production jobs) | judge p50 1.36 s (Haiku), transcription p50 0.56 s (Scribe), brief p50 7.5 s (Sonnet) |
 | Model spend on production, all time | $0.74 over 3,800 jobs (the wave backfill included) |
 | Hard-mode model verdicts (recorded once, replayed by CI for free) | 6,953 verdicts, $1.16 |
 
